@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#090d16">
+  <meta name="description" content="ARIA — assistant personnel, prototype web.">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css">
+  <title>ARIA — Assistant personnel</title>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+      <div class="brand-copy"><div class="brand">ARIA <span>PERSONAL AI</span></div><div class="status"><i></i><span id="statusText">Prototype local · backend non connecté</span></div></div>
+      <button class="icon-button" id="settingsBtn" aria-label="Paramètres" title="Paramètres">⚙</button>
+    </header>
+
+    <main>
+      <section class="hero" id="welcome">
+        <div class="eyebrow">SYSTÈME PERSONNEL · V0.7 FOUNDATION</div>
+        <h1>À votre service,<br><em>Quentin.</em></h1>
+        <p>Une interface discrète pour organiser vos idées, préparer vos missions et construire votre assistant personnel.</p>
+        <div class="capability-row"><span>◈ Mémoire locale</span><span>◈ Interface mobile</span><span>◈ Architecture extensible</span></div>
+      </section>
+
+      <section class="workspace">
+        <div class="section-head"><div><div class="eyebrow">CONSOLE</div><h2>Conversation</h2></div><button id="clearBtn" class="text-button">Effacer</button></div>
+        <div id="messages" class="messages" aria-live="polite">
+          <article class="message aria-message"><div class="avatar">A</div><div class="bubble"><div class="message-label">ARIA <span>PROTOCOLE INITIAL</span></div><p>Bonjour. Mon interface est prête, mais mon moteur IA distant n’est pas encore connecté. Vous pouvez tester la conversation locale et la mémoire de ce prototype.</p></div></article>
+        </div>
+        <form id="chatForm" class="composer">
+          <label class="sr-only" for="messageInput">Votre message</label>
+          <textarea id="messageInput" rows="1" placeholder="Écrivez à ARIA…" maxlength="2000"></textarea>
+          <button class="send-button" type="submit" aria-label="Envoyer">↑</button>
+        </form>
+        <div class="composer-note"><span>ENTRÉE POUR ENVOYER · MAJ + ENTRÉE POUR UN SAUT DE LIGNE</span><span id="charCount">0/2000</span></div>
+      </section>
+
+      <section class="memory-panel">
+        <div class="section-head"><div><div class="eyebrow">CONTEXTE PERSISTANT</div><h2>Mémoire locale</h2></div><span class="pill">SUR CET APPAREIL</span></div>
+        <p class="panel-description">Les notes ajoutées ici restent dans le stockage de ce navigateur. Elles ne sont pas envoyées à un serveur.</p>
+        <form id="memoryForm" class="memory-form"><input id="memoryInput" maxlength="300" placeholder="Ajouter une préférence ou une note…"><button type="submit">Ajouter</button></form>
+        <ul id="memoryList" class="memory-list"></ul>
+      </section>
+
+      <section class="security-note"><span class="shield">◇</span><div><strong>Mode prototype sécurisé</strong><p>Aucune action sur votre téléphone ou un PC n’est exécutée. Aucun compte, paiement ou accès distant n’est configuré.</p></div></section>
+    </main>
+    <footer>ARIA · FONDATION WEB V0.7 <span>CONSTRUIRE · TESTER · FIABILISER</span></footer>
+  </div>
+
+  <dialog id="settingsDialog">
+    <form method="dialog" class="dialog-content">
+      <div class="section-head"><div><div class="eyebrow">CONFIGURATION</div><h2>État du prototype</h2></div><button class="icon-button" aria-label="Fermer">×</button></div>
+      <div class="setting-row"><span>Interface PWA</span><b class="good">ACTIVE</b></div>
+      <div class="setting-row"><span>Mémoire locale</span><b class="good">ACTIVE</b></div>
+      <div class="setting-row"><span>Modèle IA réel</span><b class="pending">NON CONNECTÉ</b></div>
+      <div class="setting-row"><span>Agent Web / Windows</span><b class="pending">NON CONNECTÉ</b></div>
+      <p class="dialog-help">Pour connecter un vrai modèle, il faudra déployer un backend sécurisé. Une clé API ne doit jamais être placée dans le code de cette application.</p>
+      <button class="primary-button">Fermer</button>
+    </form>
+  </dialog>
+  <script src="app.js"></script>
+</body>
+</html>
