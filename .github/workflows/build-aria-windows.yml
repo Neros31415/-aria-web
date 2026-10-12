@@ -25,8 +25,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r desktop/requirements.txt
           pip install pyinstaller
-      - name: Build executable
-        run: pyinstaller --noconfirm --clean --windowed --name ARIA desktop/aria_desktop.py
+      - name: Build single-file executable
+        run: pyinstaller --noconfirm --clean --onefile --windowed --name ARIA desktop/aria_desktop.py
+      - name: Verify executable exists
+        run: if (!(Test-Path "dist/ARIA.exe")) { throw "Expected dist/ARIA.exe was not created." }
+        shell: pwsh
       - name: Upload executable artifact
         uses: actions/upload-artifact@v4
         with:
