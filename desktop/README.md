@@ -47,19 +47,17 @@ Expected successful JSON response:
 
 This is a proposed client contract, not a claim that the existing Cloudflare Worker already implements it. Verify/adapt the Worker before setting this variable. The desktop app deliberately contains no model-provider API key.
 
-## Build a Windows executable
+## Build a single-file Windows executable
 
 On a Windows machine:
 
 ```powershell
 pip install -r desktop/requirements.txt
 pip install pyinstaller
-pyinstaller --noconfirm --clean --windowed --name ARIA desktop/aria_desktop.py
+pyinstaller --noconfirm --clean --onefile --windowed --name ARIA desktop/aria_desktop.py
 ```
 
-The executable should appear at `dist/ARIA.exe`. This build has not yet been validated on Windows; test it on a real Windows machine before distributing it.
-
-A GitHub Actions workflow is also provided to build a Windows artifact from this repository.
+The executable should appear at `dist/ARIA.exe`. The GitHub Actions workflow uses the same `--onefile` option and checks that the expected file exists before uploading it. A successful CI build confirms packaging, not that the GUI has been manually tested on a real Windows machine.
 
 ## Security and limitations
 
