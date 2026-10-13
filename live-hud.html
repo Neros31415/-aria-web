@@ -55,6 +55,33 @@ renderMemory();
 $('memoryBtn').addEventListener('click',()=>{const note=prompt('Note à conserver dans la mémoire locale :');if(note&&note.trim()){memory.push(note.trim());memory=memory.slice(-50);try{localStorage.setItem(key,JSON.stringify(memory))}catch{}renderMemory();reply('Note enregistrée sur cet appareil.')}else reply(memory.length?'Mémoire locale : '+memory.join(' ; '):'La mémoire locale est vide.')});
 $('missionBtn').addEventListener('click',()=>reply('Le module Missions n’est pas encore connecté. Il sera développé comme une vraie liste de tâches persistante, pas comme un faux bouton.'));
 $('helpBtn').addEventListener('click',()=>reply('État : HUD interactif, animations CSS, horloge locale, mémoire navigateur et synthèse vocale disponibles. Reconnaissance vocale selon la prise en charge du navigateur. IA distante, recherche Web et synchronisation iPhone-PC non connectées.'));
+$('connectBtn').addEventListener('click',()=>{
+  let current='';
+  try{current=localStorage.getItem('aria.hud.apiBase.v1')||''}catch{}
+  const value=prompt('Adresse HTTPS de votre backend ARIA (endpoint /chat ajouté automatiquement). Laissez vide pour déconnecter :',current);
+  if(value===null)return;
+  const candidate=value.trim();
+  if(!candidate){
+    apiBase='';
+    try{localStorage.removeItem('aria.hud.apiBase.v1')}catch{feedback('Impossible de modifier le stockage local dans ce navigateur.');return}
+    $('state').textContent='MODE LOCAL';
+    feedback('Backend déconnecté. ARIA reste en mode local.');
+    return;
+  }
+  try{
+    const url=new URL(candidate);
+    const localHost=['localhost','127.0.0.1','[::1]'].includes(url.hostname);
+    if(url.username||url.password||(!localHost&&url.protocol!=='https:')||(localHost&&!['http:','https:'].includes(url.protocol))){
+      throw new Error('Utilisez une adresse HTTPS sans identifiants intégrés (HTTP autorisé uniquement sur localhost).');
+    }
+    apiBase=url.href.replace(/\\/+$/,'');
+    localStorage.setItem('aria.hud.apiBase.v1',apiBase);
+    $('state').textContent='BACKEND CONFIGURÉ';
+    feedback('Endpoint enregistré. La connexion sera vérifiée au prochain message.');
+  }catch(err){
+    feedback('Adresse refusée : '+(err instanceof TypeError?'URL invalide.':err.message));
+  }
+});
 $('clear').addEventListener('click',()=>{$('greeting').textContent='Je vous écoute.';$('prompt').textContent='Une présence. Une intention. À vous de jouer.';feedback('Affichage réinitialisé. La mémoire est conservée.')});
 $('speak').addEventListener('click',()=>{if(!('speechSynthesis'in window)){feedback('Lecture vocale non prise en charge par ce navigateur.');return}speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(lastReply);u.lang='fr-FR';speechSynthesis.speak(u)});
 $('mic').addEventListener('click',()=>{const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){feedback('Dictée vocale indisponible ici. Utilisez le champ de texte.');return}const r=new SR();r.lang='fr-FR';r.interimResults=false;$('mic').classList.add('listening');feedback('Je vous écoute…');r.onresult=e=>{$('input').value=e.results[0][0].transcript;$('input').focus();feedback('Dictée transcrite. Appuyez sur envoyer pour confirmer.')};r.onerror=()=>feedback('La dictée vocale a échoué ou n’est pas autorisée.');r.onend=()=>$('mic').classList.remove('listening');try{r.start()}catch{$('mic').classList.remove('listening');feedback('Impossible de démarrer la dictée vocale.')}});
