@@ -3,7 +3,7 @@ import vm from "node:vm";
 import assert from "node:assert/strict";
 
 const html = readFileSync("live-hud.html", "utf8");
-const scripts = [...html.matchAll(/<script>([\\s\\S]*?)<\\/script>/gi)].map((m) => m[1]);
+const scripts = html.split("<script>").slice(1).map((part) => part.split("</script>")[0]);
 assert.ok(scripts.length > 0, "HUD must contain its application script");
 
 for (const [index, script] of scripts.entries()) {
@@ -16,16 +16,16 @@ const requiredIds = [
   "memoryBtn", "missionBtn", "helpBtn", "connectBtn"
 ];
 for (const id of requiredIds) {
-  assert.match(html, new RegExp(`id=["']${id}["']`), `Missing required HUD element: ${id}`);
+  assert.ok(html.includes(`id="${id}"`), `Missing required HUD element: ${id}`);
 }
 
-assert.match(html, /connectBtn['"]\\)\\.addEventListener\\(['"]click['"]/,
+assert.ok(html.includes("$('connectBtn').addEventListener('click'"),
   "CONNECTER must have a click handler");
-assert.match(html, /aria\\.hud\\.apiBase\\.v1/,
+assert.ok(html.includes("aria.hud.apiBase.v1"),
   "Backend endpoint must be stored under the expected local key");
-assert.match(html, /url\\.protocol!=='https:'/,
+assert.ok(html.includes("url.protocol!=='https:'"),
   "Remote backend URLs must require HTTPS");
-assert.match(html, /speechSynthesis/,
+assert.ok(html.includes("speechSynthesis"),
   "Speech synthesis integration should remain present");
 
 console.log("ARIA HUD smoke checks passed: inline JavaScript parses and core controls/configuration are present.");
