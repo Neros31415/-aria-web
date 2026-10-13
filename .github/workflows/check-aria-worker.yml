@@ -1,0 +1,22 @@
+name: ARIA Worker syntax checks
+on:
+  push:
+    paths: ["worker/**", ".github/workflows/check-aria-worker.yml"]
+  pull_request:
+    paths: ["worker/**", ".github/workflows/check-aria-worker.yml"]
+permissions:
+  contents: read
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check Worker modules
+        working-directory: worker
+        run: |
+          node --check index.mjs
+          node --check security.mjs
+          node --check provider.mjs
