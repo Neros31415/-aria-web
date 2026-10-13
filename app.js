@@ -1,4 +1,5 @@
 const $ = (id) => document.getElementById(id);
+const DEFAULT_API_URL = "https://aria-brain-staging.quentineros-sevesi.workers.dev";
 const STORAGE_MESSAGES = "aria.v07.messages";
 const STORAGE_MEMORY = "aria.v07.memory";
 const messagesEl = $("messages");
@@ -52,7 +53,7 @@ function localReply(text) {
   return "Message reçu et conservé dans l’historique local. Je suis actuellement en mode prototype : sans backend connecté, je ne peux pas générer une véritable réponse par IA ni exécuter cette demande. Prochaine étape : déployer un backend sécurisé et connecter un modèle réel.";
 }
 async function sendToBrain() {
-  const endpoint = (localStorage.getItem("aria.apiUrl") || "").trim().replace(new RegExp("/+$"), "");
+  const endpoint = (localStorage.getItem("aria.apiUrl") || DEFAULT_API_URL).trim().replace(new RegExp("/+$"), "");
   const token = sessionStorage.getItem("aria.accessToken") || "";
   if (!endpoint || !token) return null;
   const payload = {
@@ -127,7 +128,7 @@ $("memoryForm").addEventListener("submit", (event) => {
   memories.push(value); persist(); $("memoryInput").value = ""; renderMemory();
 });
 $("settingsBtn").addEventListener("click", () => {
-  $("apiUrlInput").value = localStorage.getItem("aria.apiUrl") || "";
+  $("apiUrlInput").value = localStorage.getItem("aria.apiUrl") || DEFAULT_API_URL;
   $("apiTokenInput").value = sessionStorage.getItem("aria.accessToken") || "";
   $("settingsDialog").showModal();
 });
