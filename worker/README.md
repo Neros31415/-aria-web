@@ -1,15 +1,35 @@
 # ARIA Brain — préproduction
 
-Cette version est un Worker séparé nommé aria-brain-staging. Elle ne remplace pas le Worker aria-brain actuellement déployé.
+Cette version est un Worker séparé nommé `aria-brain-staging`. Elle ne remplace pas le Worker de production.
 
-Routes : GET /health, POST /chat et OPTIONS /chat. Le chat reçoit un objet JSON contenant une liste messages, chacun avec un rôle user ou assistant et un contenu texte. La réponse réussie contient le champ reply.
+## Modèle réel
 
-Le fichier wrangler.toml active le binding Cloudflare Workers AI nommé AI. Dans les variables du Worker, configurez ALLOWED_ORIGINS avec les origines HTTPS exactes, séparées par des virgules, puis ARIA_MODEL avec un modèle actuellement disponible dans votre compte. Ajoutez ARIA_ACCESS_TOKEN, un jeton aléatoire long, comme secret. Ne placez pas ce jeton dans le code client. Les clients autorisés doivent envoyer Authorization: Bearer suivi du jeton.
+Le modèle par défaut est `@cf/zai-org/glm-4.7-flash`, appelé via le binding natif `env.AI` de Cloudflare Workers AI. Aucun jeton fournisseur n'est nécessaire dans le code. Vous pouvez remplacer le modèle via la variable `ARIA_MODEL` après avoir vérifié qu'il est disponible sur votre compte.
 
-Cette option évite de stocker une clé fournisseur externe, mais l'usage de Workers AI dépend des limites et de la facturation Cloudflare. Vérifiez le modèle disponible et les coûts avant tout déploiement.
+Le modèle est appelé à chaque requête de chat réelle et peut entraîner une consommation/facturation Cloudflare. Vérifiez les limites et tarifs de votre compte avant les essais répétés. Les tests CI utilisent un modèle simulé et ne consomment pas d'inférence.
 
-Déploiement contrôlé : depuis ce dossier, connectez Wrangler au bon compte Cloudflare, puis lancez le déploiement. Le nom aria-brain-staging évite de remplacer le Worker existant. Ne migrez pas le trafic de production avant d'avoir vérifié le contrat, l'authentification et les coûts.
+## Configuration nécessaire avant déploiement
 
-Protections incluses : CORS strict, jeton Bearer, limites de taille de requête et de contexte, rôles d'entrée limités et erreurs normalisées. Le jeton partagé n'est pas une authentification multi-utilisateur complète. Avant exposition publique, ajoutez une identité robuste, une limitation de débit et des quotas. Aucun outil Web, mémoire distante ni contrôle Windows n'est exposé.
+1. Dans le compte Cloudflare voulu, vérifiez l'accès à Workers AI et le modèle ci-dessus.
+2. Configurez `ALLOWED_ORIGINS` avec les origines HTTPS exactes, séparées par des virgules.
+3. Ajoutez `ARIA_ACCESS_TOKEN` comme secret Worker, avec un jeton aléatoire long.
+4. Optionnel : configurez `ARIA_MODEL` si vous souhaitez choisir un autre modèle.
+5. Déployez explicitement ce Worker de préproduction depuis ce dossier avec Wrangler, après connexion au bon compte.
 
-Le workflow GitHub Actions vérifie la syntaxe des trois modules. Les tests locaux utilisent un binding AI simulé, mais leur harness n'est pas encore intégré au dépôt. Il reste à valider le modèle réel et le déploiement Cloudflare.
+Ne placez jamais `ARIA_ACCESS_TOKEN` dans le JavaScript public ou dans le dépôt. Un jeton partagé ne convient pas à un client navigateur public : pour connecter une interface publique, il faudra une authentification utilisateur côté serveur, ou une autre architecture sécurisée. CORS n'est pas une authentification.
+
+## Contrat API
+
+- `GET /health` indique si les composants nécessaires sont configurés et quel modèle est sélectionné.
+- `POST /chat` reçoit `{"messages":[{"role":"user","content":"Bonjour"}]}` et renvoie `{"reply":"…","model":"…"}`.
+- `OPTIONS /chat` gère le préflight CORS.
+
+Le client doit envoyer `Authorization: Bearer <jeton>` et `Content-Type: application/json`. Les messages acceptés ont les rôles `user` et `assistant`; le dernier doit être un message utilisateur.
+
+## Sécurité et limites actuelles
+
+CORS strict, jeton Bearer, limites de taille de requête et de contexte, validation des rôles, erreurs normalisées. Le jeton partagé n'est pas une authentification multi-utilisateur complète. Pas encore de mémoire persistante, d'agent Web, d'outils, de voix, ni de contrôle Windows.
+
+## Tests
+
+Lancer `node --test security.test.mjs` depuis le dossier `worker`. GitHub Actions exécute les tests de contrat et vérifie la syntaxe. Les tests utilisent un binding IA simulé : ils ne prouvent pas que le compte Cloudflare est configuré, que le modèle est accessible ou que le déploiement fonctionne.
