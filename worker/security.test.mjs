@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import worker from "./index.mjs";
 import { checkMessages, origins, secretMatches } from "./security.mjs";
+import { selectedModel } from "./provider.mjs";
 
 const env = {
   ALLOWED_ORIGINS: "https://aria.example, http://localhost:3000",
@@ -12,6 +13,11 @@ const env = {
     return { response: "Bonjour Quentin." };
   } },
 };
+
+test("uses a real default model and allows explicit override", () => {
+  assert.equal(selectedModel({}), "@cf/zai-org/glm-4.7-flash");
+  assert.equal(selectedModel({ ARIA_MODEL: "@cf/custom/model" }), "@cf/custom/model");
+});
 
 test("accepts only configured origins", () => {
   const allow = origins(env);
@@ -41,7 +47,7 @@ test("chat returns model response for authorized JSON request", async () => {
   const res = await worker.fetch(req, env);
   assert.equal(res.status, 200);
   assert.equal(res.headers.get("Access-Control-Allow-Origin"), "https://aria.example");
-  assert.deepEqual(await res.json(), { reply: "Bonjour Quentin." });
+  assert.deepEqual(await res.json(), { reply: "Bonjour Quentin.", model: "@cf/test/model" });
 });
 
 test("chat rejects missing or invalid bearer token", async () => {
