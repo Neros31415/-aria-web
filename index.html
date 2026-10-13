@@ -55,10 +55,15 @@
       <div class="section-head"><div><div class="eyebrow">CONFIGURATION</div><h2>État du prototype</h2></div><button class="icon-button" aria-label="Fermer">×</button></div>
       <div class="setting-row"><span>Interface PWA</span><b class="good">ACTIVE</b></div>
       <div class="setting-row"><span>Mémoire locale</span><b class="good">ACTIVE</b></div>
-      <div class="setting-row"><span>Modèle IA réel</span><b class="pending">NON CONNECTÉ</b></div>
+      <div class="setting-row"><span>Modèle IA réel</span><b class="pending">CONFIGURABLE</b></div>
       <div class="setting-row"><span>Agent Web / Windows</span><b class="pending">NON CONNECTÉ</b></div>
-      <p class="dialog-help">Pour connecter un vrai modèle, il faudra déployer un backend sécurisé. Une clé API ne doit jamais être placée dans le code de cette application.</p>
-      <button class="primary-button">Fermer</button>
+      <label class="setting-label" for="apiUrlInput">URL du Worker ARIA</label>
+      <input id="apiUrlInput" class="setting-input" type="url" inputmode="url" placeholder="https://aria-brain-staging.…workers.dev" autocomplete="url">
+      <label class="setting-label" for="apiTokenInput">Jeton d'accès du Worker</label>
+      <input id="apiTokenInput" class="setting-input" type="password" placeholder="Jeton personnel, jamais dans le code" autocomplete="off">
+      <p class="dialog-help">L'URL est conservée sur cet appareil. Le jeton reste en mémoire de session et sera oublié à la fermeture de l'onglet. Cette authentification partagée convient uniquement à un prototype personnel : ne publiez pas ce jeton et ne l'intégrez jamais au code. Le Worker doit être déployé et configuré avant la connexion.</p>
+      <button id="saveSettingsBtn" class="primary-button" type="button">Enregistrer</button>
+      <button class="text-button" type="submit">Fermer</button>
     </form>
   </dialog>
   <script src="app.js"></script>
