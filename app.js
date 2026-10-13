@@ -131,6 +131,30 @@ $("settingsBtn").addEventListener("click", () => {
   $("apiTokenInput").value = sessionStorage.getItem("aria.accessToken") || "";
   $("settingsDialog").showModal();
 });
+$("testConnectionBtn").addEventListener("click", async () => {
+  const endpoint = ($("apiUrlInput").value.trim() || localStorage.getItem("aria.apiUrl") || "").replace(new RegExp("/+$"), "");
+  if (!endpoint.startsWith("https://")) {
+    setStatus("Saisissez et enregistrez une URL HTTPS valide.");
+    return;
+  }
+  const button = $("testConnectionBtn");
+  button.disabled = true;
+  button.textContent = "Test en cours…";
+  try {
+    const response = await fetch(endpoint + "/health", { method: "GET", cache: "no-store" });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error("HTTP " + response.status);
+    if (data.status !== "ok") throw new Error("Réponse de santé inattendue");
+    setStatus(data.configured
+      ? "Worker joignable · configuration IA déclarée prête"
+      : "Worker joignable, mais secret ou modèle IA non configuré");
+  } catch (error) {
+    setStatus("Test impossible : " + (error.message || "erreur réseau/CORS"));
+  } finally {
+    button.disabled = false;
+    button.textContent = "Tester la connexion";
+  }
+});
 $("saveSettingsBtn").addEventListener("click", () => {
   const endpoint = $("apiUrlInput").value.trim().replace(new RegExp("/+$"), "");
   const token = $("apiTokenInput").value.trim();
