@@ -74,7 +74,7 @@ $('connectBtn').addEventListener('click',()=>{
     if(url.username||url.password||(!localHost&&url.protocol!=='https:')||(localHost&&!['http:','https:'].includes(url.protocol))){
       throw new Error('Utilisez une adresse HTTPS sans identifiants intégrés (HTTP autorisé uniquement sur localhost).');
     }
-    apiBase=url.href.replace(/\\/+$/,'');
+    apiBase=url.href; while(apiBase.endsWith('/'))apiBase=apiBase.slice(0,-1);
     localStorage.setItem('aria.hud.apiBase.v1',apiBase);
     $('state').textContent='BACKEND CONFIGURÉ';
     feedback('Endpoint enregistré. La connexion sera vérifiée au prochain message.');
