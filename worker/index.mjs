@@ -8,7 +8,7 @@ export default { async fetch(req, env) {
   if (u.pathname !== "/chat") return fail("not_found", "Route inconnue.", 404, o, a);
   if (req.method !== "POST") return fail("method_not_allowed", "POST requis.", 405, o, a);
   if (!env.ARIA_ACCESS_TOKEN || !env.AI) return fail("service_not_configured", "Service non configuré.", 503, o, a);
-  const t = (req.headers.get("Authorization") || "").match(/^Bearer\\s+(.+)$/i)?.[1] || "";
+  const t = (req.headers.get("Authorization") || "").match(/^Bearer\s+(.+)$/i)?.[1] || "";
   if (!secretMatches(t, env.ARIA_ACCESS_TOKEN)) return fail("unauthorized", "Authentification requise.", 401, o, a);
   if (!(req.headers.get("Content-Type") || "").toLowerCase().includes("application/json")) return fail("unsupported_media_type", "JSON requis.", 415, o, a);
   let b;
