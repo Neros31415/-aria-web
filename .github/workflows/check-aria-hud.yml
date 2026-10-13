@@ -1,0 +1,32 @@
+name: ARIA HUD smoke checks
+
+on:
+  push:
+    branches:
+      - test/aria-hud-smoke-checks
+      - feat/aria-live-holographic-hud
+    paths:
+      - "live-hud.html"
+      - "tests/check-hud.mjs"
+      - ".github/workflows/check-aria-hud.yml"
+  pull_request:
+    paths:
+      - "live-hud.html"
+      - "tests/check-hud.mjs"
+      - ".github/workflows/check-aria-hud.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  hud-smoke-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Parse inline JavaScript and verify core controls
+        run: node tests/check-hud.mjs
