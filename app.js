@@ -52,7 +52,7 @@ function localReply(text) {
   return "Message reçu et conservé dans l’historique local. Je suis actuellement en mode prototype : sans backend connecté, je ne peux pas générer une véritable réponse par IA ni exécuter cette demande. Prochaine étape : déployer un backend sécurisé et connecter un modèle réel.";
 }
 async function sendToBrain() {
-  const endpoint = (localStorage.getItem("aria.apiUrl") || "").trim().replace(/\\/+$/, "");
+  const endpoint = (localStorage.getItem("aria.apiUrl") || "").trim().replace(new RegExp("/+$"), "");
   const token = sessionStorage.getItem("aria.accessToken") || "";
   if (!endpoint || !token) return null;
   const payload = {
@@ -132,9 +132,9 @@ $("settingsBtn").addEventListener("click", () => {
   $("settingsDialog").showModal();
 });
 $("saveSettingsBtn").addEventListener("click", () => {
-  const endpoint = $("apiUrlInput").value.trim().replace(/\\/+$/, "");
+  const endpoint = $("apiUrlInput").value.trim().replace(new RegExp("/+$"), "");
   const token = $("apiTokenInput").value.trim();
-  if (endpoint && !/^https:\/\//i.test(endpoint) && !/^http:\/\/localhost(?::\\d+)?$/i.test(endpoint)) {
+  if (endpoint && !endpoint.startsWith("https://") && !endpoint.startsWith("http://localhost")) {
     setStatus("URL refusée : utilisez HTTPS ou localhost");
     return;
   }
