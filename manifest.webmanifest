@@ -1,12 +1,23 @@
 {
   "name": "ARIA — Assistant personnel",
   "short_name": "ARIA",
-  "description": "Prototype web mobile d'ARIA",
+  "description": "Assistant personnel ARIA — application web installable.",
   "lang": "fr-FR",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
   "background_color": "#080b12",
   "theme_color": "#090d16",
-  "icons": []
+  "icons": [
+    {
+      "src": "aria-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
 }
