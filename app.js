@@ -90,6 +90,38 @@ $("memoryForm").addEventListener("submit", (event) => {
   memories.push(value); persist(); $("memoryInput").value = ""; renderMemory();
 });
 $("settingsBtn").addEventListener("click", () => $("settingsDialog").showModal());
+let deferredInstallPrompt = null;
+const installBtn = $("installBtn"), installDialog = $("installDialog"), installHint = $("installHint");
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+const isStandalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+function showInstallGuide() {
+  if (isStandalone) { installHint.textContent = "ARIA est déjà installée sur cet appareil."; return; }
+  if (isIOS) $("installInstructions").textContent = "Sur iPhone ou iPad, l’ajout à l’écran d’accueil se fait depuis le menu de partage de Safari.";
+  else {
+    $("installInstructions").textContent = "Suivez les instructions du navigateur pour installer ARIA sur cet appareil.";
+    $("installSteps").innerHTML = "<li>Ouvrez le menu du navigateur.</li><li>Choisissez <strong>Installer l’application</strong> ou <strong>Ajouter à l’écran d’accueil</strong>.</li><li>Confirmez l’installation.</li>";
+  }
+  installDialog.showModal();
+}
+installBtn.addEventListener("click", async () => {
+  if (isStandalone) { installHint.textContent = "ARIA est déjà installée sur cet appareil."; return; }
+  if (deferredInstallPrompt) {
+    deferredInstallPrompt.prompt();
+    const result = await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    if (result.outcome === "accepted") installHint.textContent = "Installation acceptée. ARIA sera disponible depuis votre écran d’accueil.";
+    return;
+  }
+  showInstallGuide();
+});
+window.addEventListener("beforeinstallprompt", event => {
+  event.preventDefault(); deferredInstallPrompt = event;
+  installHint.textContent = "ARIA peut être installée sur cet appareil.";
+});
+window.addEventListener("appinstalled", () => {
+  installHint.textContent = "ARIA est installée sur cet appareil."; installBtn.textContent = "ARIA installée ✓";
+});
+if (isStandalone) { installBtn.textContent = "ARIA installée ✓"; installHint.textContent = "ARIA est déjà installée sur cet appareil."; }
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
 }
