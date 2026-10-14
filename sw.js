@@ -1,5 +1,5 @@
-const CACHE = "aria-v07-shell-1";
-const ASSETS = ["./", "./index.html", "./styles.css", "./app.js", "./manifest.webmanifest"];
+const CACHE = "aria-v07-shell-2";
+const ASSETS = ["./", "./index.html", "./styles.css", "./app.js", "./manifest.webmanifest", "./aria-icon.svg"];
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting()));
 });
