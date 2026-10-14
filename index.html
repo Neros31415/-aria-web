@@ -22,6 +22,8 @@
         <div class="eyebrow">SYSTÈME PERSONNEL · V0.7 FOUNDATION</div>
         <h1>À votre service,<br><em>Quentin.</em></h1>
         <p>Une interface discrète pour organiser vos idées, préparer vos missions et construire votre assistant personnel.</p>
+        <div class="install-actions"><button id="installBtn" class="install-button" type="button">Installer ARIA <span aria-hidden="true">↗</span></button><a class="download-button" href="https://github.com/Neros31415/-aria-web/archive/refs/heads/main.zip" download>Télécharger le prototype <span>ZIP</span></a></div>
+        <p class="install-hint" id="installHint">Installez ARIA sur votre écran d’accueil pour la retrouver comme une application.</p>
         <div class="capability-row"><span>◈ Mémoire locale</span><span>◈ Interface mobile</span><span>◈ Architecture extensible</span></div>
       </section>
 
@@ -50,6 +52,10 @@
     <footer>ARIA · FONDATION WEB V0.7 <span>CONSTRUIRE · TESTER · FIABILISER</span></footer>
   </div>
 
+  <dialog id="installDialog"><form method="dialog" class="dialog-content"><div class="section-head"><div><div class="eyebrow">INSTALLATION</div><h2>Emporter ARIA</h2></div><button class="icon-button" aria-label="Fermer">×</button></div>
+    <p class="dialog-help" id="installInstructions">Ajoutez ARIA à votre écran d’accueil pour l’ouvrir dans une fenêtre dédiée.</p>
+    <ol class="install-steps" id="installSteps"><li>Ouvrez cette page dans Safari.</li><li>Appuyez sur <strong>Partager</strong>.</li><li>Choisissez <strong>Sur l’écran d’accueil</strong>, puis confirmez.</li></ol>
+    <p class="dialog-help">Sur iPhone, l’installation se fait depuis Safari : iOS ne permet pas d’installer directement un fichier IPA depuis cette page. Cette version est une application web installable (PWA), pas encore une application publiée sur l’App Store.</p><button class="primary-button">Compris</button></form></dialog>
   <dialog id="settingsDialog">
     <form method="dialog" class="dialog-content">
       <div class="section-head"><div><div class="eyebrow">CONFIGURATION</div><h2>État du prototype</h2></div><button class="icon-button" aria-label="Fermer">×</button></div>
