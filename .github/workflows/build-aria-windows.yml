@@ -6,6 +6,10 @@ on:
     paths:
       - "desktop/**"
       - ".github/workflows/build-aria-windows.yml"
+  pull_request:
+    paths:
+      - "desktop/**"
+      - ".github/workflows/build-aria-windows.yml"
 
 permissions:
   contents: read
@@ -25,6 +29,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r desktop/requirements.txt
           pip install pyinstaller
+      - name: Test local SQLite persistence
+        run: python -m unittest discover -s desktop -p "test_*.py" -v
       - name: Build single-file executable
         run: pyinstaller --noconfirm --clean --onefile --windowed --name ARIA desktop/aria_desktop.py
       - name: Verify executable exists
