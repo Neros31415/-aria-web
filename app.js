@@ -171,6 +171,13 @@ async function sendToAria(text) {
       throw new Error(errors[response.status] || data.error || "Erreur backend (" + response.status + ").");
     }
     if (typeof data.reply !== "string" || !data.reply.trim()) throw new Error("Le backend n’a pas renvoyé de réponse.");
+    try {
+      const savedMemory = await memoryRequest("GET");
+      memories = normalizeMemories(savedMemory.memories);
+      memoryMode = "remote";
+      persist();
+      renderMemory();
+    } catch { /* A memory refresh failure must not discard a successful chat reply. */ }
     addMessage("assistant", data.reply.trim());
     setStatus("Connectée · " + (data.model || "IA distante") + (memoryMode === "remote" ? " · mémoire persistante" : ""));
   } catch (error) {
