@@ -95,6 +95,37 @@ export default {
     const profile = "Tu es Aria, l’assistante personnelle de Quentin. Écris toujours ton nom Aria, jamais ARIA dans tes réponses. VOUVOIE Quentin systématiquement : emploie vous/votre, jamais tu/te/ton, même dans les échanges personnels et complices. Profil utilisateur transmis par l’application : centres d’intérêt IA, informatique, sciences et philosophie, univers et physique, esport (League of Legends et Wild Rift), cyclisme. Projet : assistante personnelle inspirée de Jarvis, personnalité élégante, complice, calme, avec un humour sec subtil et occasionnel, interface HUD discrète et fluide, mémoire contrôlée par l’utilisateur. Quentin utilise principalement son iPhone et n’a pas actuellement de PC : privilégie les étapes réalisables sur téléphone. Il préfère les réponses courtes, directes, concrètes, honnêtes, sans ton brochure ni listes non sollicitées. Parle naturellement, évite les introductions génériques et les avertissements répétitifs. Ne récite pas systématiquement tes limites : mentionne-les seulement quand elles sont utiles à la demande. Tu peux le contredire avec des arguments, tout en le vouvoyant. N’invente jamais de souvenirs et ne prétends pas être humaine.";
     const incomingSystem = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n\n");
     const conversation = messages.filter((m) => m.role !== "system").slice(-20);
+    let memoryWriteStatus = "";
+    const lastUserMessage = messages.filter((item) => item.role === "user").at(-1)?.content.trim() || "";
+    const rememberMatch = lastUserMessage.match(/^(?:Aria[,\\s]+)?(?:retiens(?:\\s+bien)?\\s+que|mémorise(?:\\s+que)?|souviens-toi\\s+que|n'oublie pas que)\\s+(.+)$/i);
+    if (rememberMatch) {
+      if (!env.ARIA_MEMORY || !validClientId(body.clientId)) {
+        memoryWriteStatus = "Échec : le stockage persistant n’est pas disponible. Ne prétends pas que l’information a été mémorisée.";
+      } else {
+        try {
+          const key = "memory:v1:" + body.clientId;
+          const saved = await env.ARIA_MEMORY.get(key, "json");
+          const memories = Array.isArray(saved) ? saved : [];
+          const text = rememberMatch[1].trim().slice(0, 300);
+          const existing = memories.find((item) => typeof item.text === "string" && item.text.trim().toLocaleLowerCase("fr") === text.toLocaleLowerCase("fr"));
+          const now = Date.now();
+          if (existing) {
+            existing.text = text;
+            existing.updatedAt = now;
+          } else {
+            memories.push({id: crypto.randomUUID(), text, createdAt: now, updatedAt: now});
+          }
+          const bounded = memories.slice(-100);
+          await env.ARIA_MEMORY.put(key, JSON.stringify(bounded), {
+            metadata: {schema: 1, count: bounded.length, updatedAt: now}
+          });
+          memoryWriteStatus = "Succès : l’information a été enregistrée dans la mémoire persistante.";
+        } catch {
+          memoryWriteStatus = "Échec : le serveur n’a pas pu enregistrer l’information. Ne prétends pas qu’elle a été mémorisée.";
+        }
+      }
+    }
+
     let memoryContext = "Aucune mémoire persistante enregistrée pour cet appareil.";
     if (env.ARIA_MEMORY && validClientId(body.clientId)) {
       try {
