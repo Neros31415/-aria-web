@@ -1,23 +1,39 @@
 const $ = (id) => document.getElementById(id);
 const STORAGE_MESSAGES = "aria.v07.messages";
 const STORAGE_MEMORY = "aria.v07.memory";
+const STORAGE_CLIENT_ID = "aria.v07.memoryClientId";
+const STORAGE_MIGRATED = "aria.v07.memoryMigrated";
 const SESSION_TOKEN = "aria.session.accessToken";
 const API_BASE = "https://aria-brain-staging.quentineros-sevesi.workers.dev";
 const messagesEl = $("messages");
 const input = $("messageInput");
 let messages = safeRead(STORAGE_MESSAGES, []);
-let memories = safeRead(STORAGE_MEMORY, []);
+let memories = normalizeMemories(safeRead(STORAGE_MEMORY, []));
 let isSending = false;
+let memoryMode = "local";
+let memorySyncing = false;
 
 function safeRead(key, fallback) {
-  try { const value = JSON.parse(localStorage.getItem(key)); return Array.isArray(value) ? value : fallback; }
+  try { const value = JSON.parse(localStorage.getItem(key)); return value ?? fallback; }
   catch { return fallback; }
+}
+function normalizeMemories(items) {
+  if (!Array.isArray(items)) return [];
+  return items.map((item) => {
+    if (typeof item === "string") return {id: crypto.randomUUID(), text: item.slice(0, 300), createdAt: Date.now()};
+    if (item && typeof item.text === "string") return {
+      id: typeof item.id === "string" ? item.id : crypto.randomUUID(),
+      text: item.text.slice(0, 300),
+      createdAt: Number.isFinite(item.createdAt) ? item.createdAt : Date.now()
+    };
+    return null;
+  }).filter((item) => item && item.text.trim()).slice(0, 100);
 }
 function persist() {
   try {
     localStorage.setItem(STORAGE_MESSAGES, JSON.stringify(messages.slice(-50)));
     localStorage.setItem(STORAGE_MEMORY, JSON.stringify(memories.slice(-100)));
-  } catch { setStatus("Stockage indisponible dans ce navigateur"); }
+  } catch { setStatus("Stockage local indisponible"); }
 }
 function setStatus(text) { $("statusText").textContent = text; }
 function addMessage(role, text, save = true) {
@@ -53,6 +69,76 @@ function setSessionToken(value) {
     return true;
   } catch { return false; }
 }
+function getClientId() {
+  try {
+    let id = localStorage.getItem(STORAGE_CLIENT_ID);
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem(STORAGE_CLIENT_ID, id);
+    }
+    return id;
+  } catch { return ""; }
+}
+async function memoryRequest(method) {
+  const token = getSessionToken();
+  const clientId = getClientId();
+  if (!token || !clientId) throw new Error("Jeton ou identifiant local indisponible.");
+  const response = await fetch(API_BASE + "/memory?clientId=" + encodeURIComponent(clientId), {
+    method,
+    headers: {"Authorization":"Bearer " + token, "Content-Type":"application/json"},
+    ...(method === "PUT" ? {body: JSON.stringify({clientId, memories})} : {})
+  });
+  let data;
+  try { data = await response.json(); } catch { throw new Error("Réponse mémoire illisible."); }
+  if (!response.ok) throw new Error(data.error || "Erreur mémoire (" + response.status + ").");
+  return data;
+}
+async function syncMemories() {
+  if (memorySyncing || !getSessionToken()) return;
+  memorySyncing = true;
+  try {
+    const data = await memoryRequest("GET");
+    const remote = normalizeMemories(data.memories);
+    const alreadyMigrated = localStorage.getItem(STORAGE_MIGRATED) === "true";
+    if (!remote.length && memories.length && !alreadyMigrated) {
+      const saved = await memoryRequest("PUT");
+      memories = normalizeMemories(saved.memories);
+    } else {
+      memories = remote;
+    }
+    localStorage.setItem(STORAGE_MIGRATED, "true");
+    memoryMode = "remote";
+    persist();
+    renderMemory();
+    setStatus("Connectée · mémoire persistante active");
+  } catch (error) {
+    memoryMode = "local";
+    renderMemory();
+    setStatus("Chat connecté · mémoire locale uniquement");
+    $("memoryStatus").textContent = "Serveur indisponible : notes conservées sur cet appareil. " + error.message;
+  } finally {
+    memorySyncing = false;
+  }
+}
+async function saveMemoriesToServer() {
+  if (!getSessionToken()) {
+    memoryMode = "local";
+    renderMemory();
+    return;
+  }
+  try {
+    const data = await memoryRequest("PUT");
+    memories = normalizeMemories(data.memories);
+    memoryMode = "remote";
+    persist();
+    renderMemory();
+    $("memoryStatus").textContent = "Enregistrée sur le serveur ARIA.";
+  } catch (error) {
+    memoryMode = "local";
+    renderMemory();
+    $("memoryStatus").textContent = "Non synchronisée : " + error.message + " Les notes restent sur cet appareil.";
+  }
+}
 async function sendToAria(text) {
   const token = getSessionToken();
   if (!token) {
@@ -65,10 +151,14 @@ async function sendToAria(text) {
   sendButton.disabled = true;
   setStatus("ARIA réfléchit…");
   try {
+    await syncMemories();
     const response = await fetch(API_BASE + "/chat", {
       method: "POST",
       headers: {"Content-Type":"application/json", "Authorization":"Bearer " + token},
-      body: JSON.stringify({messages: messages.slice(-20).map(({role,text}) => ({role,content:text}))})
+      body: JSON.stringify({
+        clientId: getClientId(),
+        messages: messages.slice(-20).map(({role,text}) => ({role,content:text}))
+      })
     });
     let data;
     try { data = await response.json(); } catch { throw new Error("Réponse illisible du backend."); }
@@ -77,12 +167,12 @@ async function sendToAria(text) {
       throw new Error("Jeton refusé. Il a été effacé de cette session ; vérifiez-le dans les paramètres.");
     }
     if (!response.ok) {
-      const errors = {403:"Origine refusée par le backend.", 429:"Limite de requêtes atteinte.", 502:"Le fournisseur IA est temporairement indisponible.", 503:"Le backend n’est pas configuré."};
+      const errors = {403:"Origine refusée par le backend.", 429:"Limite de requêtes atteinte.", 502:"Le fournisseur IA est temporairement indisponible.", 503:"Le backend ou le stockage mémoire n’est pas configuré."};
       throw new Error(errors[response.status] || data.error || "Erreur backend (" + response.status + ").");
     }
     if (typeof data.reply !== "string" || !data.reply.trim()) throw new Error("Le backend n’a pas renvoyé de réponse.");
     addMessage("assistant", data.reply.trim());
-    setStatus("Connectée · " + (data.model || "IA distante"));
+    setStatus("Connectée · " + (data.model || "IA distante") + (memoryMode === "remote" ? " · mémoire persistante" : ""));
   } catch (error) {
     addMessage("assistant", "Je n’ai pas pu répondre : " + (error && error.message ? error.message : "erreur réseau") + " Vérifiez la connexion et l’état du backend.");
     if (error instanceof TypeError) setStatus("Backend inaccessible ou CORS");
@@ -116,20 +206,28 @@ function renderMemory() {
   const list = $("memoryList"); list.replaceChildren();
   memories.forEach((memory, index) => {
     const li = document.createElement("li");
-    const span = document.createElement("span"); span.textContent = memory;
+    const span = document.createElement("span"); span.textContent = memory.text;
     const remove = document.createElement("button"); remove.type = "button"; remove.textContent = "×"; remove.setAttribute("aria-label", "Supprimer cette note");
-    remove.addEventListener("click", () => { memories.splice(index, 1); persist(); renderMemory(); });
+    remove.addEventListener("click", () => {
+      memories.splice(index, 1); persist(); renderMemory(); void saveMemoriesToServer();
+    });
     li.append(span, remove); list.appendChild(li);
   });
   if (!memories.length) {
     const li = document.createElement("li"); li.textContent = "Aucune note enregistrée."; li.style.color = "#66778e"; list.appendChild(li);
   }
+  const status = $("memoryStatus");
+  if (status) status.textContent = memoryMode === "remote"
+    ? "Synchronisée avec le serveur ARIA."
+    : "Stockée sur cet appareil uniquement. Configurez le jeton pour synchroniser.";
 }
 $("memoryForm").addEventListener("submit", (event) => {
   event.preventDefault();
   const value = $("memoryInput").value.trim();
   if (!value) return;
-  memories.push(value); persist(); $("memoryInput").value = ""; renderMemory();
+  memories.push({id: crypto.randomUUID(), text: value.slice(0, 300), createdAt: Date.now()});
+  memories = memories.slice(-100);
+  persist(); $("memoryInput").value = ""; renderMemory(); void saveMemoriesToServer();
 });
 $("closeSettingsBtn").addEventListener("click", () => $("settingsDialog").close());
 $("settingsBtn").addEventListener("click", () => {
@@ -142,8 +240,10 @@ $("apiTokenForm").addEventListener("submit", (event) => {
   const token = $("apiTokenInput").value.trim();
   if (!token) {
     setSessionToken("");
+    memoryMode = "local";
     setStatus("Jeton supprimé de la session");
     $("tokenStatus").textContent = "Jeton supprimé de cet onglet.";
+    renderMemory();
     return;
   }
   if (!setSessionToken(token)) {
@@ -151,10 +251,13 @@ $("apiTokenForm").addEventListener("submit", (event) => {
     return;
   }
   $("tokenStatus").textContent = "Jeton conservé uniquement dans la session de cet onglet.";
-  setStatus("Jeton configuré · connexion au premier message");
+  setStatus("Jeton configuré · synchronisation de la mémoire…");
+  void syncMemories();
 });
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
 }
-renderAllMessages(); renderMemory();
-setStatus(getSessionToken() ? "Jeton présent · backend prêt à tester" : "IA distante · jeton à configurer");
+renderAllMessages();
+renderMemory();
+setStatus(getSessionToken() ? "Jeton présent · synchronisation mémoire…" : "IA distante · jeton à configurer");
+if (getSessionToken()) void syncMemories();
