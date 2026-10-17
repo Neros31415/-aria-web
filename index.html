@@ -22,7 +22,7 @@
         <div class="eyebrow">SYSTÈME PERSONNEL · V0.7 FOUNDATION</div>
         <h1>À votre service,<br><em>Quentin.</em></h1>
         <p>Une interface discrète pour organiser vos idées, préparer vos missions et construire votre assistant personnel.</p>
-        <div class="capability-row"><span>◈ Mémoire locale</span><span>◈ Interface mobile</span><span>◈ Architecture extensible</span></div>
+        <div class="capability-row"><span>◈ Mémoire persistante</span><span>◈ Interface mobile</span><span>◈ Architecture extensible</span></div>
       </section>
 
       <section class="workspace">
@@ -39,9 +39,10 @@
       </section>
 
       <section class="memory-panel">
-        <div class="section-head"><div><div class="eyebrow">CONTEXTE PERSISTANT</div><h2>Mémoire locale</h2></div><span class="pill">SUR CET APPAREIL</span></div>
-        <p class="panel-description">Les notes ajoutées ici restent dans le stockage de ce navigateur. Elles ne sont pas envoyées à un serveur.</p>
+        <div class="section-head"><div><div class="eyebrow">CONTEXTE PERSISTANT</div><h2>Mémoire d’Aria</h2></div><span class="pill">SERVEUR + APPAREIL</span></div>
+        <p class="panel-description">Les notes peuvent être synchronisées avec le serveur ARIA et réutilisées dans une nouvelle conversation. Sans jeton configuré, elles restent sur cet appareil.</p>
         <form id="memoryForm" class="memory-form"><input id="memoryInput" maxlength="300" placeholder="Ajouter une préférence ou une note…"><button type="submit">Ajouter</button></form>
+        <p id="memoryStatus" class="panel-description" role="status" aria-live="polite">Stockée sur cet appareil uniquement. Configurez le jeton pour synchroniser.</p>
         <ul id="memoryList" class="memory-list"></ul>
       </section>
 
@@ -52,7 +53,7 @@
 
   <dialog id="settingsDialog">
     <div class="dialog-content">
-      <div class="section-head"><div><div class="eyebrow">CONFIGURATION</div><h2>État du prototype</h2></div><button class="icon-button" aria-label="Fermer">×</button></div>
+      <div class="section-head"><div><div class="eyebrow">CONFIGURATION</div><h2>État du prototype</h2></div><button class="icon-button" id="closeSettingsTopBtn" type="button" aria-label="Fermer">×</button></div>
       <div class="setting-row"><span>Interface PWA</span><b class="good">ACTIVE</b></div>
       <div class="setting-row"><span>Mémoire locale</span><b class="good">ACTIVE</b></div>
       <div class="setting-row"><span>Backend IA de test</span><b class="pending">À VALIDER</b></div>
@@ -64,7 +65,7 @@
         <div id="tokenStatus" class="dialog-help" role="status" aria-live="polite"></div>
         <button class="primary-button" type="submit">Enregistrer le jeton de session</button>
       </form>
-      <p class="dialog-help">Le chat enverra les messages au backend de test Cloudflare. L’intégration n’est pas considérée comme validée avant un test réel depuis cette page.</p>
+      <p class="dialog-help">Le chat et la mémoire utilisent le backend de test Cloudflare. La mémoire serveur n’est considérée comme validée qu’après un test réel et une récupération depuis une nouvelle session.</p>
       <button class="text-button" id="closeSettingsBtn" type="button">Fermer</button>
     </div>
   </dialog>
