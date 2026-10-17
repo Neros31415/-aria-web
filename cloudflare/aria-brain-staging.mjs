@@ -97,7 +97,7 @@ export default {
     const conversation = messages.filter((m) => m.role !== "system").slice(-20);
     let memoryWriteStatus = "";
     const lastUserMessage = messages.filter((item) => item.role === "user").at(-1)?.content.trim() || "";
-    const rememberMatch = lastUserMessage.match(/^(?:Aria[,\\s]+)?(?:retiens(?:\\s+bien)?\\s+que|mémorise(?:\\s+que)?|souviens-toi\\s+que|n'oublie pas que)\\s+(.+)$/i);
+    const rememberMatch = lastUserMessage.match(/^(?:Aria[,\s]+)?(?:retiens(?:\s+bien)?\s+que|mémorise(?:\s+que)?|souviens-toi\s+que|n'oublie pas que)\s+(.+)$/i);
     if (rememberMatch) {
       if (!env.ARIA_MEMORY || !validClientId(body.clientId)) {
         memoryWriteStatus = "Échec : le stockage persistant n’est pas disponible. Ne prétends pas que l’information a été mémorisée.";
