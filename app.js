@@ -131,6 +131,7 @@ $("memoryForm").addEventListener("submit", (event) => {
   if (!value) return;
   memories.push(value); persist(); $("memoryInput").value = ""; renderMemory();
 });
+$("closeSettingsBtn").addEventListener("click", () => $("settingsDialog").close());
 $("settingsBtn").addEventListener("click", () => {
   const tokenInput = $("apiTokenInput");
   if (tokenInput) tokenInput.value = getSessionToken();
