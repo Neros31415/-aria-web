@@ -55,10 +55,19 @@
       <div class="section-head"><div><div class="eyebrow">CONFIGURATION</div><h2>État du prototype</h2></div><button class="icon-button" aria-label="Fermer">×</button></div>
       <div class="setting-row"><span>Interface PWA</span><b class="good">ACTIVE</b></div>
       <div class="setting-row"><span>Mémoire locale</span><b class="good">ACTIVE</b></div>
-      <div class="setting-row"><span>Modèle IA réel</span><b class="pending">NON CONNECTÉ</b></div>
-      <div class="setting-row"><span>Agent Web / Windows</span><b class="pending">NON CONNECTÉ</b></div>
-      <p class="dialog-help">Pour connecter un vrai modèle, il faudra déployer un backend sécurisé. Une clé API ne doit jamais être placée dans le code de cette application.</p>
-      <button class="primary-button">Fermer</button>
+      <div class="setting-row"><span>Interface PWA</span><b class="good">ACTIVE</b></div>
+      <div class="setting-row"><span>Mémoire locale</span><b class="good">ACTIVE</b></div>
+      <div class="setting-row"><span>Backend IA de test</span><b class="pending">À VALIDER</b></div>
+      <div class="setting-row"><span>Recherche Web / agent Windows</span><b class="pending">NON CONNECTÉS</b></div>
+      <form id="apiTokenForm" class="token-form">
+        <label for="apiTokenInput">Jeton d’accès ARIA</label>
+        <input id="apiTokenInput" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Saisir le jeton d’accès" maxlength="500">
+        <div class="dialog-help">Le jeton est conservé uniquement dans la session de cet onglet, jamais dans le dépôt ni dans la mémoire persistante. Ne saisissez pas votre clé fournisseur OpenAI.</div>
+        <div id="tokenStatus" class="dialog-help" role="status" aria-live="polite"></div>
+        <button class="primary-button" type="submit">Enregistrer le jeton de session</button>
+      </form>
+      <p class="dialog-help">Le chat enverra les messages au backend de test Cloudflare. L’intégration n’est pas considérée comme validée avant un test réel depuis cette page.</p>
+      <button class="text-button" value="close">Fermer</button>
     </form>
   </dialog>
   <script src="app.js"></script>
