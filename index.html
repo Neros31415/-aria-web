@@ -51,10 +51,8 @@
   </div>
 
   <dialog id="settingsDialog">
-    <form method="dialog" class="dialog-content">
+    <div class="dialog-content">
       <div class="section-head"><div><div class="eyebrow">CONFIGURATION</div><h2>État du prototype</h2></div><button class="icon-button" aria-label="Fermer">×</button></div>
-      <div class="setting-row"><span>Interface PWA</span><b class="good">ACTIVE</b></div>
-      <div class="setting-row"><span>Mémoire locale</span><b class="good">ACTIVE</b></div>
       <div class="setting-row"><span>Interface PWA</span><b class="good">ACTIVE</b></div>
       <div class="setting-row"><span>Mémoire locale</span><b class="good">ACTIVE</b></div>
       <div class="setting-row"><span>Backend IA de test</span><b class="pending">À VALIDER</b></div>
@@ -67,8 +65,8 @@
         <button class="primary-button" type="submit">Enregistrer le jeton de session</button>
       </form>
       <p class="dialog-help">Le chat enverra les messages au backend de test Cloudflare. L’intégration n’est pas considérée comme validée avant un test réel depuis cette page.</p>
-      <button class="text-button" value="close">Fermer</button>
-    </form>
+      <button class="text-button" id="closeSettingsBtn" type="button">Fermer</button>
+    </div>
   </dialog>
   <script src="app.js"></script>
 </body>
