@@ -99,8 +99,9 @@ async function syncMemories() {
   try {
     const data = await memoryRequest("GET");
     const remote = normalizeMemories(data.memories);
-    const alreadyMigrated = localStorage.getItem(STORAGE_MIGRATED) === "true";
-    if (!remote.length && memories.length && !alreadyMigrated) {
+    // Never discard device-only notes merely because a previous sync was attempted.
+    // If the server is empty but this device has notes, seed the remote store from this device.
+    if (!remote.length && memories.length) {
       const saved = await memoryRequest("PUT");
       memories = normalizeMemories(saved.memories);
     } else {
