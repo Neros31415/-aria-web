@@ -48,9 +48,50 @@ function renderMessage(item) {
   const bubble = document.createElement("div"); bubble.className = "bubble";
   const label = document.createElement("div"); label.className = "message-label"; label.textContent = item.role === "user" ? "VOUS" : "ARIA";
   const tag = document.createElement("span"); tag.textContent = item.role === "user" ? "MESSAGE" : "IA DISTANTE"; label.appendChild(tag);
-  const p = document.createElement("p"); p.textContent = item.text;
+  const p = document.createElement("p");
+  if (item.role === "user") p.textContent = item.text;
+  else renderFormattedText(p, item.text);
   bubble.append(label, p); article.append(avatar, bubble); messagesEl.appendChild(article);
   article.scrollIntoView({behavior:"smooth", block:"nearest"});
+}
+// Render a deliberately small, safe subset of Markdown without injecting HTML.
+function renderFormattedText(container, text) {
+  const pattern = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>()]+)|\*\*([^*]+)\*\*|`([^`]+)`/g;
+  let cursor = 0;
+  let match;
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > cursor) container.appendChild(document.createTextNode(text.slice(cursor, match.index)));
+    if (match[2]) {
+      const link = document.createElement("a");
+      link.href = match[2];
+      link.textContent = match[1];
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.className = "message-link";
+      container.appendChild(link);
+    } else if (match[3]) {
+      const rawUrl = match[3].replace(/[.,!?;:]+$/, "");
+      const trailing = match[3].slice(rawUrl.length);
+      const link = document.createElement("a");
+      link.href = rawUrl;
+      link.textContent = rawUrl;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.className = "message-link";
+      container.appendChild(link);
+      if (trailing) container.appendChild(document.createTextNode(trailing));
+    } else if (match[4]) {
+      const strong = document.createElement("strong");
+      strong.textContent = match[4];
+      container.appendChild(strong);
+    } else if (match[5]) {
+      const code = document.createElement("code");
+      code.textContent = match[5];
+      container.appendChild(code);
+    }
+    cursor = pattern.lastIndex;
+  }
+  if (cursor < text.length) container.appendChild(document.createTextNode(text.slice(cursor)));
 }
 function renderAllMessages() {
   messagesEl.replaceChildren();
