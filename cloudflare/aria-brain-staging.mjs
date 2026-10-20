@@ -23,10 +23,15 @@ export default {
 
     const url = new URL(req.url);
     if (url.pathname === "/health" && req.method === "GET") {
+      const requireIndividualAuth = env.ARIA_REQUIRE_INDIVIDUAL_AUTH === "true";
+      const authConfigured = requireIndividualAuth
+        ? Boolean(env.ARIA_USERS)
+        : Boolean(env.ARIA_ACCESS_TOKEN || env.ARIA_USERS);
       return json({
         status: "ok",
         service: "aria-api",
-        configured: Boolean(env.ARIA_ACCESS_TOKEN && env.OPENAI_API_KEY),
+        configured: Boolean(authConfigured && env.OPENAI_API_KEY),
+        authenticationMode: requireIndividualAuth ? "individual" : "alpha",
         provider: "openai",
         model: "gpt-6-astra",
         persistentMemory: Boolean(env.ARIA_MEMORY)
