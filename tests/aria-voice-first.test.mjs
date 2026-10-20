@@ -114,6 +114,40 @@ test("backend memory deletion requires a valid bearer token and deletes only the
   assert.deepEqual(deleted, ["memory:v1:" + clientId]);
 });
 
+test("individually provisioned bearer tokens isolate memory by stable user identity", async () => {
+  const hashToken = async (token) => {
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
+    return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  };
+  const tokenA = "alpha-user-token-a";
+  const tokenB = "alpha-user-token-b";
+  const sessions = new Map([
+    ["session:v1:" + await hashToken(tokenA), "alpha_user_a"],
+    ["session:v1:" + await hashToken(tokenB), "alpha_user_b"]
+  ]);
+  const memoryReads = [];
+  const env = {
+    OPENAI_API_KEY: "test-key",
+    ARIA_USERS: { async get(key) { return sessions.get(key) || null; } },
+    ARIA_MEMORY: {
+      async get(key) { memoryReads.push(key); return []; },
+      async put() {},
+      async delete() {}
+    }
+  };
+  const request = (token) => new Request(
+    "https://aria-brain-staging.quentineros-sevesi.workers.dev/memory?clientId=123e4567-e89b-42d3-a456-426614174000",
+    {headers:{Origin:"https://neros31415.github.io",Authorization:"Bearer " + token}}
+  );
+  const first = await worker.fetch(request(tokenA), env);
+  const second = await worker.fetch(request(tokenB), env);
+  const invalid = await worker.fetch(request("not-provisioned"), env);
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.equal(invalid.status, 401);
+  assert.deepEqual(memoryReads, ["memory:v2:user:alpha_user_a", "memory:v2:user:alpha_user_b"]);
+});
+
 test("backend rejects an invalid token without deleting memory", async () => {
   const deleted = [];
   const env = {
