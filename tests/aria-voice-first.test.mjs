@@ -148,6 +148,22 @@ test("individually provisioned bearer tokens isolate memory by stable user ident
   assert.deepEqual(memoryReads, ["memory:v2:user:alpha_user_a", "memory:v2:user:alpha_user_b"]);
 });
 
+test("individual-auth mode rejects the shared alpha token", async () => {
+  const env = {
+    OPENAI_API_KEY: "test-key",
+    ARIA_ACCESS_TOKEN: "legacy-shared-token",
+    ARIA_REQUIRE_INDIVIDUAL_AUTH: "true",
+    ARIA_USERS: { async get() { return null; } },
+    ARIA_MEMORY: { async get() { return []; }, async put() {}, async delete() {} }
+  };
+  const response = await worker.fetch(new Request(
+    "https://aria-brain-staging.quentineros-sevesi.workers.dev/memory?clientId=123e4567-e89b-42d3-a456-426614174000",
+    {headers:{Origin:"https://neros31415.github.io",Authorization:"Bearer legacy-shared-token"}}
+  ), env);
+  assert.equal(response.status, 401);
+  assert.deepEqual(await response.json(), {error:"unauthorized"});
+});
+
 test("backend rejects an invalid token without deleting memory", async () => {
   const deleted = [];
   const env = {
