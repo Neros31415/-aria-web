@@ -64,6 +64,21 @@
         <div class="widget-status-box"><span class="widget-status-label">SOURCE</span><strong id="sceneSourceStatus">AUCUNE DONNÉE</strong></div>
         <button class="quiet-action widget-close" id="contextClose" type="button">Fermer les widgets</button>
       </aside>
+      <section class="visualization-stage" id="visualizationStage" aria-label="Espace de visualisation" hidden>
+        <header class="visualization-header">
+          <div><span class="widget-kicker">ARIA / IMMERSIVE SPACE</span><h2 id="visualizationTitle">Visualisation</h2></div>
+          <button class="quiet-action" id="visualizationBack" type="button">Retour à ARIA</button>
+        </header>
+        <div class="visualization-viewport" aria-live="polite">
+          <div class="visualization-rings" aria-hidden="true"><span></span><span></span><span></span></div>
+          <div class="visualization-center"><span class="visualization-mark">A</span><span class="visualization-caption">ESPACE VISUEL</span></div>
+          <div class="visualization-grid" aria-hidden="true"></div>
+        </div>
+        <p class="visualization-note" id="visualizationNote">Espace de visualisation en préparation. Aucune scène 3D ou donnée externe n’est encore connectée.</p>
+      </section>
+      <div class="logo-transition" id="logoTransition" hidden aria-hidden="true">
+        <span class="transition-mark">A</span>
+      </div>
       <aside class="transcript-widget" id="transcriptWidget" aria-live="polite" hidden>
         <div class="transcript-head"><span>TRANSCRIPTION</span><button id="transcriptClose" type="button" aria-label="Masquer la transcription">×</button></div>
         <div id="transcriptText">La transcription apparaîtra ici si vous l'activez.</div>
