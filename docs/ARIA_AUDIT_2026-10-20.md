@@ -1,44 +1,46 @@
-# ARIA — audit initial du dépôt
+# ARIA — audit et avancement technique
 Date : 20 octobre 2026
-Dépôt audité : https://github.com/Neros31415/-aria-web
-Branche de référence de l'audit : main (546a51f73c37a823b083e2ed250b5a119c2a7931)
-Branche d'interface examinée : feat/aria-cinematic-hud-integration (b3cc4230fac97dca07dbd53c5571ad803974f8b0)
+Dépôt : https://github.com/Neros31415/-aria-web
+Base de référence : `main` — `546a51f73c37a823b083e2ed250b5a119c2a7931`
+Branche de travail : `feat/aria-voice-first-onboarding`
 
-## Résumé exécutif
-Le dépôt contient une PWA statique et plusieurs branches de travail. La branche main est une base V0.7 locale : historique et notes en localStorage, sans moteur IA distant, recherche web, synchronisation ou contrôle système. La branche HUD ajoute une scène visuelle plus ambitieuse, mais son orbe est encore un bouton, le chat écrit reste central et les scènes sont des maquettes.
+## 1. Audit initial
+- `main` est une PWA statique qui stocke l'historique et les notes dans `localStorage`; elle ne contacte pas de modèle IA.
+- La branche HUD précédente contenait une orbe cliquable, un chat écrit permanent et des scènes 3D de démonstration.
+- Le backend Cloudflare existant utilisait un jeton Bearer partagé, un stockage KV et un profil système codé en dur. Le profil codé en dur a été remplacé par une consigne générique.
+- Le navigateur ne peut pas garantir l'écoute vocale continue en arrière-plan, notamment sur iOS. Il faut tester sur appareils réels.
+- La suppression de données distantes doit être distinguée de l'effacement local et ne jamais être annoncée comme réussie sans confirmation serveur.
 
-## Constat vérifié
-- Dépôt public, branche par défaut : main.
-- Fichiers de la base : index.html, app.js, styles.css, sw.js, manifest.webmanifest et README.md.
-- Pas de package.json à la racine sur main : les scripts de build/test ne sont pas définis comme dans un projet npm classique.
-- main/index.html présente un formulaire de chat écrit, un historique et un panneau de mémoire locale.
-- main/app.js persiste l'historique et les notes dans localStorage et répond par des règles locales; il ne contacte pas un modèle.
-- La branche HUD possède une orbe SVG animée, des panneaux contextuels et des scènes Présence/Globe/Mont-Blanc/Moteur. Le code déclare explicitement que plusieurs scènes sont des démonstrations.
-- Dans cette branche, l'orbe possède encore role=button, tabindex et des gestionnaires click/keyboard qui changent de scène.
-- La branche HUD contient encore un composer textuel et un panneau de conversation.
-- Les PR #12 et #9 proposent un backend Cloudflare et une mémoire KV, mais restent des changements séparés à valider. Le Worker de la branche alpha injecte un profil personnel codé en dur et n'offre pas de route DELETE pour la mémoire.
-- La PR #14 est un brouillon et n'a pas été fusionnée. La CI alpha PR #12 a un run réussi, mais cela ne prouve pas le parcours vocal/mobile ni la connexion réelle du fournisseur.
-- Le précédent signalement de panne réseau vers aria-brain-staging doit être revalidé sur le déploiement actuel.
-- Cette branche ajoute une interface vocale expérimentale basée sur les API Web Speech natives. La disponibilité de SpeechRecognition, particulièrement sur iOS Safari et en arrière-plan, reste à tester sur appareil réel.
-- Le Worker `aria-brain-staging` a été déployé sur Cloudflare le 20 octobre 2026 avec la route DELETE protégée et un profil générique. Les bindings AI, KV et les deux secrets sont toujours présents.
-- La liste de clés du namespace KV `ARIA_MEMORY_STAGING` a été vérifiée : aucune clé avec le préfixe `memory:v1:` n'est actuellement présente.
-- La réinitialisation locale est déclenchée au premier lancement de cette branche. La suppression distante est seulement tentée si l'ancien clientId et le jeton de session sont présents; elle ne peut être déclarée réussie que si le Worker répond positivement.
-- Le frontend voice-first n'est pas encore déployé sur l'URL publique; le nettoyage du stockage local de l'appareil se produira seulement lorsque cette version sera ouverte.
+## 2. Changements présents dans cette branche
+- Interface vocale prioritaire : l'orbe est purement visuel et le chat écrit permanent a été retiré.
+- Onboarding oral et réglages de proactivité, longueur de réponse et humour.
+- Transcription facultative, états visuels d'écoute/réflexion/parole et respect de `prefers-reduced-motion`.
+- Appels du frontend vers `/chat` sur le Worker de staging.
+- Jeton d'accès alpha saisi par le testeur, conservé dans `sessionStorage` seulement, jamais codé dans le frontend.
+- Historique conversationnel conservé en mémoire vive de la page, limité aux derniers messages; il n'est pas écrit dans `localStorage`.
+- Synchronisation du panneau mémoire avec le Worker via GET/PUT, suppression locale d'une note et synchronisation de cette suppression.
+- Route DELETE protégée ajoutée au Worker de staging pour supprimer la mémoire d'un profil donné.
+- Suppression du profil personnel codé en dur dans le Worker.
+- Cache PWA mis à jour et tests automatisés ajoutés.
 
-## Risques prioritaires
-1. Aucune expérience vocale principale dans la base de référence.
-2. L'interface de la branche HUD contredit la spécification : orbe cliquable et chat écrit permanent.
-3. Les données locales historiques ne sont pas effacées automatiquement par la base actuelle.
-4. La mémoire distante ne possède pas de route de suppression explicite.
-5. Le profil de l'utilisateur est codé en dur dans le Worker de la branche alpha.
-6. La disponibilité du backend et le fonctionnement réel du modèle ne sont pas prouvés par le code du frontend.
-7. La reconnaissance vocale en continu en arrière-plan n'est pas garantie sur iOS/Android; la capacité dépend du navigateur et des politiques système.
+## 3. Vérifications
+- Le Worker `aria-brain-staging` a été déployé le 20 octobre 2026; les bindings AI, KV et les secrets sont présents.
+- Le namespace KV de staging a été vérifié : aucune clé `memory:v1:` n'était présente au moment de l'audit.
+- Les tests GitHub Actions ont réussi sur les versions précédentes de cette branche. Le dernier changement de synchronisation mémoire et de purge complète est en cours de validation CI; consulter le run le plus récent avant de considérer cette révision comme validée.
+- Aucun changement de frontend n'est fusionné dans `main`.
 
-## Suite recommandée
-- Développer sur une branche dédiée sans toucher à main.
-- Faire de l'orbe un élément purement visuel et piloter l'interaction par la voix.
-- Ajouter un onboarding oral et des états visuels expliqués.
-- Purger l'ancien stockage local au premier lancement de la version révisée, avec une opération séparée pour les données serveur.
-- Ajouter une route DELETE protégée au Worker et tester la suppression de la mémoire distante avec l'identifiant de profil correct. La route DELETE est maintenant ajoutée dans cette branche, mais n'est pas encore déployée sur le Worker de staging.
-- Connecter le moteur vocal au backend seulement après validation de son contrat et de son authentification.
-- Tester la version sur Safari iPhone et les navigateurs Android, puis vérifier le cache PWA.
+## 4. Limites et risques restants
+1. L'accès au backend repose encore sur un jeton alpha partagé fourni au testeur. Ce mécanisme convient uniquement à un alpha contrôlé; une version publique doit utiliser une authentification individuelle et des jetons à durée limitée.
+2. Le frontend de cette branche n'est pas déployé sur l'URL publique; l'expérience ne peut pas encore être testée par simple ouverture du site actuel.
+3. Les API Web Speech varient selon les navigateurs. Les autorisations micro, le redémarrage après synthèse vocale, l'interruption utilisateur et l'arrière-plan doivent être testés sur iPhone et Android.
+4. Le contrat de modèle et le vrai trajet `/chat` doivent être testés sur le Worker déployé avec un jeton alpha valide; un test unitaire ne prouve pas la disponibilité du fournisseur.
+5. Les scènes globe, relief et moteur restent des visuels de démonstration, pas des visualisations 3D reliées à des données réelles.
+6. La suppression distante nécessite l'identifiant de profil et un jeton valide. L'interface indique l'échec si le serveur ne confirme pas la suppression.
+
+## 5. Prochaines étapes
+1. Attendre et corriger la CI de la dernière révision.
+2. Tester `/health` et `/chat` sur le Worker de staging sans exposer le secret dans le code public.
+3. Tester le parcours complet sur iPhone : autorisation micro, onboarding, aller-retour vocal, erreur réseau, pause/reprise et mémoire.
+4. Préparer un déploiement de prévisualisation séparé de `main`, puis effectuer un test alpha manuel.
+5. Remplacer le jeton partagé par une authentification dédiée avant d'élargir les testeurs.
+6. Intégrer ensuite des outils réels (recherche web, visualisations 3D) avec des contrats explicites et des états d'exécution honnêtes.
