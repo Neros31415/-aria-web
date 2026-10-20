@@ -60,6 +60,18 @@ test("frontend calls the real chat endpoint and keeps alpha credentials in sessi
   assert.match(app, /memories: memories\.map\(item => typeof item === "string" \? \{text:item\} : item\)/);
 });
 
+test("voice turns are serialized, abortable, and cannot speak after the user pauses", () => {
+  assert.match(app, /let turnInProgress = false/);
+  assert.match(app, /let turnGeneration = 0/);
+  assert.match(app, /let activeChatController = null/);
+  assert.match(app, /if \(speaking \|\| requestInFlight \|\| turnInProgress\) return/);
+  assert.match(app, /activeChatController\.abort\(\)/);
+  assert.match(app, /signal:activeChatController\.signal/);
+  assert.match(app, /thisTurn !== turnGeneration/);
+  assert.match(app, /event\.error === "audio-capture"/);
+  assert.match(app, /event\.error === "language-not-supported"/);
+});
+
 test("backend memory deletion requires a valid bearer token and deletes only the requested profile key", async () => {
   const deleted = [];
   const env = {
