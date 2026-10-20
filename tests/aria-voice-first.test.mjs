@@ -10,6 +10,26 @@ const sw = await readFile(new URL("../sw.js", import.meta.url), "utf8");
 const workerSource = await readFile(new URL("../cloudflare/aria-brain-staging.mjs", import.meta.url), "utf8");
 const visualEngine = await readFile(new URL("../visualization-engine.js", import.meta.url), "utf8");
 
+test("health endpoint reports readiness for individual auth without shared token", async () => {
+  const env = {
+    OPENAI_API_KEY: "test-key",
+    ARIA_REQUIRE_INDIVIDUAL_AUTH: "true",
+    ARIA_USERS: { async get() { return null; } },
+    ARIA_MEMORY: { async get() { return []; } }
+  };
+  const response = await worker.fetch(new Request("https://aria-brain-staging.quentineros-sevesi.workers.dev/health"), env);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    status: "ok",
+    service: "aria-api",
+    configured: true,
+    authenticationMode: "individual",
+    provider: "openai",
+    model: "gpt-6-astra",
+    persistentMemory: true
+  });
+});
+
 test("voice-first HUD has no permanent chat composer and the orb is not a control", () => {
   assert.match(html, /id="ariaOrb" role="img"/);
   assert.doesNotMatch(html, /id="ariaOrb"[^>]*role="button"/);
