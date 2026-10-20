@@ -119,8 +119,8 @@ test("individually provisioned bearer tokens isolate memory by stable user ident
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
     return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
   };
-  const tokenA = "alpha-user-token-a";
-  const tokenB = "alpha-user-token-b";
+  const tokenA = "a".repeat(64);
+  const tokenB = "b".repeat(64);
   const sessions = new Map([
     ["session:v1:" + await hashToken(tokenA), "alpha_user_a"],
     ["session:v1:" + await hashToken(tokenB), "alpha_user_b"]
