@@ -48,7 +48,7 @@ Le correctif de la branche :
 - conserve la mémoire désactivée lorsqu’on passe la question de consentement;
 - demande aussi une réponse reconnaissable pour les préférences de proactivité, de longueur et d’humour plutôt que de sauvegarder silencieusement une valeur par défaut.
 
-Les tests automatisés couvrent désormais aussi la confirmation serveur explicite de purge/synchronisation et le protocole d’intention structuré. Le dernier run vert connu est le workflow `39447166605`, sur le commit `5c66bc645c6ff59b9709e6197187e30746fc5988`; il valide la syntaxe JS et les tests de la branche, mais pas le fournisseur réel ni l’iPhone.
+Les tests automatisés couvrent désormais aussi la confirmation serveur explicite de purge/synchronisation et le protocole d’intention structuré. Le dernier run vert connu est le workflow `39448062952`, sur le commit `b7735c2dd9a77ce4a325bc8f9f1bb454c7061f90`; il valide la syntaxe JS et les tests de la branche, dont les tokens individuels de longueur insuffisante sont refusés. Il ne valide ni le fournisseur réel ni l’iPhone.
 
 ## 5. Risques et limites
 1. **Accès alpha :** le code prend en charge les jetons individuels mais le Worker déployé n’a pas été reconfiguré ni vérifié. Tant que `ARIA_REQUIRE_INDIVIDUAL_AUTH=true` et le binding `ARIA_USERS` ne sont pas confirmés en staging, limiter strictement l’accès à des testeurs contrôlés.
