@@ -44,7 +44,7 @@ test("legacy local ARIA data is purged on first launch and remote deletion is ex
 });
 
 test("the voice-first stylesheet and cache version are included in the PWA", () => {
-  assert.match(sw, /aria-voice-v10-shell-1/);
+  assert.match(sw, /aria-voice-v11-shell-1/);
   assert.match(sw, /"\.\/visualization-engine\.js"/);
   assert.match(sw, /"\.\/voice\.css"/);
   assert.match(css, /data-state="listening"/);
@@ -146,6 +146,7 @@ test("the globe scene uses WebGL locally and supports pointer rotation without e
   assert.match(html, /src="visualization-engine.js"/);
   assert.match(visualEngine, /getContext\("webgl"/);
   assert.match(visualEngine, /gl\.drawElements\(gl\.TRIANGLES/);
+  assert.match(visualEngine, /-r\.z \* perspective \* 0\.45/);
   assert.match(visualEngine, /pointermove/);
   assert.match(visualEngine, /rotationY \+= dx \* 0\.008/);
   assert.match(app, /généré localement, sans données géographiques externes/i);
