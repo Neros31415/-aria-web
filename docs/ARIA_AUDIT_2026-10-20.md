@@ -102,3 +102,14 @@ Les tests automatisés couvrent désormais aussi la confirmation serveur explici
 
 ## 7. Règle de statut
 Un test automatisé vert confirme uniquement les assertions couvertes par ce test. Il ne prouve pas le comportement sur un appareil réel, la disponibilité d’un fournisseur IA, la qualité d’une visualisation 3D, ni la suppression de données distantes sans confirmation serveur.
+
+## 8. Correctif de readiness du backend — 20 octobre 2026
+
+Le endpoint `/health` calculait auparavant `configured` uniquement à partir de `ARIA_ACCESS_TOKEN` et de `OPENAI_API_KEY`. Il signalait donc à tort une configuration incomplète lorsque l’authentification individuelle était activée et que le jeton partagé avait été supprimé — précisément l’état attendu après migration sécurisée.
+
+Correctif appliqué dans `cloudflare/aria-brain-staging.mjs` :
+- `configured` dépend maintenant du mode d’authentification choisi et des bindings/secrets nécessaires à ce mode;
+- la réponse indique `authenticationMode: "individual"` ou `"alpha"`;
+- un test automatisé vérifie le mode individuel avec `ARIA_USERS` et sans jeton partagé.
+
+**Limite importante :** `configured: true` signifie uniquement que la configuration requise est présente. Cela ne prouve ni qu’un jeton individuel a été provisionné, ni que le fournisseur IA répond, ni que le Worker déployé utilise ce code. Aucun déploiement n’a été effectué. La validation iPhone physique et la vérification du staging restent en attente.
