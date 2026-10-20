@@ -28,6 +28,7 @@ test("first-run onboarding explains voice and personal preferences", () => {
 test("legacy local ARIA data is purged on first launch and remote deletion is explicit", () => {
   assert.match(app, /aria\.v07\.messages/);
   assert.match(app, /remoteResetPromise/);
+  assert.match(app, /sessionStorage\.removeItem\(SESSION_TOKEN_KEY\)/);
   assert.match(app, /method: "DELETE"/);
   assert.match(app, /Mémoire locale effacée/i);
 });
@@ -37,6 +38,16 @@ test("the voice-first stylesheet and cache version are included in the PWA", () 
   assert.match(sw, /"\.\/voice\.css"/);
   assert.match(css, /data-state="listening"/);
   assert.match(css, /prefers-reduced-motion/);
+});
+
+test("frontend calls the real chat endpoint and keeps alpha credentials in session storage", () => {
+  assert.match(app, /const API_BASE = "https:\/\/aria-brain-staging\.quentineros-sevesi\.workers\.dev"/);
+  assert.match(app, /async function requestAriaReply/);
+  assert.match(app, /fetch\(API_BASE \+ "\/chat"/);
+  assert.match(app, /sessionStorage\.setItem\(SESSION_TOKEN_KEY, token\)/);
+  assert.doesNotMatch(app, /localStorage\.setItem\(SESSION_TOKEN_KEY/);
+  assert.match(html, /id="apiTokenSetting" type="password"/);
+  assert.match(app, /clientId: getClientId\(\)/);
 });
 
 test("backend memory deletion requires a valid bearer token and deletes only the requested profile key", async () => {
