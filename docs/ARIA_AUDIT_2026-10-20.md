@@ -118,3 +118,12 @@ Correctif appliqué dans `cloudflare/aria-brain-staging.mjs` :
 ### Vérification Cloudflare en lecture seule — 20 octobre 2026
 
 La configuration du Worker déployé a été interrogée sans modifier de paramètres ni créer de déploiement. Les bindings et secrets visibles confirment que le mode individuel n’est pas encore configuré : le jeton partagé reste actif et le binding `ARIA_USERS` manque. Ne pas considérer le support de code dans Git comme preuve d’activation en staging. La prochaine action technique sera de préparer puis valider la configuration de staging avec un accès individuel et une procédure de retour arrière; aucune modification Cloudflare n’a été appliquée dans cette session.
+
+## État réel du staging — 20 octobre 2026
+
+- Namespace de sessions créé : `ARIA_USERS_STAGING` (`9f1d1da82c0246b0b19b8c20fa93e55a`). Il est actuellement vide et n’est pas encore lié au Worker.
+- Aucun jeton individuel n’a été provisionné.
+- La configuration du Worker précédemment lue ne contenait que les bindings `AI`, `ARIA_MEMORY`, `ARIA_ACCESS_TOKEN` et `OPENAI_API_KEY`; le code actuellement déployé est une ancienne version qui authentifie uniquement le jeton partagé.
+- Le déploiement du code avec authentification individuelle n’a pas été effectué. Ne pas ajouter `ARIA_REQUIRE_INDIVIDUAL_AUTH=true` avant que le code compatible et le binding `ARIA_USERS` soient tous deux déployés, au risque de verrouiller l’accès au service.
+- Prochaine séquence autorisée : déployer le code de la branche sur staging en préservant les secrets et bindings existants; ajouter le binding KV; vérifier `/health`; provisionner un jeton temporaire avec expiration; tester l’accès individuel et le refus du jeton partagé; supprimer le secret partagé uniquement après validation et préparation d’un retour arrière.
+- Aucun jeton brut n’a été créé ou transmis. Aucun secret fournisseur n’a été lu ou exposé. Aucune modification du code déployé ni aucune modification des bindings du Worker n’a été effectuée.
