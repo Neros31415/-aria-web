@@ -307,6 +307,12 @@ async function requestAriaReply(text) {
     conversation.push({role:"user", content:text});
     const payload = {
       clientId: getClientId(),
+      memoryConsent: profile.memoryConsent === true,
+      preferences: {
+        proactivity: profile.proactivity,
+        verbosity: profile.verbosity,
+        humor: profile.humor
+      },
       messages: conversation.slice(-20)
     };
     activeChatController = new AbortController();
@@ -512,6 +518,7 @@ function saveSettingsFromDialog() {
   profile.proactivity = $("proactivitySetting").value;
   profile.verbosity = $("verbositySetting").value;
   profile.humor = $("humorSetting").value;
+  profile.memoryConsent = $("memoryConsentSetting").checked;
   saveProfile();
   $("settingsDialog").close();
   speak(getApiToken() ? "Vos préférences sont enregistrées. Le jeton alpha est disponible pour cette session." : "Vos préférences sont enregistrées. Le moteur distant restera indisponible tant que le jeton alpha n'est pas configuré.", {resume:true});
@@ -577,6 +584,7 @@ $("settingsBtn").addEventListener("click", () => {
   $("proactivitySetting").value = profile.proactivity;
   $("verbositySetting").value = profile.verbosity;
   $("humorSetting").value = profile.humor;
+  $("memoryConsentSetting").checked = profile.memoryConsent === true;
   $("settingsDialog").showModal();
 });
 $("saveSettings").addEventListener("click", saveSettingsFromDialog);
