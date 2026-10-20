@@ -23,10 +23,12 @@ if (!localStorage.getItem(KEYS.reset)) {
     }).then(response => response.ok).catch(() => false);
   }
   for (const key of Object.keys(localStorage)) {
-    if (key.startsWith("aria.")) localStorage.removeItem(key);
+    // Keep only the old profile ID temporarily so a failed remote purge can be retried.
+    if (key.startsWith("aria.") && key !== "aria.v07.memoryClientId") localStorage.removeItem(key);
   }
   for (const key of Object.keys(sessionStorage)) {
-    if (key.startsWith("aria.")) sessionStorage.removeItem(key);
+    // The old access token is retained only long enough to request deletion of the matching server record.
+    if (key.startsWith("aria.") && key !== "aria.session.accessToken") sessionStorage.removeItem(key);
   }
   localStorage.setItem(KEYS.reset, "done");
 }
@@ -97,6 +99,7 @@ function updateTranscript(text, role = "ARIA") {
   if (transcriptVisible) $("transcriptWidget").hidden = false;
 }
 function speak(text, options = {}) {
+  if (options.resume === true && recognition) shouldResumeListening = true;
   if (!("speechSynthesis" in window)) {
     announceVisual("La synthèse vocale n'est pas disponible dans ce navigateur.");
     return;
@@ -404,18 +407,22 @@ $("resetMemoryBtn").addEventListener("click", async () => {
   memories = [];
   profile = {proactivity:"balanced",verbosity:"balanced",humor:"balanced",memoryConsent:false};
   for (const key of Object.keys(localStorage)) {
-    if (key.startsWith("aria.")) localStorage.removeItem(key);
+    if (key.startsWith("aria.") && key !== "aria.v07.memoryClientId") localStorage.removeItem(key);
   }
   for (const key of Object.keys(sessionStorage)) {
-    if (key.startsWith("aria.")) sessionStorage.removeItem(key);
+    if (key.startsWith("aria.") && key !== "aria.session.accessToken") sessionStorage.removeItem(key);
   }
   localStorage.setItem(KEYS.reset, "done");
   localStorage.setItem(KEYS.memory, "[]");
   localStorage.setItem(KEYS.profile, JSON.stringify(profile));
   renderMemory();
+  if (remoteDeleted) {
+    localStorage.removeItem("aria.v07.memoryClientId");
+    sessionStorage.removeItem("aria.session.accessToken");
+  }
   $("memoryStatus").textContent = remoteDeleted
     ? "Mémoire locale effacée et suppression serveur confirmée."
-    : "Mémoire locale effacée. Suppression serveur non confirmée : le Worker peut ne pas encore prendre en charge cette opération ou l'identifiant de session peut manquer.";
+    : "Mémoire locale effacée. Suppression serveur non confirmée : l'identifiant et la session sont conservés temporairement pour permettre une nouvelle tentative.";
   speak(remoteDeleted
     ? "La mémoire personnelle de cet appareil a été effacée et le serveur a confirmé la suppression."
     : "La mémoire personnelle locale a été effacée. Je ne peux pas confirmer la suppression serveur, qui nécessite une session autorisée et un Worker compatible.", {resume:true});
@@ -431,10 +438,14 @@ updateClock();
 window.setInterval(updateClock, 1000);
 renderMemory();
 remoteResetPromise.then(deleted => {
+  if (deleted) {
+    localStorage.removeItem("aria.v07.memoryClientId");
+    sessionStorage.removeItem("aria.session.accessToken");
+  }
   if (localStorage.getItem(KEYS.reset) === "done" && !localStorage.getItem(KEYS.onboarded)) {
     $("memoryStatus").textContent = deleted
       ? "Les anciennes données locales et la mémoire serveur ont été effacées."
-      : "Les anciennes données locales ont été effacées. La suppression distante n'a pas pu être confirmée.";
+      : "Les anciennes données locales ont été effacées. La suppression distante n'a pas pu être confirmée; l'identifiant et la session sont conservés temporairement pour permettre une nouvelle tentative.";
   }
 });
 finishSetupIfReturning();
