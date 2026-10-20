@@ -39,3 +39,12 @@ Cette procédure permet des accès alpha individuels et une isolation mémoire p
 ## Avant toute ouverture publique
 
 Ne pas ouvrir l’inscription publique tant que l’authentification n’inclut pas la vérification d’e-mail, la récupération de compte, la révocation visible des sessions, la limitation de débit/coût, la revue de sécurité et des tests de bout en bout. Les jetons individuels provisionnés manuellement sont réservés aux tests fermés et temporaires.
+
+## État réel du staging — 20 octobre 2026
+
+- Namespace de sessions créé : `ARIA_USERS_STAGING` (`9f1d1da82c0246b0b19b8c20fa93e55a`). Il est actuellement vide et n’est pas encore lié au Worker.
+- Aucun jeton individuel n’a été provisionné.
+- La configuration du Worker précédemment lue ne contenait que les bindings `AI`, `ARIA_MEMORY`, `ARIA_ACCESS_TOKEN` et `OPENAI_API_KEY`; le code actuellement déployé est une ancienne version qui authentifie uniquement le jeton partagé.
+- Le déploiement du code avec authentification individuelle n’a pas été effectué. Ne pas ajouter `ARIA_REQUIRE_INDIVIDUAL_AUTH=true` avant que le code compatible et le binding `ARIA_USERS` soient tous deux déployés, au risque de verrouiller l’accès au service.
+- Prochaine séquence autorisée : déployer le code de la branche sur staging en préservant les secrets et bindings existants; ajouter le binding KV; vérifier `/health`; provisionner un jeton temporaire avec expiration; tester l’accès individuel et le refus du jeton partagé; supprimer le secret partagé uniquement après validation et préparation d’un retour arrière.
+- Aucun jeton brut n’a été créé ou transmis. Aucun secret fournisseur n’a été lu ou exposé. Aucune modification du code déployé ni aucune modification des bindings du Worker n’a été effectuée.
