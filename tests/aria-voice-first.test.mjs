@@ -66,6 +66,20 @@ test("frontend calls the real chat endpoint and keeps alpha credentials in sessi
   assert.match(app, /memories: memories\.map\(item => typeof item === "string" \? \{text:item\} : item\)/);
 });
 
+test("interface actions are model-classified and memory requests are not swallowed by keyword shortcuts", () => {
+  assert.match(app, /function applyIntentAction/);
+  assert.match(app, /case "open_visualization"/);
+  assert.match(app, /case "open_memory"/);
+  assert.match(app, /const result = local \|\| await requestAriaReply\(utterance\)/);
+  assert.match(app, /action: allowedActions\.includes\(data\.action\)/);
+  assert.doesNotMatch(app, /if \(\/mémoire\|souviens\|retiens\/\.test\(lower\)\)/);
+  assert.match(workerSource, /type: "json_schema"/);
+  assert.match(workerSource, /name: "aria_turn"/);
+  assert.match(workerSource, /Analyse l’intention réelle de l’utilisateur, pas seulement des mots-clés/);
+  assert.match(workerSource, /allowedActions\.has\(turn\.action\)/);
+  assert.match(workerSource, /allowedScenes\.has\(turn\.scene\)/);
+});
+
 test("voice turns are serialized, abortable, and cannot speak after the user pauses", () => {
   assert.match(app, /let turnInProgress = false/);
   assert.match(app, /let turnGeneration = 0/);
@@ -182,7 +196,7 @@ test("backend never reads or writes persistent memories when consent is disabled
     providerRequest = JSON.parse(options.body);
     return new Response(JSON.stringify({
       model:"test-model",
-      output:[{type:"message",content:[{type:"output_text",text:"Je ne l’ai pas mémorisé."}]}]
+      output:[{type:"message",content:[{type:"output_text",text:JSON.stringify({reply:"Je ne l’ai pas mémorisé.",action:"none",scene:"none"})}]}]
     }), {status:200,headers:{"Content-Type":"application/json"}});
   };
   try {
@@ -203,6 +217,10 @@ test("backend never reads or writes persistent memories when consent is disabled
     assert.deepEqual(reads, []);
     assert.match(providerRequest.instructions, /Mémoire personnelle désactivée par l’utilisateur/);
     assert.match(providerRequest.instructions, /aucune information n’a été enregistrée/);
+    assert.equal(providerRequest.text.format.type, "json_schema");
+    assert.equal(providerRequest.text.format.name, "aria_turn");
+    assert.equal(providerRequest.text.format.strict, true);
+    assert.equal(providerRequest.text.format.schema.additionalProperties, false);
   } finally {
     globalThis.fetch = originalFetch;
   }
