@@ -48,7 +48,7 @@ Le correctif de la branche :
 - conserve la mémoire désactivée lorsqu’on passe la question de consentement;
 - demande aussi une réponse reconnaissable pour les préférences de proactivité, de longueur et d’humour plutôt que de sauvegarder silencieusement une valeur par défaut.
 
-Le test statique de ce comportement a été ajouté. La suite automatisée a ensuite été étendue à la boucle vocale interrompable et au consentement mémoire. Le dernier run associé au commit bcf842369108d2dd020d38ff6aee9cb093c52f31 a réussi, y compris les vérifications de syntaxe pour app.js, visualization-engine.js et le Worker, puis les tests automatisés.
+Le test statique de ce comportement a été ajouté. La suite automatisée a ensuite été étendue à la boucle vocale interrompable et au consentement mémoire. Le dernier run associé au commit b62ccaed43905789b029b2285a8cecbb1cd4e7a2 a réussi, y compris les vérifications de syntaxe pour app.js, visualization-engine.js et le Worker, puis les tests automatisés.
 
 ## 5. Risques et limites
 1. **Accès alpha :** jeton partagé, aucune authentification individuelle; limiter aux testeurs contrôlés et révoquer le jeton en cas de fuite.
@@ -68,8 +68,8 @@ Le test statique de ce comportement a été ajouté. La suite automatisée a ens
 
 ### P1 — Valider la boucle vocale
 - Correctif de tours vocaux appliqué : déduplication pendant le traitement, annulation de la requête via AbortController et invalidation des réponses après pause.
-- Les vérifications de syntaxe et les tests automatisés réussissent sur le commit bcf842369108d2dd020d38ff6aee9cb093c52f31.
-- Test physique iPhone Safari toujours requis : permissions, première rencontre, aller-retour vocal, interruption, pause/reprise et erreurs réseau. Consigner le résultat dans docs/TEST_PLAN_IPHONE_ALPHA.md.
+- Les vérifications de syntaxe et les tests automatisés réussissent sur le commit b62ccaed43905789b029b2285a8cecbb1cd4e7a2.
+- Test physique iPhone Safari toujours requis : permissions, première rencontre, aller-retour vocal, interruption, pause/reprise et erreurs réseau. Consigner le résultat dans docs/TEST_PLAN_IPHONE_ALPHA.md, qui couvre maintenant aussi les widgets contextuels, la transition immersive et le globe WebGL.
 
 ### P2 — Sécuriser mémoire et accès
 - Réglage mémoire ajouté aux paramètres; le consentement est transmis explicitement au Worker.
