@@ -73,6 +73,7 @@ test("interface actions are model-classified and memory requests are not swallow
   assert.match(app, /const result = local \|\| await requestAriaReply\(utterance\)/);
   assert.match(app, /action: allowedActions\.includes\(data\.action\)/);
   assert.doesNotMatch(app, /if \(\/mémoire\|souviens\|retiens\/\.test\(lower\)\)/);
+  assert.doesNotMatch(app, /montre\|affiche\|visualise\|ouvre\|prépare.*globe/);
   assert.match(workerSource, /type: "json_schema"/);
   assert.match(workerSource, /name: "aria_turn"/);
   assert.match(workerSource, /Analyse l’intention réelle de l’utilisateur, pas seulement des mots-clés/);
@@ -221,6 +222,56 @@ test("backend never reads or writes persistent memories when consent is disabled
     assert.equal(providerRequest.text.format.name, "aria_turn");
     assert.equal(providerRequest.text.format.strict, true);
     assert.equal(providerRequest.text.format.schema.additionalProperties, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("backend returns only schema-valid model intent actions", async () => {
+  const env = {
+    ARIA_ACCESS_TOKEN: "test-token",
+    OPENAI_API_KEY: "test-key",
+    ARIA_MEMORY: { async get() { return []; }, async put() {}, async delete() {} }
+  };
+  const originalFetch = globalThis.fetch;
+  let providerText = JSON.stringify({
+    reply:"J’ouvre le globe 3D.",
+    action:"open_visualization",
+    scene:"globe"
+  });
+  globalThis.fetch = async (_url, options) => {
+    const payload = JSON.parse(options.body);
+    assert.equal(payload.text.format.name, "aria_turn");
+    return new Response(JSON.stringify({
+      model:"test-model",
+      output:[{type:"message",content:[{type:"output_text",text:providerText}]}]
+    }), {status:200,headers:{"Content-Type":"application/json"}});
+  };
+  const request = () => new Request(
+    "https://aria-brain-staging.quentineros-sevesi.workers.dev/chat",
+    {
+      method:"POST",
+      headers:{Origin:"https://neros31415.github.io",Authorization:"Bearer test-token","Content-Type":"application/json"},
+      body:JSON.stringify({
+        clientId:"123e4567-e89b-42d3-a456-426614174000",
+        memoryConsent:false,
+        messages:[{role:"user",content:"Peux-tu me montrer le globe ?"}]
+      })
+    }
+  );
+  try {
+    const valid = await worker.fetch(request(), env);
+    assert.equal(valid.status, 200);
+    assert.deepEqual(await valid.json(), {
+      reply:"J’ouvre le globe 3D.",
+      action:"open_visualization",
+      scene:"globe",
+      model:"test-model"
+    });
+    providerText = "ceci n'est pas un JSON";
+    const invalid = await worker.fetch(request(), env);
+    assert.equal(invalid.status, 502);
+    assert.deepEqual(await invalid.json(), {error:"invalid_provider_output"});
   } finally {
     globalThis.fetch = originalFetch;
   }
