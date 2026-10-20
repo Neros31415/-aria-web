@@ -40,3 +40,22 @@ dialog .text-button{border:0;background:none;color:var(--muted);font-size:11px;p
 .core-stage[data-state="unavailable"] .core-halo{opacity:.25}
 @media(max-width:800px){.voice-main{min-height:calc(100svh - 145px);padding:6px 0 12px}.voice-main .core-wrap{width:min(70vw,320px);min-width:220px}.voice-main .scene-subtitle{max-width:310px;font-size:12px}.voice-main .core-stage h1{font-size:32px}.voice-note{max-width:310px}.transcript-widget{bottom:78px;right:12px}.voice-main .memory-drawer{bottom:8px}}
 @media(prefers-reduced-motion:reduce){.orbit,.core-halo,.core-globe,.pulse-dot{animation:none!important;transition:none!important}}
+
+/* Contextual side widgets: hidden until a request needs them. */
+.voice-main{grid-template-columns:minmax(0,1fr) minmax(0,760px) minmax(0,1fr);gap:clamp(12px,2.2vw,32px);width:100%;place-items:center stretch}
+.context-widget{width:100%;max-width:230px;align-self:center;padding:17px 15px 15px;border:1px solid #ffffff1c;border-radius:15px;background:linear-gradient(145deg,#101820b8,#070a0db8);backdrop-filter:blur(18px);box-shadow:0 15px 50px #0003;animation:widget-arrive .28s ease-out both}
+.context-widget[hidden]{display:none!important}
+.context-widget-left{justify-self:end}
+.context-widget-right{justify-self:start}
+.widget-kicker,.widget-status-label{font-size:8px;letter-spacing:.2em;color:#91a0aa}
+.widget-rule{width:26px;height:1px;background:var(--gold);opacity:.75;margin:12px 0 15px}
+.context-widget h2{font-size:17px;line-height:1.35;font-weight:350;letter-spacing:-.025em;margin:0 0 9px;overflow-wrap:anywhere}
+.context-widget p{font-size:10px;line-height:1.75;color:#9ba8b2;margin:0 0 17px;overflow-wrap:anywhere}
+.widget-state{display:flex;align-items:center;gap:8px;font-size:7px;letter-spacing:.15em;color:#b5c4cc}
+.widget-status-box{border-top:1px solid var(--line);padding-top:12px;display:flex;flex-direction:column;gap:7px}
+.widget-status-box strong{font-size:8px;font-weight:500;letter-spacing:.12em;color:var(--gold);overflow-wrap:anywhere}
+.widget-close{margin-top:16px;padding:8px 0;border:0;font-size:9px;color:#a8b3bb}
+@keyframes widget-arrive{from{opacity:0;translate:0 5px}to{opacity:1;translate:0 0}}
+@media(max-width:1000px){.voice-main{grid-template-columns:minmax(0,1fr) minmax(0,560px) minmax(0,1fr);gap:10px}.context-widget{padding:13px 11px}.context-widget h2{font-size:14px}.context-widget p{font-size:9px}}
+@media(max-width:800px){.voice-main{grid-template-columns:1fr;gap:10px;align-content:center}.voice-main .core-stage{grid-row:1}.context-widget{max-width:none;width:min(100%,520px);justify-self:center;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:12px;align-items:start;padding:12px 14px}.context-widget[hidden]{display:none!important}.context-widget .widget-kicker,.context-widget .widget-rule{grid-column:1/-1}.context-widget .widget-rule{margin:3px 0 7px}.context-widget h2{font-size:13px;margin:0}.context-widget p{font-size:9px;margin:0}.context-widget .widget-state,.context-widget .widget-status-box,.context-widget .widget-close{grid-column:1/-1;margin-top:9px}.context-widget-right{grid-row:auto}.voice-main .memory-drawer{z-index:14}}
+@media(prefers-reduced-motion:reduce){.context-widget{animation:none!important}}
