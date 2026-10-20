@@ -152,3 +152,13 @@ Restent non validés ou incomplets : configuration du binding de sessions indivi
 - **Interdiction de basculer** `ARIA_REQUIRE_INDIVIDUAL_AUTH=true` tant que le code compatible n’est pas déployé, que le binding `ARIA_USERS` n’est pas lié et que le endpoint de santé n’a pas confirmé la configuration; cette séquence évite un verrouillage d’accès.
 - Séquence exigée : déployer le code compatible en préservant les bindings et secrets existants → lier le namespace → vérifier `/health` → créer un jeton individuel à durée limitée et stocker uniquement son hash dans KV → tester l’isolement des sessions et le rejet des accès non autorisés → seulement ensuite désactiver l’authentification partagée si les tests sont concluants.
 - Le déploiement via l’API Cloudflare n’a pas pu être exécuté avec les outils disponibles lors de ce contrôle. L’état de sécurité reste **non validé pour les testeurs**; pas de lancement public. La PR reste ouverte en brouillon et `main` n’a pas été modifiée.
+
+
+## 13. Point de contrôle staging — 20 octobre 2026, 17:45 CEST
+Le staging a progressé depuis le point de contrôle précédent :
+- Le code Worker de `cloudflare/aria-brain-staging.mjs` (blob Git `89cdd33a5e87deedcbcfa3692339c6550a6ce7ce`) a été déployé via l’endpoint Cloudflare de remplacement du contenu, qui ne modifie pas la configuration.
+- Le binding KV `ARIA_USERS` est lié au namespace `ARIA_USERS_STAGING` (`9f1d1da82c0246b0b19b8c20fa93e55a`). Les bindings `AI`, `ARIA_MEMORY` et les secrets existants `ARIA_ACCESS_TOKEN` / `OPENAI_API_KEY` ont été conservés; cela a été confirmé par une lecture de configuration après mise à jour.
+- Un jeton alpha individuel aléatoire a été provisionné avec une expiration KV de 7 jours. Seul le hash SHA-256 est stocké sous `session:v1:<hash>`; l’identité associée est opaque. Le jeton brut n’est pas consigné dans le dépôt ni dans les documents.
+- `ARIA_REQUIRE_INDIVIDUAL_AUTH=true` est maintenant configuré. Le déploiement actif version 24 (ID `cfe2d049-56ec-4c57-8355-7701d25e06c3`) contient le code et les bindings attendus.
+- Le stockage du mapping jeton→identité a été vérifié via l’API KV. En revanche, l’appel réel à `/health`, le rejet du jeton partagé, l’accès au jeton individuel via HTTP et l’isolation mémoire entre deux comptes n’ont pas encore été validés de bout en bout. Ne pas annoncer ces tests comme réussis.
+- Le staging est en mode individuel mais reste **en validation technique**. Ne pas supprimer le secret partagé avant les tests HTTP et la préparation d’un retour arrière. Aucun lancement public; PR toujours en brouillon; `main` inchangée.
