@@ -51,6 +51,8 @@ test("frontend calls the real chat endpoint and keeps alpha credentials in sessi
   assert.match(app, /async function syncRemoteMemory/);
   assert.match(app, /async function saveRemoteMemory/);
   assert.match(app, /localStorage\.removeItem\(KEYS\.clientId\)/);
+  assert.match(app, /clientIdsToDelete = \[\.\.\.new Set\(\[currentClientId, oldClientId\]/);
+  assert.match(app, /memories: memories\.map\(item => typeof item === "string" \? \{text:item\} : item\)/);
 });
 
 test("backend memory deletion requires a valid bearer token and deletes only the requested profile key", async () => {
