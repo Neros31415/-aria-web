@@ -16,7 +16,7 @@ Le contrôle contre V1.1 révèle deux catégories :
 - main n’a pas été modifiée par cette branche.
 - Le Worker Cloudflare aria-brain-staging a été déployé en staging le 20 octobre 2026; les bindings AI, KV et secrets étaient présents lors de l’audit précédent.
 - Le namespace mémoire de staging était vide au moment de la vérification antérieure. Cet état est une observation datée, pas une garantie permanente.
-- L’authentification utilise encore un jeton Bearer alpha partagé. Il ne convient qu’à un groupe fermé; ne pas ouvrir le service au public avec ce mécanisme.
+- Le Worker de la branche prend désormais en charge des jetons individuels provisionnés via le binding KV `ARIA_USERS` (empreinte SHA-256 → identifiant opaque), avec mémoire `memory:v2:user:<id>` et un mode `ARIA_REQUIRE_INDIVIDUAL_AUTH=true` qui refuse le jeton partagé. La configuration réelle du Worker déployé n’a pas été vérifiée ni modifiée dans cette tâche; jusqu’à preuve du contraire, considérer le staging comme utilisant encore le mode alpha partagé.
 - Le frontend de cette branche n’est pas déployé sur l’URL publique. Les tests unitaires ne prouvent ni l’accessibilité du fournisseur IA ni le fonctionnement complet sur iPhone.
 
 ## 3. Matrice de conformité V1.1
@@ -36,7 +36,7 @@ Le contrôle contre V1.1 révèle deux catégories :
 | Transition caméra à travers le logo | Prototype implémenté | Une transition cinématique agrandit le symbole A pour entrer dans l’espace visuel, puis le mouvement inverse ramène à l’accueil. La réduction des animations est prise en compte; test de perception et fluidité sur iPhone restant. |
 | Curiosité et autonomie intellectuelle | Non vérifiable par l’interface seule | Formaliser la consigne système générique et la tester avec un jeu de scénarios; aucune personnalité personnelle ne doit être codée en dur dans le Worker. |
 | Adaptation iPhone et accessibilité | Partiel | CSS responsive et réduction des animations présents; tests Safari iPhone, rotation, safe areas, autorisations et arrière-plan restent à faire. |
-| Authentification individuelle | Absente | Bloqueur avant bêta publique : identité, isolation des données, expiration/révocation des sessions et récupération de compte. |
+| Authentification individuelle | Support de code ajouté; configuration et cycle de vie incomplets | Le Worker accepte des jetons individuels hachés via KV, dérive la clé mémoire de l’identité et peut désactiver le jeton partagé. Provisionnement et révocation sont documentés. Il reste à configurer et tester le binding en staging; inscription, vérification d’e-mail, récupération de compte et gestion utilisateur ne sont pas implémentées. |
 
 ## 4. Correctif de comportement ajouté après comparaison au cahier des charges
 L’audit a relevé que la question mémoire de l’onboarding pouvait auparavant interpréter toute réponse qui ne contenait pas un refus explicite comme un consentement. Cela ne respectait pas le principe de contrôle utilisateur.
@@ -51,7 +51,7 @@ Le correctif de la branche :
 Les tests automatisés couvrent désormais aussi la confirmation serveur explicite de purge/synchronisation et le protocole d’intention structuré. Le dernier run vert connu est le workflow `39447166605`, sur le commit `5c66bc645c6ff59b9709e6197187e30746fc5988`; il valide la syntaxe JS et les tests de la branche, mais pas le fournisseur réel ni l’iPhone.
 
 ## 5. Risques et limites
-1. **Accès alpha :** jeton partagé, aucune authentification individuelle; limiter aux testeurs contrôlés et révoquer le jeton en cas de fuite.
+1. **Accès alpha :** le code prend en charge les jetons individuels mais le Worker déployé n’a pas été reconfiguré ni vérifié. Tant que `ARIA_REQUIRE_INDIVIDUAL_AUTH=true` et le binding `ARIA_USERS` ne sont pas confirmés en staging, limiter strictement l’accès à des testeurs contrôlés.
 2. **Voix mobile :** les API Web Speech varient selon le navigateur; iOS peut suspendre la reconnaissance en arrière-plan.
 3. **Conversation :** les erreurs HTTP et le fournisseur peuvent empêcher la réponse même si les tests de code passent.
 4. **Mémoire :** l’effacement local ne prouve pas l’effacement distant; les deux résultats doivent être affichés séparément.
@@ -76,7 +76,8 @@ Les tests automatisés couvrent désormais aussi la confirmation serveur explici
 - Réglage mémoire ajouté aux paramètres; le consentement est transmis explicitement au Worker.
 - Avec consentement désactivé, le Worker n’effectue ni lecture ni écriture de souvenirs lors d’une requête de chat, même si l’utilisateur formule une demande de mémorisation; ce cas est couvert par un test automatisé.
 - Tester encore la purge locale + distante avec jeton valide, jeton invalide et indisponibilité réseau.
-- Bloqueur avant toute ouverture plus large : le jeton Bearer reste partagé. L’authentification individuelle, l’isolation par compte, la révocation et la récupération de compte ne sont pas implémentées.
+- Le code de session individuelle est présent : hash SHA-256 du jeton, résolution de l’identité via KV, mémoire isolée par identité, expiration possible via TTL KV et révocation par suppression de l’entrée. Configurer et tester ce parcours en staging; le mode public reste bloqué par l’absence d’inscription vérifiée, de récupération de compte, de gestion des sessions et de revue de sécurité.
+- Voir `docs/ALPHA_AUTH_PROVISIONING.md` pour la procédure manuelle d’alpha fermé.
 
 ### P3 — HUD contextuel
 - Widgets latéraux et disposition responsive implémentés dans le code. Valider la lisibilité, la fermeture et les zones tactiles sur iPhone.
