@@ -11,6 +11,9 @@ const API_BASE = "https://aria-brain-staging.quentineros-sevesi.workers.dev";
 const SESSION_TOKEN_KEY = "aria.voice.alphaToken";
 let conversation = [];
 let requestInFlight = false;
+let turnInProgress = false;
+let turnGeneration = 0;
+let activeChatController = null;
 function getClientId() {
   let id = localStorage.getItem(KEYS.clientId);
   if (!id) {
@@ -122,6 +125,8 @@ function speak(text, options = {}) {
   if (options.resume === true && recognition) shouldResumeListening = true;
   if (!("speechSynthesis" in window)) {
     announceVisual("La synthèse vocale n'est pas disponible dans ce navigateur.");
+    speaking = false;
+    if (typeof options.onEnd === "function") options.onEnd();
     return;
   }
   window.speechSynthesis.cancel();
@@ -180,8 +185,16 @@ function startListening() {
   }
 }
 function stopListening() {
+  // Invalidate the current turn before aborting so an old response can never
+  // start speaking again after the user has paused or interrupted ARIA.
+  turnGeneration += 1;
+  turnInProgress = false;
   shouldResumeListening = false;
   listening = false;
+  if (activeChatController) {
+    activeChatController.abort();
+    activeChatController = null;
+  }
   if (recognition) { try { recognition.stop(); } catch {} }
   if ("speechSynthesis" in window) window.speechSynthesis.cancel();
   speaking = false;
@@ -296,13 +309,15 @@ async function requestAriaReply(text) {
       clientId: getClientId(),
       messages: conversation.slice(-20)
     };
+    activeChatController = new AbortController();
     const response = await fetch(API_BASE + "/chat", {
       method:"POST",
       headers: {
         "Authorization":"Bearer " + token,
         "Content-Type":"application/json"
       },
-      body:JSON.stringify(payload)
+      body:JSON.stringify(payload),
+      signal:activeChatController.signal
     });
     let data = {};
     try { data = await response.json(); } catch {}
@@ -327,23 +342,55 @@ async function requestAriaReply(text) {
     return data.reply;
   } catch (error) {
     conversation.pop();
+    if (error?.name === "AbortError") {
+      return "";
+    }
     announceVisual("Impossible de joindre le moteur distant. Vérifiez votre connexion réseau.");
     return "Je n'arrive pas à joindre mon moteur conversationnel. Vérifiez votre connexion, puis réessayez.";
   } finally {
     requestInFlight = false;
+    activeChatController = null;
   }
 }
 async function handleUtterance(text) {
-  if (!text.trim()) return;
-  updateTranscript(text, "VOUS");
+  const utterance = text.trim();
+  if (!utterance) return;
+  // Ignore duplicate/interim finals while a turn is being processed.
+  if (!onboarding && (turnInProgress || requestInFlight || speaking)) return;
+  updateTranscript(utterance, "VOUS");
   setState("thinking", "Je réfléchis.", "Je traite votre demande.");
   if (onboarding) {
-    await handleOnboardingAnswer(text.trim());
+    await handleOnboardingAnswer(utterance);
     return;
   }
-  const local = localDemoReply(text);
-  const reply = local ? local.text : await requestAriaReply(text.trim());
-  window.setTimeout(() => speak(reply, {resume: true}), 100);
+
+  turnInProgress = true;
+  const thisTurn = ++turnGeneration;
+  try {
+    const local = localDemoReply(utterance);
+    const reply = local ? local.text : await requestAriaReply(utterance);
+    // The user may have paused or interrupted while the network request ran.
+    if (thisTurn !== turnGeneration || !reply) return;
+    window.setTimeout(() => {
+      if (thisTurn !== turnGeneration) return;
+      speak(reply, {
+        resume: true,
+        onEnd: () => {
+          if (thisTurn !== turnGeneration) return;
+          turnInProgress = false;
+          shouldResumeListening = false;
+          if (!$("voiceStop").hidden) window.setTimeout(startListening, 300);
+          else setState("presence");
+        }
+      });
+    }, 100);
+  } catch (error) {
+    if (thisTurn === turnGeneration) {
+      turnInProgress = false;
+      announceVisual("Une erreur inattendue a interrompu cette réponse. Vous pouvez réessayer.");
+      setState("unavailable");
+    }
+  }
 }
 const onboardingQuestions = [
   {key:"proactivity", prompt:"Pour commencer, préférez-vous que je sois discrète, que je vous signale parfois les choses utiles, ou que je prenne davantage l'initiative ?"},
@@ -479,17 +526,24 @@ if (SpeechRecognition) {
   recognition.interimResults = false;
   recognition.maxAlternatives = 1;
   recognition.onresult = (event) => {
+    if (speaking || requestInFlight || turnInProgress) return;
     const result = event.results[event.results.length - 1];
     if (result.isFinal && result[0]?.transcript) handleUtterance(result[0].transcript);
   };
   recognition.onerror = (event) => {
     listening = false;
-    if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-      announceVisual("L'accès au microphone a été refusé. Autorisez-le dans les réglages du navigateur.");
-      setState("unavailable");
-      $("voiceStart").hidden = false;
-      $("voiceStop").hidden = true;
-    }
+    const messages = {
+      "not-allowed": "L'accès au microphone a été refusé. Autorisez-le dans les réglages du navigateur.",
+      "service-not-allowed": "Le navigateur n'autorise pas le service de reconnaissance vocale.",
+      "audio-capture": "Aucun microphone utilisable n'a été détecté.",
+      "network": "La reconnaissance vocale a rencontré une erreur réseau.",
+      "language-not-supported": "La reconnaissance vocale française n'est pas prise en charge ici."
+    };
+    if (event.error === "no-speech" || event.error === "aborted") return;
+    announceVisual(messages[event.error] || "La reconnaissance vocale s'est interrompue (" + event.error + "). Vous pouvez réessayer.");
+    setState("unavailable");
+    $("voiceStart").hidden = false;
+    $("voiceStop").hidden = true;
   };
   recognition.onend = () => {
     listening = false;
