@@ -32,9 +32,8 @@ function setApiToken(value) {
 // profile/history keys on this build's first launch; keep unrelated site data.
 let remoteResetPromise = Promise.resolve(false);
 if (!localStorage.getItem(KEYS.reset)) {
-  // Capture the old profile credentials before clearing this device. The Worker
-  // branch in this PR adds DELETE /memory; until that Worker is deployed, the
-  // request will fail safely and the UI must not claim remote deletion.
+  // Capture old profile credentials before clearing this device. The staging
+  // Worker supports authenticated DELETE; report failure instead of claiming success.
   const oldClientId = localStorage.getItem("aria.v07.memoryClientId");
   const oldToken = sessionStorage.getItem("aria.session.accessToken") || sessionStorage.getItem(SESSION_TOKEN_KEY);
   if (oldClientId && oldToken) {
@@ -231,7 +230,10 @@ async function saveRemoteMemory() {
     const response = await fetch(API_BASE + "/memory", {
       method: "PUT",
       headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
-      body: JSON.stringify({ clientId: getClientId(), memories })
+      body: JSON.stringify({
+        clientId: getClientId(),
+        memories: memories.map(item => typeof item === "string" ? {text:item} : item)
+      })
     });
     if (!response.ok) return false;
     const data = await response.json();
@@ -513,17 +515,19 @@ $("resetMemoryBtn").addEventListener("click", async () => {
   if (!confirm("Effacer les données personnelles conservées localement par cette version d'ARIA ? Cette opération est irréversible sur cet appareil.")) return;
   const oldClientId = localStorage.getItem("aria.v07.memoryClientId");
   const currentClientId = localStorage.getItem(KEYS.clientId);
-  const clientIdToDelete = currentClientId || oldClientId;
+  const clientIdsToDelete = [...new Set([currentClientId, oldClientId].filter(Boolean))];
   const oldToken = sessionStorage.getItem("aria.session.accessToken") || sessionStorage.getItem(SESSION_TOKEN_KEY);
-  let remoteDeleted = false;
-  if (clientIdToDelete && oldToken) {
-    try {
-      const response = await fetch(API_BASE + "/memory?clientId=" + encodeURIComponent(clientIdToDelete), {
-        method: "DELETE",
-        headers: { "Authorization": "Bearer " + oldToken }
-      });
-      remoteDeleted = response.ok;
-    } catch {}
+  let remoteDeleted = clientIdsToDelete.length > 0 && Boolean(oldToken);
+  if (remoteDeleted) {
+    for (const clientId of clientIdsToDelete) {
+      try {
+        const response = await fetch(API_BASE + "/memory?clientId=" + encodeURIComponent(clientId), {
+          method: "DELETE",
+          headers: { "Authorization": "Bearer " + oldToken }
+        });
+        if (!response.ok) remoteDeleted = false;
+      } catch { remoteDeleted = false; }
+    }
   }
   memories = [];
   profile = {proactivity:"balanced",verbosity:"balanced",humor:"balanced",memoryConsent:false};
