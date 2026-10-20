@@ -121,9 +121,11 @@ test("individually provisioned bearer tokens isolate memory by stable user ident
   };
   const tokenA = "a".repeat(64);
   const tokenB = "b".repeat(64);
+  const weakToken = "short-token";
   const sessions = new Map([
     ["session:v1:" + await hashToken(tokenA), "alpha_user_a"],
-    ["session:v1:" + await hashToken(tokenB), "alpha_user_b"]
+    ["session:v1:" + await hashToken(tokenB), "alpha_user_b"],
+    ["session:v1:" + await hashToken(weakToken), "weak_user"]
   ]);
   const memoryReads = [];
   const env = {
@@ -142,9 +144,11 @@ test("individually provisioned bearer tokens isolate memory by stable user ident
   const first = await worker.fetch(request(tokenA), env);
   const second = await worker.fetch(request(tokenB), env);
   const invalid = await worker.fetch(request("not-provisioned"), env);
+  const weak = await worker.fetch(request(weakToken), env);
   assert.equal(first.status, 200);
   assert.equal(second.status, 200);
   assert.equal(invalid.status, 401);
+  assert.equal(weak.status, 401);
   assert.deepEqual(memoryReads, ["memory:v2:user:alpha_user_a", "memory:v2:user:alpha_user_b"]);
 });
 
