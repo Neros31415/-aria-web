@@ -42,7 +42,15 @@ Statut : **à exécuter sur un appareil réel**. La CI ne remplace pas ces tests
 - [ ] La suppression locale est distinguée de la suppression distante.
 - [ ] En cas d’erreur réseau, ARIA n’annonce pas que la mémoire serveur a été supprimée.
 
-## D. Responsive et accessibilité
+## D. HUD, visualisation et accessibilité
+- [ ] Les widgets contextuels s’ouvrent sur commande vocale, restent discrets et se ferment indépendamment.
+- [ ] Le passage logo → espace visuel est fluide et le bouton « Retour à ARIA » effectue le mouvement inverse.
+- [ ] La préférence de réduction des animations réduit ou supprime la transition.
+- [ ] La commande « montre le globe » ouvre le globe filaire WebGL généré localement.
+- [ ] Le globe tourne par glissement du doigt, sans défilement accidentel de la page.
+- [ ] Le globe ne prétend pas afficher des continents ou des données géographiques réelles.
+- [ ] Si WebGL est indisponible, ARIA annonce clairement cette limite et propose le retour à l’interface principale.
+- [ ] Les scènes non implémentées sont identifiées comme espace en préparation, sans simulation présentée comme réelle.
 - [ ] L’orbe reste un élément visuel, pas un bouton.
 - [ ] Les commandes restent accessibles avec une seule main et n’empiètent pas sur les zones système de l’iPhone.
 - [ ] Les panneaux mémoire, paramètres et transcription peuvent être fermés.
@@ -64,7 +72,7 @@ Pour chaque échec, consigner : modèle d’iPhone, version iOS, Safari ou PWA, 
 | Consentement mémoire désactivé | À tester | |
 | Consentement mémoire activé | À tester | |
 | Purge locale et distante | À tester | |
-| PWA installée | À tester | |
+| PWA installée | À tester |\n| Transition logo → visualisation → retour | À tester |\n| Globe WebGL manipulable | À tester |\n| Widgets contextuels mobile | À tester | |
 
 ## Critère de sortie
 La boucle vocale ne passe en alpha testeur qu’après réussite des scénarios A et B, et la mémoire ne passe qu’après réussite des scénarios C. L’authentification individuelle reste un prérequis séparé à toute ouverture publique.
