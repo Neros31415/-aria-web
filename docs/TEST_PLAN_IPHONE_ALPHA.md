@@ -5,11 +5,19 @@ Statut : **à exécuter sur un appareil réel**. La CI ne remplace pas ces tests
 
 ## Préconditions
 - Ouvrir une prévisualisation de la branche; ne pas utiliser main comme preuve de validation.
-- Disposer d’un jeton alpha valide transmis par l’administrateur. Ne jamais l’inclure dans une capture d’écran ou un rapport.
+- Disposer d’un jeton alpha valide transmis par l’administrateur. Si le mode individuel est activé en staging, utiliser un jeton provisionné via `ARIA_USERS`; ne jamais l’inclure dans une capture d’écran ou un rapport.
 - Utiliser Safari sur iPhone, d’abord dans l’onglet navigateur puis, si le parcours fonctionne, depuis la PWA ajoutée à l’écran d’accueil.
 - Garder le test en premier plan : iOS peut suspendre la reconnaissance vocale en arrière-plan.
 
-## A. Autorisations et premier lancement
+## A. Accès et isolation alpha
+- [ ] Le Worker de staging indique que le mode individuel est configuré avant d’utiliser des données personnelles.
+- [ ] Un jeton individuel provisionné autorise `/chat` et `/memory`.
+- [ ] Le jeton partagé est refusé lorsque `ARIA_REQUIRE_INDIVIDUAL_AUTH=true`.
+- [ ] Un jeton absent, inconnu ou révoqué est refusé sans lecture/écriture mémoire.
+- [ ] Deux identités provisionnées différentes utilisent des clés mémoire distinctes, même si le navigateur envoie le même `clientId`.
+- [ ] Une expiration KV ou une révocation rend le jeton inutilisable; aucune inscription ou récupération de compte n’est supposée.
+
+## B. Autorisations et premier lancement
 - [ ] Le microphone n’est pas utilisé avant l’action de démarrage.
 - [ ] La demande d’autorisation est claire.
 - [ ] Refuser le microphone produit un état explicite, sans boucle de redémarrage agressive.
@@ -20,7 +28,7 @@ Statut : **à exécuter sur un appareil réel**. La CI ne remplace pas ces tests
 - [ ] Dire « passer » ne donne pas le consentement mémoire.
 - [ ] Après validation, l’onboarding ne se relance pas à chaque ouverture; la commande de recommencement fonctionne.
 
-## B. Boucle vocale
+## C. Boucle vocale
 - [ ] Parler une phrase courte déclenche une seule réponse.
 - [ ] La transcription reste facultative et peut être masquée.
 - [ ] Les états présence, écoute, réflexion, réponse et indisponibilité correspondent au comportement réel.
@@ -32,7 +40,7 @@ Statut : **à exécuter sur un appareil réel**. La CI ne remplace pas ces tests
 - [ ] Reprendre l’écoute fonctionne après pause et après plusieurs échanges successifs.
 - [ ] Erreur réseau ou erreur fournisseur : message honnête, aucun succès inventé, nouvelle tentative possible.
 
-## C. Intentions et actions d’interface
+## D. Intentions et actions d’interface
 - [ ] Une demande explicite « montre-moi le globe » ouvre le globe WebGL local.
 - [ ] Une question informative sur un moteur ne déclenche pas automatiquement l’ouverture d’une visualisation moteur.
 - [ ] Une demande ambiguë déclenche une clarification plutôt qu’une action supposée.
@@ -41,7 +49,7 @@ Statut : **à exécuter sur un appareil réel**. La CI ne remplace pas ces tests
 - [ ] Une demande de carte, de mécanisme ou de modèle scientifique non disponible affiche honnêtement l’indisponibilité; aucune donnée fictive n’est présentée comme réelle.
 - [ ] Une sortie d’intention mal formée du fournisseur est rejetée par le Worker et ne déclenche aucune action.
 
-## D. Préférences et mémoire
+## E. Préférences et mémoire
 - [ ] Changer les préférences dans les paramètres modifie le payload envoyé au moteur.
 - [ ] Le réglage mémoire est visible, lisible et conservé après rechargement.
 - [ ] Consentement mémoire désactivé : une demande « Retiens que… » n’entraîne aucune lecture ni écriture de souvenirs par le Worker pendant le chat.
@@ -51,7 +59,7 @@ Statut : **à exécuter sur un appareil réel**. La CI ne remplace pas ces tests
 - [ ] La suppression locale est distinguée de la suppression distante.
 - [ ] En cas d’erreur réseau, ARIA n’annonce pas que la mémoire serveur a été supprimée.
 
-## E. HUD, visualisation et accessibilité
+## F. HUD, visualisation et accessibilité
 - [ ] Les widgets contextuels s’ouvrent sur commande vocale, restent discrets et se ferment indépendamment.
 - [ ] Le passage logo → espace visuel est fluide et le bouton « Retour à ARIA » effectue le mouvement inverse.
 - [ ] La préférence de réduction des animations réduit ou supprime la transition.
@@ -67,7 +75,7 @@ Statut : **à exécuter sur un appareil réel**. La CI ne remplace pas ces tests
 - [ ] La préférence de réduction des animations est respectée.
 - [ ] La PWA installée et Safari affichent la même version de l’interface.
 
-## F. Journal de test à compléter
+## G. Journal de test à compléter
 Pour chaque échec, consigner : modèle d’iPhone, version iOS, Safari ou PWA, étape, résultat attendu, résultat observé, heure approximative et capture expurgée de tout jeton ou donnée personnelle.
 
 | Test | Résultat | Détails |
