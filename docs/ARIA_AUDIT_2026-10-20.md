@@ -48,7 +48,7 @@ Le correctif de la branche :
 - conserve la mémoire désactivée lorsqu’on passe la question de consentement;
 - demande aussi une réponse reconnaissable pour les préférences de proactivité, de longueur et d’humour plutôt que de sauvegarder silencieusement une valeur par défaut.
 
-Le test statique de ce comportement a été ajouté. Le résultat CI du dernier commit doit être vérifié avant de déclarer le correctif validé.
+Le test statique de ce comportement a été ajouté. Le workflow « ARIA voice-first checks » a réussi sur le commit applicatif 75b19bcb58e6568fb6c9ec1ddac813e5d215c587; le workflow du commit documentaire courant 332e1c10f932214ccbdb9edad16243f578f51a0b a également terminé avec succès.
 
 ## 5. Risques et limites
 1. **Accès alpha :** jeton partagé, aucune authentification individuelle; limiter aux testeurs contrôlés et révoquer le jeton en cas de fuite.
@@ -61,9 +61,9 @@ Le test statique de ce comportement a été ajouté. Le résultat CI du dernier 
 8. **Onboarding :** la séquence de présentation de l’orbe est sérielle; tester les interruptions et la reprise pour éviter que l’écoute et la synthèse se bloquent l’une l’autre.
 
 ## 6. Prochaines étapes ordonnées par valeur
-### P0 — Vérifier la dernière révision
-- Confirmer les tests GitHub Actions après les derniers commits.
-- Corriger tout échec et vérifier le diff complet.
+### P0 — Maintenir la validation CI
+- La suite automatisée a réussi après le correctif de consentement et après la mise à jour documentaire.
+- Recontrôler la CI après toute modification de code supplémentaire et revoir le diff complet.
 - Garder la PR #15 en brouillon; ne pas fusionner ni déployer.
 
 ### P1 — Valider la boucle vocale
