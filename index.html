@@ -19,6 +19,13 @@
     </header>
 
     <main class="voice-main">
+      <aside class="context-widget context-widget-left" id="contextWidget" aria-label="Contexte de la visualisation" hidden>
+        <div class="widget-kicker">CONTEXTE</div>
+        <div class="widget-rule"></div>
+        <h2 id="contextTitle">Visualisation</h2>
+        <p id="contextDescription">Les informations contextuelles apparaîtront ici lorsque vous en aurez besoin.</p>
+        <div class="widget-state"><span class="mini-dot"></span><span id="contextStatus">EN ATTENTE</span></div>
+      </aside>
       <section class="core-stage" id="coreStage" data-state="presence" aria-label="Présence visuelle d'ARIA">
         <div class="stage-caption"><span>ARIA / CORE</span><span id="clockLabel">INITIALISATION</span></div>
         <div class="core-wrap" id="ariaOrb" role="img" aria-label="Orbe représentant l'état d'ARIA">
@@ -49,6 +56,14 @@
         <p class="voice-note" id="voiceNote">La voix nécessite l'autorisation du microphone. L'écoute continue dépend des possibilités du navigateur et du système.</p>
       </section>
 
+      <aside class="context-widget context-widget-right" id="sceneToolsWidget" aria-label="État et commandes de visualisation" hidden>
+        <div class="widget-kicker">ESPACE VISUEL</div>
+        <div class="widget-rule"></div>
+        <h2>État de la scène</h2>
+        <p id="sceneToolsDescription">Aucune scène n'est ouverte.</p>
+        <div class="widget-status-box"><span class="widget-status-label">SOURCE</span><strong id="sceneSourceStatus">AUCUNE DONNÉE</strong></div>
+        <button class="quiet-action widget-close" id="contextClose" type="button">Fermer les widgets</button>
+      </aside>
       <aside class="transcript-widget" id="transcriptWidget" aria-live="polite" hidden>
         <div class="transcript-head"><span>TRANSCRIPTION</span><button id="transcriptClose" type="button" aria-label="Masquer la transcription">×</button></div>
         <div id="transcriptText">La transcription apparaîtra ici si vous l'activez.</div>
