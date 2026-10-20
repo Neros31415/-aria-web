@@ -112,6 +112,19 @@ test("backend rejects an invalid token without deleting memory", async () => {
   assert.deepEqual(deleted, []);
 });
 
+test("contextual HUD widgets are responsive, explicit, and do not claim a real 3D scene", () => {
+  assert.match(html, /id="contextWidget"/);
+  assert.match(html, /id="sceneToolsWidget"/);
+  assert.match(html, /id="contextClose"/);
+  assert.match(app, /function showContextWidgets/);
+  assert.match(app, /function hideContextWidgets/);
+  assert.match(app, /La scène 3D réelle n’est pas encore connectée/);
+  assert.match(app, /AUCUNE DONNÉE EXTERNE/);
+  assert.match(css, /\.context-widget\[hidden\]/);
+  assert.match(css, /@media\(max-width:800px\)/);
+  assert.match(css, /prefers-reduced-motion/);
+});
+
 test("backend never reads or writes persistent memories when consent is disabled", async () => {
   const writes = [];
   const reads = [];
