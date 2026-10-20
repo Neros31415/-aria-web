@@ -1,4 +1,4 @@
-const CACHE = "aria-voice-v10-shell-1";
+const CACHE = "aria-voice-v11-shell-1";
 const ASSETS = ["./", "./index.html", "./styles.css", "./voice.css", "./app.js", "./visualization-engine.js", "./manifest.webmanifest"];
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting()));
