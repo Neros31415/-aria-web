@@ -32,7 +32,16 @@ Statut : **à exécuter sur un appareil réel**. La CI ne remplace pas ces tests
 - [ ] Reprendre l’écoute fonctionne après pause et après plusieurs échanges successifs.
 - [ ] Erreur réseau ou erreur fournisseur : message honnête, aucun succès inventé, nouvelle tentative possible.
 
-## C. Préférences et mémoire
+## C. Intentions et actions d’interface
+- [ ] Une demande explicite « montre-moi le globe » ouvre le globe WebGL local.
+- [ ] Une question informative sur un moteur ne déclenche pas automatiquement l’ouverture d’une visualisation moteur.
+- [ ] Une demande ambiguë déclenche une clarification plutôt qu’une action supposée.
+- [ ] « Ouvre ma mémoire » ouvre le panneau sans détourner une demande « Retiens que… » vers le panneau.
+- [ ] « Retour à ARIA » ferme la scène et effectue la transition inverse.
+- [ ] Une demande de carte, de mécanisme ou de modèle scientifique non disponible affiche honnêtement l’indisponibilité; aucune donnée fictive n’est présentée comme réelle.
+- [ ] Une sortie d’intention mal formée du fournisseur est rejetée par le Worker et ne déclenche aucune action.
+
+## D. Préférences et mémoire
 - [ ] Changer les préférences dans les paramètres modifie le payload envoyé au moteur.
 - [ ] Le réglage mémoire est visible, lisible et conservé après rechargement.
 - [ ] Consentement mémoire désactivé : une demande « Retiens que… » n’entraîne aucune lecture ni écriture de souvenirs par le Worker pendant le chat.
@@ -42,7 +51,7 @@ Statut : **à exécuter sur un appareil réel**. La CI ne remplace pas ces tests
 - [ ] La suppression locale est distinguée de la suppression distante.
 - [ ] En cas d’erreur réseau, ARIA n’annonce pas que la mémoire serveur a été supprimée.
 
-## D. HUD, visualisation et accessibilité
+## E. HUD, visualisation et accessibilité
 - [ ] Les widgets contextuels s’ouvrent sur commande vocale, restent discrets et se ferment indépendamment.
 - [ ] Le passage logo → espace visuel est fluide et le bouton « Retour à ARIA » effectue le mouvement inverse.
 - [ ] La préférence de réduction des animations réduit ou supprime la transition.
@@ -58,7 +67,7 @@ Statut : **à exécuter sur un appareil réel**. La CI ne remplace pas ces tests
 - [ ] La préférence de réduction des animations est respectée.
 - [ ] La PWA installée et Safari affichent la même version de l’interface.
 
-## E. Journal de test à compléter
+## F. Journal de test à compléter
 Pour chaque échec, consigner : modèle d’iPhone, version iOS, Safari ou PWA, étape, résultat attendu, résultat observé, heure approximative et capture expurgée de tout jeton ou donnée personnelle.
 
 | Test | Résultat | Détails |
