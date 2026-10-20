@@ -35,13 +35,37 @@ export default {
     if (url.pathname !== "/chat" && url.pathname !== "/memory") return json({ error: "not_found" }, 404);
     if (url.pathname === "/chat" && req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
     if (url.pathname === "/memory" && !["GET", "PUT", "DELETE"].includes(req.method)) return json({ error: "method_not_allowed" }, 405);
-    if (!env.ARIA_ACCESS_TOKEN || !env.OPENAI_API_KEY) return json({ error: "service_not_configured" }, 503);
-    if ((req.headers.get("Authorization") || "") !== "Bearer " + env.ARIA_ACCESS_TOKEN) {
-      return json({ error: "unauthorized" }, 401);
+    if (!env.OPENAI_API_KEY || (!env.ARIA_ACCESS_TOKEN && !env.ARIA_USERS)) {
+      return json({ error: "service_not_configured" }, 503);
     }
+
+    const authorization = req.headers.get("Authorization") || "";
+    const bearerToken = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
+    let principal = null;
+    if (bearerToken && env.ARIA_USERS) {
+      try {
+        const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(bearerToken));
+        const tokenHash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+        const userId = await env.ARIA_USERS.get("session:v1:" + tokenHash);
+        if (typeof userId === "string" && /^[a-zA-Z0-9_-]{1,80}$/.test(userId)) {
+          principal = { type: "user", id: userId };
+        }
+      } catch {
+        return json({ error: "auth_storage_unavailable" }, 503);
+      }
+    }
+    // Shared-token access remains a temporary closed-alpha fallback only.
+    if (!principal && bearerToken && env.ARIA_ACCESS_TOKEN && bearerToken === env.ARIA_ACCESS_TOKEN) {
+      principal = { type: "shared", id: null };
+    }
+    if (!principal) return json({ error: "unauthorized" }, 401);
 
     const validClientId = (value) =>
       typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+    const memoryKeyFor = (clientId) => {
+      if (principal.type === "user") return "memory:v2:user:" + principal.id;
+      return validClientId(clientId) ? "memory:v1:" + clientId : null;
+    };
 
     if (url.pathname === "/memory") {
       if (!env.ARIA_MEMORY) return json({ error: "memory_storage_unavailable" }, 503);
@@ -51,8 +75,8 @@ export default {
         try { body = await req.json(); } catch { return json({ error: "invalid_json" }, 400); }
         clientId = body.clientId;
       }
-      if (!validClientId(clientId)) return json({ error: "invalid_client_id" }, 400);
-      const key = "memory:v1:" + clientId;
+      const key = memoryKeyFor(clientId);
+      if (!key) return json({ error: "invalid_client_id" }, 400);
       try {
         if (req.method === "GET") {
           const saved = await env.ARIA_MEMORY.get(key, "json");
@@ -113,11 +137,11 @@ export default {
     if (rememberMatch) {
       if (!memoryConsent) {
         memoryWriteStatus = "Mémoire désactivée par l’utilisateur : aucune information n’a été enregistrée. Explique comment activer la mémoire dans les préférences si nécessaire.";
-      } else if (!env.ARIA_MEMORY || !validClientId(body.clientId)) {
-        memoryWriteStatus = "Échec : le stockage persistant n’est pas disponible. Ne prétends pas que l’information a été mémorisée.";
+      } else if (!env.ARIA_MEMORY || !memoryKeyFor(body.clientId)) {
+        memoryWriteStatus = "Échec : le stockage persistant ou l’identifiant de mémoire n’est pas disponible. Ne prétends pas que l’information a été mémorisée.";
       } else {
         try {
-          const key = "memory:v1:" + body.clientId;
+          const key = memoryKeyFor(body.clientId);
           const saved = await env.ARIA_MEMORY.get(key, "json");
           const memories = Array.isArray(saved) ? saved : [];
           const text = rememberMatch[1].trim().slice(0, 300);
@@ -143,9 +167,9 @@ export default {
     let memoryContext = memoryConsent
       ? "Aucune mémoire persistante enregistrée pour cet appareil."
       : "Mémoire personnelle désactivée par l’utilisateur. N’utilise aucun souvenir persistant et n’enregistre rien.";
-    if (memoryConsent && env.ARIA_MEMORY && validClientId(body.clientId)) {
+    if (memoryConsent && env.ARIA_MEMORY && memoryKeyFor(body.clientId)) {
       try {
-        const saved = await env.ARIA_MEMORY.get("memory:v1:" + body.clientId, "json");
+        const saved = await env.ARIA_MEMORY.get(memoryKeyFor(body.clientId), "json");
         if (Array.isArray(saved) && saved.length) {
           memoryContext = saved.map((item) => "- " + item.text).join("\n");
         }
