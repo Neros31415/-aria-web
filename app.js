@@ -43,7 +43,15 @@ if (!localStorage.getItem(KEYS.reset)) {
     remoteResetPromise = fetch("https://aria-brain-staging.quentineros-sevesi.workers.dev/memory?clientId=" + encodeURIComponent(oldClientId), {
       method: "DELETE",
       headers: { "Authorization": "Bearer " + oldToken }
-    }).then(response => response.ok).catch(() => false);
+    }).then(async response => {
+      if (!response.ok) return false;
+      try {
+        const result = await response.json();
+        return result.deleted === true && result.persisted === true;
+      } catch {
+        return false;
+      }
+    }).catch(() => false);
   }
   for (const key of Object.keys(localStorage)) {
     // Keep only the old profile ID temporarily so a failed remote purge can be retried.
@@ -240,7 +248,10 @@ async function syncRemoteMemory() {
 }
 async function saveRemoteMemory() {
   const token = getApiToken();
-  if (!token) return false;
+  if (!token) {
+    $("memoryStatus").textContent = "Modification locale enregistrée. La suppression distante n’est pas confirmée : configurez un jeton alpha pour synchroniser.";
+    return false;
+  }
   try {
     const response = await fetch(API_BASE + "/memory", {
       method: "PUT",
@@ -250,14 +261,24 @@ async function saveRemoteMemory() {
         memories: memories.map(item => typeof item === "string" ? {text:item} : item)
       })
     });
-    if (!response.ok) return false;
+    if (!response.ok) {
+      $("memoryStatus").textContent = response.status === 401
+        ? "Modification locale enregistrée. Jeton refusé : la modification distante n’est pas confirmée."
+        : "Modification locale enregistrée. Le serveur n’a pas confirmé la modification distante.";
+      return false;
+    }
     const data = await response.json();
-    if (Array.isArray(data.memories)) memories = data.memories;
+    if (data.persisted !== true || !Array.isArray(data.memories)) {
+      $("memoryStatus").textContent = "Modification locale enregistrée. Réponse serveur insuffisante : la modification distante n’est pas confirmée.";
+      return false;
+    }
+    memories = data.memories;
     localStorage.setItem(KEYS.memory, JSON.stringify(memories));
-    $("memoryStatus").textContent = "Mémoire locale et distante mises à jour.";
+    renderMemory();
+    $("memoryStatus").textContent = "Mémoire distante mise à jour et confirmée par le serveur.";
     return true;
   } catch {
-    $("memoryStatus").textContent = "La mémoire locale est mise à jour, mais la synchronisation distante a échoué.";
+    $("memoryStatus").textContent = "Modification locale enregistrée. La synchronisation distante a échoué; l’état serveur reste incertain.";
     return false;
   }
 }
@@ -705,7 +726,13 @@ $("resetMemoryBtn").addEventListener("click", async () => {
           method: "DELETE",
           headers: { "Authorization": "Bearer " + oldToken }
         });
-        if (!response.ok) remoteDeleted = false;
+        if (!response.ok) {
+          remoteDeleted = false;
+          continue;
+        }
+        let result;
+        try { result = await response.json(); } catch { result = null; }
+        if (result?.deleted !== true || result?.persisted !== true) remoteDeleted = false;
       } catch { remoteDeleted = false; }
     }
   }
