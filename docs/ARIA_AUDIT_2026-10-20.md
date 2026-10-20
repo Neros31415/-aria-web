@@ -19,6 +19,8 @@ Le dépôt contient une PWA statique et plusieurs branches de travail. La branch
 - Les PR #12 et #9 proposent un backend Cloudflare et une mémoire KV, mais restent des changements séparés à valider. Le Worker de la branche alpha injecte un profil personnel codé en dur et n'offre pas de route DELETE pour la mémoire.
 - La PR #14 est un brouillon et n'a pas été fusionnée. La CI alpha PR #12 a un run réussi, mais cela ne prouve pas le parcours vocal/mobile ni la connexion réelle du fournisseur.
 - Le précédent signalement de panne réseau vers aria-brain-staging doit être revalidé sur le déploiement actuel.
+- Cette branche ajoute une interface vocale expérimentale basée sur les API Web Speech natives. La disponibilité de SpeechRecognition, particulièrement sur iOS Safari et en arrière-plan, reste à tester sur appareil réel.
+- La réinitialisation locale est déclenchée au premier lancement de cette branche. La suppression distante est seulement tentée si l'ancien clientId et le jeton de session sont présents; elle ne peut être déclarée réussie que si le Worker répond positivement.
 
 ## Risques prioritaires
 1. Aucune expérience vocale principale dans la base de référence.
@@ -34,6 +36,6 @@ Le dépôt contient une PWA statique et plusieurs branches de travail. La branch
 - Faire de l'orbe un élément purement visuel et piloter l'interaction par la voix.
 - Ajouter un onboarding oral et des états visuels expliqués.
 - Purger l'ancien stockage local au premier lancement de la version révisée, avec une opération séparée pour les données serveur.
-- Ajouter une route DELETE protégée au Worker et tester la suppression de la mémoire distante avec l'identifiant de profil correct.
+- Ajouter une route DELETE protégée au Worker et tester la suppression de la mémoire distante avec l'identifiant de profil correct. La route DELETE est maintenant ajoutée dans cette branche, mais n'est pas encore déployée sur le Worker de staging.
 - Connecter le moteur vocal au backend seulement après validation de son contrat et de son authentification.
 - Tester la version sur Safari iPhone et les navigateurs Android, puis vérifier le cache PWA.
