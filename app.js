@@ -4,8 +4,29 @@ const KEYS = {
   memory: "aria.v07.memory",
   profile: "aria.voice.profile.v1",
   onboarded: "aria.voice.onboarded.v1",
-  reset: "aria.voice.reset.20261020"
+  reset: "aria.voice.reset.20261020",
+  clientId: "aria.voice.clientId.v1"
 };
+const API_BASE = "https://aria-brain-staging.quentineros-sevesi.workers.dev";
+const SESSION_TOKEN_KEY = "aria.voice.alphaToken";
+let conversation = [];
+let requestInFlight = false;
+function getClientId() {
+  let id = localStorage.getItem(KEYS.clientId);
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem(KEYS.clientId, id);
+  }
+  return id;
+}
+function getApiToken() {
+  return sessionStorage.getItem(SESSION_TOKEN_KEY) || "";
+}
+function setApiToken(value) {
+  const token = value.trim();
+  if (token) sessionStorage.setItem(SESSION_TOKEN_KEY, token);
+  else sessionStorage.removeItem(SESSION_TOKEN_KEY);
+}
 
 // The user explicitly requested a fresh personal start. Remove legacy ARIA
 // profile/history keys on this build's first launch; keep unrelated site data.
@@ -15,7 +36,7 @@ if (!localStorage.getItem(KEYS.reset)) {
   // branch in this PR adds DELETE /memory; until that Worker is deployed, the
   // request will fail safely and the UI must not claim remote deletion.
   const oldClientId = localStorage.getItem("aria.v07.memoryClientId");
-  const oldToken = sessionStorage.getItem("aria.session.accessToken");
+  const oldToken = sessionStorage.getItem("aria.session.accessToken") || sessionStorage.getItem(SESSION_TOKEN_KEY);
   if (oldClientId && oldToken) {
     remoteResetPromise = fetch("https://aria-brain-staging.quentineros-sevesi.workers.dev/memory?clientId=" + encodeURIComponent(oldClientId), {
       method: "DELETE",
@@ -202,14 +223,63 @@ function renderMemory() {
 }
 function localDemoReply(text) {
   const lower = text.toLocaleLowerCase("fr");
-  if (/mont.?blanc|alpes/.test(lower)) return {text:"Je peux afficher une scène de démonstration du Mont-Blanc. Pour le moment, ce visuel n'est pas relié à une carte ou à des données de relief réelles.", scene:"mountain"};
-  if (/moteur|ferrari|objet 3d/.test(lower)) return {text:"Je peux ouvrir l'aperçu mécanique. Le modèle 3D interactif reste à intégrer.", scene:"engine"};
-  if (/globe|carte|monde/.test(lower)) return {text:"Le globe central est une maquette visuelle. Les données géographiques réelles restent à connecter.", scene:"globe"};
   if (/mémoire|souviens|retiens/.test(lower)) {
     openPanel("memoryPanel");
     return {text: memories.length ? "Votre panneau mémoire est ouvert. Je peux vous montrer les notes présentes sur cet appareil." : "Votre mémoire personnelle est actuellement vierge."};
   }
-  return {text:"Je vous ai entendue. Le parcours vocal et l'interface sont actifs, mais le moteur conversationnel distant n'est pas encore relié à cette version. Je ne vais pas faire semblant d'avoir compris ou exécuté une tâche que je ne peux pas encore traiter."};
+  return null;
+}
+async function requestAriaReply(text) {
+  const token = getApiToken();
+  if (!token) {
+    $("settingsDialog").showModal();
+    announceVisual("Le moteur distant n'est pas encore connecté. Saisissez votre jeton d'accès alpha dans les paramètres.");
+    return "Je suis prête, mais il me manque le jeton d'accès alpha pour joindre mon moteur conversationnel. Ouvrons les paramètres pour le configurer.";
+  }
+  if (requestInFlight) return "Je termine déjà votre demande précédente. Un instant, s'il vous plaît.";
+  requestInFlight = true;
+  try {
+    conversation.push({role:"user", content:text});
+    const payload = {
+      clientId: getClientId(),
+      messages: conversation.slice(-20)
+    };
+    const response = await fetch(API_BASE + "/chat", {
+      method:"POST",
+      headers: {
+        "Authorization":"Bearer " + token,
+        "Content-Type":"application/json"
+      },
+      body:JSON.stringify(payload)
+    });
+    let data = {};
+    try { data = await response.json(); } catch {}
+    if (response.status === 401) {
+      sessionStorage.removeItem(SESSION_TOKEN_KEY);
+      conversation.pop();
+      $("settingsDialog").showModal();
+      announceVisual("Le jeton d'accès a été refusé. Vérifiez-le ou demandez-en un nouveau à l'administrateur.");
+      return "Le serveur a refusé le jeton d'accès. Je l'ai retiré de cette session. Vérifiez-le dans les paramètres.";
+    }
+    if (!response.ok || typeof data.reply !== "string" || !data.reply.trim()) {
+      conversation.pop();
+      const reason = data.error === "provider_unavailable" ? "Le fournisseur IA ne répond pas pour le moment."
+        : data.error === "provider_error" ? "Le fournisseur IA a renvoyé une erreur."
+        : data.error === "service_not_configured" ? "Le moteur distant n'est pas entièrement configuré."
+        : "La connexion au moteur distant a échoué.";
+      announceVisual(reason + " Votre demande n'a pas été confirmée comme exécutée.");
+      return reason + " Je n'ai donc pas de réponse fiable à vous donner pour l'instant.";
+    }
+    conversation.push({role:"assistant",content:data.reply});
+    conversation = conversation.slice(-20);
+    return data.reply;
+  } catch (error) {
+    conversation.pop();
+    announceVisual("Impossible de joindre le moteur distant. Vérifiez votre connexion réseau.");
+    return "Je n'arrive pas à joindre mon moteur conversationnel. Vérifiez votre connexion, puis réessayez.";
+  } finally {
+    requestInFlight = false;
+  }
 }
 async function handleUtterance(text) {
   if (!text.trim()) return;
@@ -219,12 +289,9 @@ async function handleUtterance(text) {
     await handleOnboardingAnswer(text.trim());
     return;
   }
-  const result = localDemoReply(text);
-  if (result.scene) {
-    document.querySelector(".core-stage").dataset.scene = result.scene;
-    document.body.classList.add("scene-active");
-  }
-  window.setTimeout(() => speak(result.text, {resume: true}), 250);
+  const local = localDemoReply(text);
+  const reply = local ? local.text : await requestAriaReply(text.trim());
+  window.setTimeout(() => speak(reply, {resume: true}), 100);
 }
 const onboardingQuestions = [
   {key:"proactivity", prompt:"Pour commencer, préférez-vous que je sois discrète, que je vous signale parfois les choses utiles, ou que je prenne davantage l'initiative ?"},
@@ -310,12 +377,13 @@ function finishSetupIfReturning() {
   }
 }
 function saveSettingsFromDialog() {
+  setApiToken($("apiTokenSetting").value);
   profile.proactivity = $("proactivitySetting").value;
   profile.verbosity = $("verbositySetting").value;
   profile.humor = $("humorSetting").value;
   saveProfile();
   $("settingsDialog").close();
-  speak("Vos préférences sont enregistrées.", {resume:true});
+  speak(getApiToken() ? "Vos préférences sont enregistrées. Le jeton alpha est disponible pour cette session." : "Vos préférences sont enregistrées. Le moteur distant restera indisponible tant que le jeton alpha n'est pas configuré.", {resume:true});
 }
 function updateClock() {
   $("clockLabel").textContent = new Date().toLocaleTimeString("fr-FR", {hour:"2-digit",minute:"2-digit"});
@@ -367,6 +435,7 @@ $("transcriptClose").addEventListener("click", () => {
 $("memoryToggle").addEventListener("click", () => openPanel("memoryPanel"));
 $("memoryClose").addEventListener("click", () => closePanel("memoryPanel"));
 $("settingsBtn").addEventListener("click", () => {
+  $("apiTokenSetting").value = getApiToken();
   $("proactivitySetting").value = profile.proactivity;
   $("verbositySetting").value = profile.verbosity;
   $("humorSetting").value = profile.humor;
@@ -393,7 +462,7 @@ $("onboardingSkip").addEventListener("click", () => {
 $("resetMemoryBtn").addEventListener("click", async () => {
   if (!confirm("Effacer les données personnelles conservées localement par cette version d'ARIA ? Cette opération est irréversible sur cet appareil.")) return;
   const oldClientId = localStorage.getItem("aria.v07.memoryClientId");
-  const oldToken = sessionStorage.getItem("aria.session.accessToken");
+  const oldToken = sessionStorage.getItem("aria.session.accessToken") || sessionStorage.getItem(SESSION_TOKEN_KEY);
   let remoteDeleted = false;
   if (oldClientId && oldToken) {
     try {
@@ -410,7 +479,7 @@ $("resetMemoryBtn").addEventListener("click", async () => {
     if (key.startsWith("aria.") && key !== "aria.v07.memoryClientId") localStorage.removeItem(key);
   }
   for (const key of Object.keys(sessionStorage)) {
-    if (key.startsWith("aria.") && key !== "aria.session.accessToken") sessionStorage.removeItem(key);
+    if (key.startsWith("aria.") && key !== "aria.session.accessToken" && key !== SESSION_TOKEN_KEY) sessionStorage.removeItem(key);
   }
   localStorage.setItem(KEYS.reset, "done");
   localStorage.setItem(KEYS.memory, "[]");
@@ -419,7 +488,10 @@ $("resetMemoryBtn").addEventListener("click", async () => {
   if (remoteDeleted) {
     localStorage.removeItem("aria.v07.memoryClientId");
     sessionStorage.removeItem("aria.session.accessToken");
+  sessionStorage.removeItem(SESSION_TOKEN_KEY);
+    sessionStorage.removeItem(SESSION_TOKEN_KEY);
   }
+  if (remoteDeleted) sessionStorage.removeItem(SESSION_TOKEN_KEY);
   $("memoryStatus").textContent = remoteDeleted
     ? "Mémoire locale effacée et suppression serveur confirmée."
     : "Mémoire locale effacée. Suppression serveur non confirmée : l'identifiant et la session sont conservés temporairement pour permettre une nouvelle tentative.";
