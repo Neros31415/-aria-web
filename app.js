@@ -9,7 +9,19 @@ const KEYS = {
 
 // The user explicitly requested a fresh personal start. Remove legacy ARIA
 // profile/history keys on this build's first launch; keep unrelated site data.
+let remoteResetPromise = Promise.resolve(false);
 if (!localStorage.getItem(KEYS.reset)) {
+  // Capture the old profile credentials before clearing this device. The Worker
+  // branch in this PR adds DELETE /memory; until that Worker is deployed, the
+  // request will fail safely and the UI must not claim remote deletion.
+  const oldClientId = localStorage.getItem("aria.v07.memoryClientId");
+  const oldToken = sessionStorage.getItem("aria.session.accessToken");
+  if (oldClientId && oldToken) {
+    remoteResetPromise = fetch("https://aria-brain-staging.quentineros-sevesi.workers.dev/memory?clientId=" + encodeURIComponent(oldClientId), {
+      method: "DELETE",
+      headers: { "Authorization": "Bearer " + oldToken }
+    }).then(response => response.ok).catch(() => false);
+  }
   for (const key of Object.keys(localStorage)) {
     if (key.startsWith("aria.")) localStorage.removeItem(key);
   }
@@ -105,6 +117,10 @@ function speak(text, options = {}) {
     voices.find(v => v.lang.toLowerCase().startsWith("fr")) || null;
   utterance.onend = () => {
     speaking = false;
+    if (typeof options.onEnd === "function") {
+      options.onEnd();
+      return;
+    }
     if (shouldResumeListening) {
       shouldResumeListening = false;
       window.setTimeout(startListening, 300);
@@ -112,6 +128,10 @@ function speak(text, options = {}) {
   };
   utterance.onerror = () => {
     speaking = false;
+    if (typeof options.onEnd === "function") {
+      options.onEnd();
+      return;
+    }
     if (shouldResumeListening) { shouldResumeListening = false; startListening(); }
     else setState("presence");
   };
@@ -245,35 +265,38 @@ function beginOnboarding() {
   onboarding = true;
   onboardingStep = 0;
   $("onboardingDialog").close();
-  speak("Bonjour. Je suis Aria. Je suis conçue pour vous aider à réfléchir, découvrir, organiser et accomplir des tâches. Nous allons régler ensemble la manière dont je vous parle, le degré d'initiative que vous souhaitez me laisser et la façon dont je peux utiliser la mémoire. Vous pourrez modifier ces choix plus tard. Commençons.", {resume:true});
-  window.setTimeout(() => speak(onboardingQuestions[0].prompt, {resume:true}), 6500);
+  speak("Bonjour. Je suis Aria. Je suis conçue pour vous aider à réfléchir, découvrir, organiser et accomplir des tâches. Nous allons régler ensemble la manière dont je vous parle, le degré d'initiative que vous souhaitez me laisser et la façon dont je peux utiliser la mémoire. Vous pourrez modifier ces choix plus tard. Commençons.", {
+    resume: true,
+    onEnd: () => speak(onboardingQuestions[0].prompt, {resume:true})
+  });
 }
 function finishOnboarding() {
   onboarding = false;
   saveProfile();
   localStorage.setItem(KEYS.onboarded, "done");
-  speak("Parfait. Vous pourrez modifier ces préférences à tout moment. Je vais maintenant vous expliquer les états de mon orbe.", {resume:false});
-  window.setTimeout(() => {
-    const states = [
-      ["presence","Quand je suis calme, je suis présente et disponible."],
-      ["listening","Quand l'orbe s'anime doucement, je vous écoute."],
-      ["thinking","Quand sa lumière se concentre, je réfléchis à votre demande."],
-      ["speaking","Quand elle pulse avec ma voix, je vous réponds."],
-      ["initiative","Quand l'animation change avant que vous me sollicitiez, c'est que je prends la parole pour signaler un point pertinent."]
-    ];
-    let i = 0;
-    const next = () => {
-      if (i >= states.length) {
-        speak("Voilà pour mes états essentiels. Je vous laisse découvrir la suite. Vous pouvez me parler naturellement.", {resume:true});
-        return;
-      }
-      const [state, text] = states[i++];
-      setState(state, undefined, undefined);
-      speak(text, {resume:false});
-      window.setTimeout(next, 2600);
-    };
-    next();
-  }, 3000);
+  speak("Parfait. Vous pourrez modifier ces préférences à tout moment. Je vais maintenant vous expliquer les états de mon orbe.", {
+    resume: false,
+    onEnd: () => {
+      const states = [
+        ["presence","Quand je suis calme, je suis présente et disponible."],
+        ["listening","Quand l'orbe s'anime doucement, je vous écoute."],
+        ["thinking","Quand sa lumière se concentre, je réfléchis à votre demande."],
+        ["speaking","Quand elle pulse avec ma voix, je vous réponds."],
+        ["initiative","Quand l'animation change avant que vous me sollicitiez, c'est que je prends la parole pour signaler un point pertinent."]
+      ];
+      let i = 0;
+      const next = () => {
+        if (i >= states.length) {
+          speak("Voilà pour mes états essentiels. Je vous laisse découvrir la suite. Vous pouvez me parler naturellement.", {resume:true});
+          return;
+        }
+        const [state, text] = states[i++];
+        setState(state);
+        speak(text, {resume:false, onEnd: next});
+      };
+      next();
+    }
+  });
 }
 function finishSetupIfReturning() {
   if (!localStorage.getItem(KEYS.onboarded)) {
@@ -364,19 +387,38 @@ $("onboardingSkip").addEventListener("click", () => {
   onboarding = false;
   localStorage.setItem(KEYS.onboarded, "skipped");
 });
-$("resetMemoryBtn").addEventListener("click", () => {
+$("resetMemoryBtn").addEventListener("click", async () => {
   if (!confirm("Effacer les données personnelles conservées localement par cette version d'ARIA ? Cette opération est irréversible sur cet appareil.")) return;
+  const oldClientId = localStorage.getItem("aria.v07.memoryClientId");
+  const oldToken = sessionStorage.getItem("aria.session.accessToken");
+  let remoteDeleted = false;
+  if (oldClientId && oldToken) {
+    try {
+      const response = await fetch("https://aria-brain-staging.quentineros-sevesi.workers.dev/memory?clientId=" + encodeURIComponent(oldClientId), {
+        method: "DELETE",
+        headers: { "Authorization": "Bearer " + oldToken }
+      });
+      remoteDeleted = response.ok;
+    } catch {}
+  }
   memories = [];
   profile = {proactivity:"balanced",verbosity:"balanced",humor:"balanced",memoryConsent:false};
   for (const key of Object.keys(localStorage)) {
     if (key.startsWith("aria.")) localStorage.removeItem(key);
   }
+  for (const key of Object.keys(sessionStorage)) {
+    if (key.startsWith("aria.")) sessionStorage.removeItem(key);
+  }
   localStorage.setItem(KEYS.reset, "done");
   localStorage.setItem(KEYS.memory, "[]");
   localStorage.setItem(KEYS.profile, JSON.stringify(profile));
   renderMemory();
-  $("memoryStatus").textContent = "Données locales effacées. Les éventuelles données distantes ne sont pas encore supprimées par cette version.";
-  speak("La mémoire personnelle de cet appareil est vierge. Je ne peux pas confirmer la suppression d'éventuelles données distantes depuis cette version.", {resume:true});
+  $("memoryStatus").textContent = remoteDeleted
+    ? "Mémoire locale effacée et suppression serveur confirmée."
+    : "Mémoire locale effacée. Suppression serveur non confirmée : le Worker peut ne pas encore prendre en charge cette opération ou l'identifiant de session peut manquer.";
+  speak(remoteDeleted
+    ? "La mémoire personnelle de cet appareil a été effacée et le serveur a confirmé la suppression."
+    : "La mémoire personnelle locale a été effacée. Je ne peux pas confirmer la suppression serveur, qui nécessite une session autorisée et un Worker compatible.", {resume:true});
 });
 $("settingsDialog").addEventListener("close", () => {});
 document.addEventListener("keydown", (event) => {
@@ -388,4 +430,11 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 updateClock();
 window.setInterval(updateClock, 1000);
 renderMemory();
+remoteResetPromise.then(deleted => {
+  if (localStorage.getItem(KEYS.reset) === "done" && !localStorage.getItem(KEYS.onboarded)) {
+    $("memoryStatus").textContent = deleted
+      ? "Les anciennes données locales et la mémoire serveur ont été effacées."
+      : "Les anciennes données locales ont été effacées. La suppression distante n'a pas pu être confirmée.";
+  }
+});
 finishSetupIfReturning();
