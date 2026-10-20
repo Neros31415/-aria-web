@@ -131,8 +131,8 @@ test("logo transition opens and returns from the central visualization workspace
   assert.match(html, /id="logoTransition"/);
   assert.match(app, /function openVisualization/);
   assert.match(app, /function closeVisualization/);
-  assert.match(app, /data-phase = "enter"/);
-  assert.match(app, /data-phase = "return"/);
+  assert.match(app, /dataset\.phase = "enter"/);
+  assert.match(app, /dataset\.phase = "return"/);
   assert.match(app, /prefers-reduced-motion: reduce/);
   assert.match(css, /logo-zoom-through/);
   assert.match(css, /logo-zoom-back/);
