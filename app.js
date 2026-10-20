@@ -286,8 +286,32 @@ function renderMemory() {
     list.appendChild(li);
   }
 }
+function showContextWidgets(title, description) {
+  $("contextTitle").textContent = title;
+  $("contextDescription").textContent = description;
+  $("contextStatus").textContent = "APERÇU DE L’INTERFACE";
+  $("sceneToolsDescription").textContent = "Le HUD contextuel est actif. La scène 3D connectée reste à intégrer.";
+  $("sceneSourceStatus").textContent = "AUCUNE DONNÉE EXTERNE";
+  $("contextWidget").hidden = false;
+  $("sceneToolsWidget").hidden = false;
+}
+function hideContextWidgets() {
+  $("contextWidget").hidden = true;
+  $("sceneToolsWidget").hidden = true;
+}
 function localDemoReply(text) {
   const lower = text.toLocaleLowerCase("fr");
+  if (/(ferme|masque|cache).*(widgets|panneaux|détails)/i.test(lower)) {
+    hideContextWidgets();
+    return {text:"Les widgets contextuels sont fermés."};
+  }
+  if (/(montre|affiche|visualise|ouvre|prépare).*(globe|carte|monde|planète|moteur|modèle 3d|visualisation)/i.test(lower) ||
+      /^(globe|carte|visualisation 3d|modèle 3d)$/i.test(lower.trim())) {
+    const topic = /moteur/i.test(lower) ? "Mécanisme / moteur"
+      : /carte|planète|globe|monde/i.test(lower) ? "Globe et cartographie" : "Visualisation 3D";
+    showContextWidgets(topic, "Espace contextuel préparé à partir de votre demande. La scène 3D et les données métier ne sont pas encore connectées dans cette version.");
+    return {text:"J’ai préparé les widgets contextuels autour de mon interface. Pour être précise, la scène 3D réelle n’est pas encore connectée : ce que vous voyez est le cadre du HUD, pas une simulation de données."};
+  }
   if (/mémoire|souviens|retiens/.test(lower)) {
     openPanel("memoryPanel");
     return {text: memories.length ? "Votre panneau mémoire est ouvert. Je peux vous montrer les notes présentes sur cet appareil." : "Votre mémoire personnelle est actuellement vierge."};
@@ -577,6 +601,7 @@ $("transcriptClose").addEventListener("click", () => {
   transcriptVisible = false;
   $("transcriptWidget").hidden = true;
 });
+$("contextClose").addEventListener("click", hideContextWidgets);
 $("memoryToggle").addEventListener("click", () => openPanel("memoryPanel"));
 $("memoryClose").addEventListener("click", () => closePanel("memoryPanel"));
 $("settingsBtn").addEventListener("click", () => {
