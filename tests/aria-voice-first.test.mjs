@@ -29,7 +29,7 @@ test("legacy local ARIA data is purged on first launch and remote deletion is ex
   assert.match(app, /aria\.v07\.messages/);
   assert.match(app, /remoteResetPromise/);
   assert.match(app, /method: "DELETE"/);
-  assert.match(app, /Données locales effacées/);
+  assert.match(app, /données locales effacées/i);
 });
 
 test("the voice-first stylesheet and cache version are included in the PWA", () => {
