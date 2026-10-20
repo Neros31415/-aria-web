@@ -309,13 +309,13 @@ function renderMemory() {
     list.appendChild(li);
   }
 }
-function openVisualization(title, note) {
+function openVisualization(title, note, requestedScene = "other") {
   if (transitionTimer) window.clearTimeout(transitionTimer);
   visualizationOpen = true;
   $("visualizationTitle").textContent = title;
   $("coreStage").hidden = true;
   $("visualizationStage").hidden = false;
-  const sceneType = /globe|cartographie/i.test(title) ? "globe" : "placeholder";
+  const sceneType = requestedScene === "globe" ? "globe" : "placeholder";
   const hasInteractiveGlobe = window.AriaVisualization?.open({type:sceneType}) === true;
   if (sceneType === "globe" && hasInteractiveGlobe) {
     note = "Globe filaire 3D généré localement, sans données géographiques externes. Faites glisser pour le faire tourner.";
@@ -377,27 +377,50 @@ function hideContextWidgets() {
   $("sceneToolsWidget").hidden = true;
 }
 function localDemoReply(text) {
-  const lower = text.toLocaleLowerCase("fr");
-  if (/(retour à aria|retourne à aria|reviens à aria|ferme la visualisation|retour à l'accueil)/i.test(lower)) {
-    closeVisualization();
-    return {text:"Je vous ramène à notre espace principal."};
-  }
-  if (/(ferme|masque|cache).*(widgets|panneaux|détails)/i.test(lower)) {
-    hideContextWidgets();
-    return {text:"Les widgets contextuels sont fermés."};
-  }
-  if (/(montre|affiche|visualise|ouvre|prépare).*(globe|carte|monde|planète|moteur|modèle 3d|visualisation)/i.test(lower) ||
-      /^(globe|carte|visualisation 3d|modèle 3d)$/i.test(lower.trim())) {
-    const topic = /moteur/i.test(lower) ? "Mécanisme / moteur"
-      : /carte|planète|globe|monde/i.test(lower) ? "Globe et cartographie" : "Visualisation 3D";
-    openVisualization(topic, "Espace de visualisation en préparation. La scène 3D réelle et les données métier ne sont pas encore connectées dans cette version.");
-    return {text:"J’ouvre l’espace visuel avec ses widgets contextuels. Je préfère être transparente : la transition immersive est active, mais la scène 3D métier n’est pas encore connectée."};
-  }
-  if (/mémoire|souviens|retiens/.test(lower)) {
+  const lower = text.toLocaleLowerCase("fr").trim();
+  // Offline shortcuts are limited to explicit interface controls. General
+  // requests and memory instructions go through the model's intent analysis.
+  if (/^(ouvre|affiche|montre|consulte)\s+(ma\s+)?(mémoire|souvenirs)$/i.test(lower) ||
+      /^(ouvre|affiche|montre)\s+(le\s+)?panneau mémoire$/i.test(lower)) {
     openPanel("memoryPanel");
-    return {text: memories.length ? "Votre panneau mémoire est ouvert. Je peux vous montrer les notes présentes sur cet appareil." : "Votre mémoire personnelle est actuellement vierge."};
+    return {text: memories.length ? "Votre panneau mémoire est ouvert. Les souvenirs affichés sont ceux de votre espace personnel." : "Votre panneau mémoire est ouvert et votre mémoire personnelle est vierge.", action:"none", scene:"none"};
+  }
+  if (/^(ferme|masque|cache)\s+(les\s+)?widgets( contextuels)?$/i.test(lower)) {
+    hideContextWidgets();
+    return {text:"Les widgets contextuels sont fermés.", action:"none", scene:"none"};
+  }
+  if (/^(retour à aria|retourne à aria|reviens à aria|ferme la visualisation|retour à l'accueil)$/i.test(lower)) {
+    closeVisualization();
+    return {text:"Je vous ramène à notre espace principal.", action:"none", scene:"none"};
   }
   return null;
+}
+function applyIntentAction(result) {
+  if (!result || typeof result !== "object") return;
+  switch (result.action) {
+    case "open_visualization": {
+      const scene = ["globe", "map", "engine", "scientific_model", "other"].includes(result.scene) ? result.scene : "other";
+      const scenes = {
+        globe: {title:"Globe 3D", note:"Globe filaire généré localement. Il ne contient pas de données géographiques réelles."},
+        map: {title:"Carte géographique", note:"La scène cartographique réelle n’est pas encore connectée. Aucune carte ni donnée géographique n’est simulée."},
+        engine: {title:"Mécanisme / moteur", note:"Le modèle 3D de mécanisme n’est pas encore connecté dans cette version."},
+        scientific_model: {title:"Modèle scientifique", note:"Le modèle scientifique interactif n’est pas encore connecté dans cette version."},
+        other: {title:"Espace de visualisation", note:"La scène demandée n’est pas encore disponible. Je ne présente pas de données fictives comme réelles."}
+      };
+      const target = scenes[scene];
+      openVisualization(target.title, target.note, scene);
+      break;
+    }
+    case "close_visualization":
+      closeVisualization();
+      break;
+    case "open_memory":
+      openPanel("memoryPanel");
+      break;
+    case "close_widgets":
+      hideContextWidgets();
+      break;
+  }
 }
 async function requestAriaReply(text) {
   const token = getApiToken();
@@ -450,7 +473,13 @@ async function requestAriaReply(text) {
     }
     conversation.push({role:"assistant",content:data.reply});
     conversation = conversation.slice(-20);
-    return data.reply;
+    const allowedActions = ["none", "open_visualization", "close_visualization", "open_memory", "close_widgets"];
+    const allowedScenes = ["none", "globe", "map", "engine", "scientific_model", "other"];
+    return {
+      text: data.reply,
+      action: allowedActions.includes(data.action) ? data.action : "none",
+      scene: allowedScenes.includes(data.scene) ? data.scene : "none"
+    };
   } catch (error) {
     conversation.pop();
     if (error?.name === "AbortError") {
@@ -479,9 +508,11 @@ async function handleUtterance(text) {
   const thisTurn = ++turnGeneration;
   try {
     const local = localDemoReply(utterance);
-    const reply = local ? local.text : await requestAriaReply(utterance);
+    const result = local || await requestAriaReply(utterance);
+    const reply = typeof result === "string" ? result : (result?.text || result?.reply || "");
     // The user may have paused or interrupted while the network request ran.
     if (thisTurn !== turnGeneration || !reply) return;
+    if (typeof result === "object") applyIntentAction(result);
     window.setTimeout(() => {
       if (thisTurn !== turnGeneration) return;
       speak(reply, {
