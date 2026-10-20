@@ -23,6 +23,11 @@ test("first-run onboarding explains voice and personal preferences", () => {
   assert.match(app, /memoryConsent/);
   assert.match(app, /Quand l'orbe s'anime doucement, je vous écoute/);
   assert.match(app, /Quand sa lumière se concentre, je réfléchis/);
+  assert.match(app, /const affirmative =/);
+  assert.match(app, /const negative =/);
+  assert.match(app, /Souhaitez-vous autoriser la mémoire : oui ou non/);
+  assert.match(app, /Vous pouvez aussi dire « passer »/);
+  assert.match(app, /profile\.memoryConsent = affirmative/);
 });
 
 test("legacy local ARIA data is purged on first launch and remote deletion is explicit", () => {
