@@ -125,6 +125,20 @@ test("contextual HUD widgets are responsive, explicit, and do not claim a real 3
   assert.match(css, /prefers-reduced-motion/);
 });
 
+test("logo transition opens and returns from the central visualization workspace", () => {
+  assert.match(html, /id="visualizationStage"/);
+  assert.match(html, /id="visualizationBack"/);
+  assert.match(html, /id="logoTransition"/);
+  assert.match(app, /function openVisualization/);
+  assert.match(app, /function closeVisualization/);
+  assert.match(app, /data-phase = "enter"/);
+  assert.match(app, /data-phase = "return"/);
+  assert.match(app, /prefers-reduced-motion: reduce/);
+  assert.match(css, /logo-zoom-through/);
+  assert.match(css, /logo-zoom-back/);
+  assert.match(app, /la scène 3D métier n’est pas encore connectée/i);
+});
+
 test("backend never reads or writes persistent memories when consent is disabled", async () => {
   const writes = [];
   const reads = [];
