@@ -4,42 +4,34 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#05070b">
-  <meta name="description" content="ARIA — une interface holographique, un assistant unique.">
+  <meta name="description" content="ARIA — assistante personnelle vocale et interface holographique.">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="styles.css">
-  <title>ARIA — Live Interface</title>
+  <link rel="stylesheet" href="voice.css">
+  <title>ARIA — Présence vocale</title>
 </head>
 <body>
   <div class="hud-shell">
     <header class="topbar">
-      <a class="brand" href="./" aria-label="ARIA, accueil"><span class="brand-symbol" aria-hidden="true">A</span><span><strong>ARIA</strong><small>PERSONAL INTELLIGENCE</small></span></a>
-      <div class="system-status"><i></i><span id="statusText">SYSTÈME EN ATTENTE</span></div>
+      <div class="brand" aria-label="ARIA"><span class="brand-symbol" aria-hidden="true">A</span><span><strong>ARIA</strong><small>PERSONAL INTELLIGENCE</small></span></div>
+      <div class="system-status" aria-live="polite"><i id="statusDot"></i><span id="statusText">PRÉSENCE</span></div>
       <button class="icon-button" id="settingsBtn" aria-label="Paramètres" title="Paramètres">⌘</button>
     </header>
 
-    <main class="hud-main">
-      <aside class="telemetry telemetry-left" aria-label="État du système">
-        <div class="micro-heading">01 / SYSTÈME</div>
-        <div class="telemetry-item"><span class="tiny-label">INTERFACE</span><strong>LIVE HUD</strong><small><i class="mini-dot"></i> En ligne localement</small></div>
-        <div class="telemetry-item"><span class="tiny-label">MÉMOIRE</span><strong id="memoryCount">00 NOTES</strong><small>Contrôlée par vous</small></div>
-        <div class="telemetry-item"><span class="tiny-label">MODE ACTUEL</span><strong id="modeLabel">PRÉSENCE</strong><small id="modeDescription">En attente de commande</small></div>
-        <button class="quiet-action" id="memoryToggle" type="button">Ouvrir la mémoire <span>↗</span></button>
-      </aside>
-
-      <section class="core-stage" aria-label="Interface centrale ARIA">
+    <main class="voice-main">
+      <section class="core-stage" id="coreStage" data-state="presence" aria-label="Présence visuelle d'ARIA">
         <div class="stage-caption"><span>ARIA / CORE</span><span id="clockLabel">INITIALISATION</span></div>
-        <div class="core-wrap" id="coreTrigger" role="button" tabindex="0" aria-label="Activer ARIA">
+        <div class="core-wrap" id="ariaOrb" role="img" aria-label="Orbe représentant l'état d'ARIA">
           <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><div class="orbit orbit-three"></div>
           <div class="core-halo"></div>
-          <svg class="core-globe" viewBox="0 0 240 240" role="img" aria-label="Globe holographique animé">
+          <svg class="core-globe" viewBox="0 0 240 240" aria-hidden="true">
             <defs><radialGradient id="sphereFill" cx="35%" cy="25%" r="75%"><stop offset="0" stop-color="#d6f6ff" stop-opacity=".2"/><stop offset=".55" stop-color="#4f9bb8" stop-opacity=".09"/><stop offset="1" stop-color="#0a1722" stop-opacity=".02"/></radialGradient><clipPath id="sphereClip"><circle cx="120" cy="120" r="75"/></clipPath></defs>
-            <circle cx="120" cy="120" r="75" fill="url(#sphereFill)" stroke="#bdefff" stroke-opacity=".58" stroke-width="1"/>
+            <circle cx="120" cy="120" r="75" fill="url(#sphereFill)" stroke="#bdefff" stroke-opacity=".58"/>
             <g clip-path="url(#sphereClip)" fill="none" stroke="#9edff3" stroke-opacity=".45" stroke-width=".8">
               <ellipse cx="120" cy="120" rx="31" ry="75"/><ellipse cx="120" cy="120" rx="59" ry="75"/>
               <ellipse cx="120" cy="120" rx="75" ry="24"/><ellipse cx="120" cy="120" rx="75" ry="49"/>
               <path d="M35 120h170M120 42v156M54 75q66 30 132 0M54 165q66-30 132 0"/>
               <path d="M74 70l14 9 7 17-11 10 4 14-17 10-5 22 16 20 19-5 11-23 18-10 5-18-15-15-5-15-22-6z" fill="#8fdff3" fill-opacity=".12"/>
-              <path d="M145 73l18 8 8 18-9 15 10 13-7 23-19 13-7-19-13-11 6-20-8-16z" fill="#8fdff3" fill-opacity=".1"/>
             </g>
             <circle cx="120" cy="120" r="83" fill="none" stroke="#c7f3ff" stroke-opacity=".12" stroke-dasharray="1 7"/>
             <circle cx="120" cy="120" r="4" fill="#effcff"/><circle cx="120" cy="120" r="11" fill="none" stroke="#b7f1ff" stroke-opacity=".5"/>
@@ -47,56 +39,64 @@
           <div class="core-crosshair crosshair-a"></div><div class="core-crosshair crosshair-b"></div>
           <span class="core-label">A</span>
         </div>
-        <div class="core-state"><span class="pulse-dot"></span><span id="coreState">PRÊTE À RECEVOIR</span></div>
-        <h1 id="sceneTitle">À votre écoute.</h1>
-        <p class="scene-subtitle" id="sceneSubtitle">Un espace vivant. Une seule interface. Votre intention donne le mouvement.</p>
-        <div class="scene-shortcuts" role="group" aria-label="Démonstrations visuelles">
-          <button class="scene-chip active" type="button" data-scene="presence">Présence</button>
-          <button class="scene-chip" type="button" data-scene="globe">Globe</button>
-          <button class="scene-chip" type="button" data-scene="mountain">Mont-Blanc</button>
-          <button class="scene-chip" type="button" data-scene="engine">Moteur 3D</button>
+        <div class="core-state"><span class="pulse-dot"></span><span id="coreState">PRÉSENTE</span></div>
+        <h1 id="sceneTitle">Bonjour.</h1>
+        <p class="scene-subtitle" id="sceneSubtitle">Je suis là. Vous pouvez me parler naturellement.</p>
+        <div class="voice-controls">
+          <button class="primary-button" id="voiceStart" type="button">Commencer notre rencontre</button>
+          <button class="quiet-action voice-stop" id="voiceStop" type="button" hidden>Mettre l'écoute en pause</button>
         </div>
+        <p class="voice-note" id="voiceNote">La voix nécessite l'autorisation du microphone. L'écoute continue dépend des possibilités du navigateur et du système.</p>
       </section>
 
-      <aside class="telemetry telemetry-right" aria-label="Outils contextuels">
-        <div class="micro-heading">02 / CONTEXTE</div>
-        <div class="context-card"><span class="tiny-label">VISUALISATION</span><strong id="visualMode">Aucune scène active</strong><p id="visualHint">Choisissez une démonstration ou demandez à ARIA.</p><div class="context-line"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div></div>
-        <div class="telemetry-item"><span class="tiny-label">INTERACTION</span><strong>LANGAGE NATUREL</strong><small>Les outils s'ouvrent ici, dans ARIA.</small></div>
-        <button class="quiet-action" id="chatToggle" type="button">Ouvrir la conversation <span>↗</span></button>
+      <aside class="transcript-widget" id="transcriptWidget" aria-live="polite" hidden>
+        <div class="transcript-head"><span>TRANSCRIPTION</span><button id="transcriptClose" type="button" aria-label="Masquer la transcription">×</button></div>
+        <div id="transcriptText">La transcription apparaîtra ici si vous l'activez.</div>
       </aside>
+
+      <section class="memory-drawer" id="memoryPanel" aria-label="Mémoire ARIA" hidden>
+        <div class="drawer-heading"><div><span class="micro-heading">CONTRÔLE PERSONNEL</span><h2>Ma mémoire</h2></div><button class="close-drawer" id="memoryClose" type="button" aria-label="Fermer la mémoire">×</button></div>
+        <p class="drawer-note">ARIA ne doit conserver que les informations que vous choisissez de lui confier.</p>
+        <ul id="memoryList" class="memory-list"></ul>
+        <button class="quiet-action" id="resetMemoryBtn" type="button">Effacer les données personnelles de cet appareil</button>
+        <p class="drawer-note" id="memoryStatus" role="status">La suppression locale ne confirme pas la suppression d'éventuelles données sur le serveur.</p>
+      </section>
     </main>
 
-    <section class="memory-drawer" id="memoryPanel" aria-label="Mémoire ARIA" hidden>
-      <div class="drawer-heading"><div><span class="micro-heading">CONTEXTE PERSISTANT</span><h2>Votre mémoire</h2></div><button class="close-drawer" id="memoryClose" type="button" aria-label="Fermer la mémoire">×</button></div>
-      <p class="drawer-note">Les notes sont conservées dans ce navigateur. Vous gardez le contrôle.</p>
-      <form id="memoryForm" class="memory-form"><input id="memoryInput" maxlength="300" placeholder="Ajouter une préférence ou une note…" aria-label="Nouvelle note de mémoire"><button type="submit">Ajouter</button></form>
-      <ul id="memoryList" class="memory-list"></ul>
-    </section>
-
-    <section class="conversation-drawer" id="chatPanel" aria-label="Conversation ARIA" hidden>
-      <div class="drawer-heading"><div><span class="micro-heading">CANAL DIRECT</span><h2>Conversation</h2></div><div class="drawer-tools"><button class="quiet-action" id="clearBtn" type="button">Effacer l'historique</button><button class="close-drawer" id="chatClose" type="button" aria-label="Fermer la conversation">×</button></div></div>
-      <div id="messages" class="messages" aria-live="polite">
-        <article class="message aria-message"><div class="avatar">A</div><div class="bubble"><div class="message-label">ARIA <span>PROTOCOLE INITIAL</span></div><p>Je suis prête. Le HUD est interactif ; le moteur IA distant doit encore être validé avant de traiter vos demandes comme des actions réelles.</p></div></article>
-      </div>
-    </section>
-
     <footer class="command-dock">
-      <div class="dock-prompt"><span class="command-mark">A</span><form id="chatForm" class="composer"><label class="sr-only" for="messageInput">Votre commande</label><textarea id="messageInput" rows="1" placeholder="Demandez quelque chose à ARIA…" maxlength="2000"></textarea><button class="send-button" type="submit" aria-label="Envoyer la commande">↑</button></form></div>
-      <div class="dock-meta"><span><i class="mini-dot"></i> INTERFACE LOCALE</span><span id="charCount">0/2000</span><span>ENTRÉE POUR ENVOYER</span></div>
+      <button class="icon-button small-action" id="transcriptToggle" type="button" aria-label="Afficher ou masquer la transcription" title="Transcription">≋</button>
+      <span class="dock-hint">PARLEZ NATURELLEMENT À ARIA</span>
+      <button class="icon-button small-action" id="memoryToggle" type="button" aria-label="Ouvrir la mémoire" title="Mémoire">◇</button>
+      <button class="icon-button small-action" id="pauseToggle" type="button" aria-label="Mettre la voix en pause" title="Pause de l'écoute">Ⅱ</button>
     </footer>
   </div>
 
-  <dialog id="settingsDialog">
+  <dialog id="onboardingDialog">
     <form method="dialog" class="dialog-content">
-      <div class="drawer-heading"><div><span class="micro-heading">CONFIGURATION</span><h2>État du prototype</h2></div><button class="close-drawer" aria-label="Fermer">×</button></div>
-      <div class="setting-row"><span>Interface HUD</span><b class="good">ACTIVE</b></div>
-      <div class="setting-row"><span>Mémoire locale</span><b class="good">ACTIVE</b></div>
-      <div class="setting-row"><span>Modèle IA distant</span><b class="pending">À VALIDER</b></div>
-      <div class="setting-row"><span>Visualisations 3D avancées</span><b class="pending">EN INTÉGRATION</b></div>
-      <p class="dialog-help">Les scènes actuelles sont des démonstrations d'interface. Les données réelles et les actions distantes ne sont pas déclarées opérationnelles sans validation.</p>
-      <button class="primary-button">Fermer</button>
+      <div class="micro-heading">PREMIÈRE RENCONTRE</div>
+      <h2>Faisons connaissance.</h2>
+      <p>ARIA vous guidera oralement dans cette configuration. Vous pouvez passer une question ou tout recommencer.</p>
+      <div class="setting-row"><span>Voix et écoute</span><b>À CONFIGURER</b></div>
+      <div class="setting-row"><span>Style de conversation</span><b>À CONFIGURER</b></div>
+      <div class="setting-row"><span>Mémoire personnelle</span><b>VIERGE</b></div>
+      <button class="primary-button" id="onboardingBegin" value="begin">Commencer</button>
+      <button class="text-button" id="onboardingSkip" value="skip">Passer pour le moment</button>
     </form>
   </dialog>
+
+  <dialog id="settingsDialog">
+    <form method="dialog" class="dialog-content">
+      <div class="drawer-heading"><div><span class="micro-heading">CONFIGURATION</span><h2>Préférences d'ARIA</h2></div><button class="close-drawer" aria-label="Fermer">×</button></div>
+      <p class="dialog-help">Le mode vocal dépend des autorisations et des capacités du navigateur. L'écoute peut s'interrompre en arrière-plan sur mobile.</p>
+      <div class="setting-row"><span>Proactivité</span><select id="proactivitySetting"><option value="discrete">Discrète</option><option value="balanced" selected>Équilibrée</option><option value="proactive">Proactive</option></select></div>
+      <div class="setting-row"><span>Réponses</span><select id="verbositySetting"><option value="short">Plutôt courtes</option><option value="balanced" selected>Équilibrées</option><option value="detailed">Détaillées</option></select></div>
+      <div class="setting-row"><span>Humour</span><select id="humorSetting"><option value="low">Discret</option><option value="balanced" selected>Naturel</option><option value="high">Fréquent</option></select></div>
+      <button class="primary-button" id="saveSettings" value="save">Enregistrer</button>
+      <button class="text-button" id="restartOnboarding" value="restart">Recommencer la première rencontre</button>
+      <button class="text-button" id="settingsMemory" value="memory">Ouvrir la mémoire</button>
+    </form>
+  </dialog>
+
   <script src="app.js"></script>
 </body>
 </html>
