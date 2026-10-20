@@ -87,7 +87,9 @@
   <dialog id="settingsDialog">
     <form method="dialog" class="dialog-content">
       <div class="drawer-heading"><div><span class="micro-heading">CONFIGURATION</span><h2>Préférences d'ARIA</h2></div><button class="close-drawer" aria-label="Fermer">×</button></div>
-      <p class="dialog-help">Le mode vocal dépend des autorisations et des capacités du navigateur. L'écoute peut s'interrompre en arrière-plan sur mobile.</p>
+      <p class="dialog-help">Le mode vocal dépend des autorisations et des capacités du navigateur. L'écoute peut s'interrompre en arrière-plan sur mobile. Pour connecter le moteur de conversation de l’alpha, saisissez le jeton qui vous a été fourni par l’administrateur. Il n’est jamais inclus dans le code public.</p>
+      <label class="token-field" for="apiTokenSetting"><span>Jeton d’accès alpha</span><input id="apiTokenSetting" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Non configuré"></label>
+      <p class="token-help">Conservé uniquement dans la session de ce navigateur. Ne partagez pas ce jeton.</p>
       <div class="setting-row"><span>Proactivité</span><select id="proactivitySetting"><option value="discrete">Discrète</option><option value="balanced" selected>Équilibrée</option><option value="proactive">Proactive</option></select></div>
       <div class="setting-row"><span>Réponses</span><select id="verbositySetting"><option value="short">Plutôt courtes</option><option value="balanced" selected>Équilibrées</option><option value="detailed">Détaillées</option></select></div>
       <div class="setting-row"><span>Humour</span><select id="humorSetting"><option value="low">Discret</option><option value="balanced" selected>Naturel</option><option value="high">Fréquent</option></select></div>
