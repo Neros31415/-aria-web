@@ -193,7 +193,56 @@ function stopListening() {
 }
 function openPanel(id) {
   $(id).hidden = false;
-  if (id === "memoryPanel") renderMemory();
+  if (id === "memoryPanel") {
+    renderMemory();
+    syncRemoteMemory();
+  }
+}
+async function syncRemoteMemory() {
+  const token = getApiToken();
+  if (!token) {
+    $("memoryStatus").textContent = "Mémoire locale affichée. Configurez le jeton alpha pour synchroniser la mémoire distante.";
+    return;
+  }
+  try {
+    const response = await fetch(API_BASE + "/memory?clientId=" + encodeURIComponent(getClientId()), {
+      headers: { "Authorization": "Bearer " + token }
+    });
+    if (!response.ok) {
+      $("memoryStatus").textContent = response.status === 401
+        ? "Jeton refusé : la mémoire distante n'a pas été synchronisée."
+        : "Mémoire distante indisponible; les données affichées restent locales.";
+      return;
+    }
+    const data = await response.json();
+    if (!Array.isArray(data.memories)) throw new Error("invalid memory response");
+    memories = data.memories;
+    localStorage.setItem(KEYS.memory, JSON.stringify(memories));
+    renderMemory();
+    $("memoryStatus").textContent = "Mémoire synchronisée avec le serveur.";
+  } catch {
+    $("memoryStatus").textContent = "Synchronisation impossible. Les données affichées restent locales.";
+  }
+}
+async function saveRemoteMemory() {
+  const token = getApiToken();
+  if (!token) return false;
+  try {
+    const response = await fetch(API_BASE + "/memory", {
+      method: "PUT",
+      headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
+      body: JSON.stringify({ clientId: getClientId(), memories })
+    });
+    if (!response.ok) return false;
+    const data = await response.json();
+    if (Array.isArray(data.memories)) memories = data.memories;
+    localStorage.setItem(KEYS.memory, JSON.stringify(memories));
+    $("memoryStatus").textContent = "Mémoire locale et distante mises à jour.";
+    return true;
+  } catch {
+    $("memoryStatus").textContent = "La mémoire locale est mise à jour, mais la synchronisation distante a échoué.";
+    return false;
+  }
 }
 function closePanel(id) { $(id).hidden = true; }
 function renderMemory() {
@@ -211,6 +260,7 @@ function renderMemory() {
       memories = memories.filter(entry => entry !== item);
       localStorage.setItem(KEYS.memory, JSON.stringify(memories));
       renderMemory();
+      saveRemoteMemory();
     });
     li.append(span, remove);
     list.appendChild(li);
@@ -462,11 +512,13 @@ $("onboardingSkip").addEventListener("click", () => {
 $("resetMemoryBtn").addEventListener("click", async () => {
   if (!confirm("Effacer les données personnelles conservées localement par cette version d'ARIA ? Cette opération est irréversible sur cet appareil.")) return;
   const oldClientId = localStorage.getItem("aria.v07.memoryClientId");
+  const currentClientId = localStorage.getItem(KEYS.clientId);
+  const clientIdToDelete = currentClientId || oldClientId;
   const oldToken = sessionStorage.getItem("aria.session.accessToken") || sessionStorage.getItem(SESSION_TOKEN_KEY);
   let remoteDeleted = false;
-  if (oldClientId && oldToken) {
+  if (clientIdToDelete && oldToken) {
     try {
-      const response = await fetch("https://aria-brain-staging.quentineros-sevesi.workers.dev/memory?clientId=" + encodeURIComponent(oldClientId), {
+      const response = await fetch(API_BASE + "/memory?clientId=" + encodeURIComponent(clientIdToDelete), {
         method: "DELETE",
         headers: { "Authorization": "Bearer " + oldToken }
       });
@@ -487,11 +539,11 @@ $("resetMemoryBtn").addEventListener("click", async () => {
   renderMemory();
   if (remoteDeleted) {
     localStorage.removeItem("aria.v07.memoryClientId");
+    localStorage.removeItem(KEYS.clientId);
     sessionStorage.removeItem("aria.session.accessToken");
-  sessionStorage.removeItem(SESSION_TOKEN_KEY);
     sessionStorage.removeItem(SESSION_TOKEN_KEY);
   }
-  if (remoteDeleted) sessionStorage.removeItem(SESSION_TOKEN_KEY);
+  conversation = [];
   $("memoryStatus").textContent = remoteDeleted
     ? "Mémoire locale effacée et suppression serveur confirmée."
     : "Mémoire locale effacée. Suppression serveur non confirmée : l'identifiant et la session sont conservés temporairement pour permettre une nouvelle tentative.";
