@@ -110,3 +110,11 @@ La boucle vocale ne passe en alpha testeur qu’après réussite des scénarios 
 - Aucun jeton individuel n’a été provisionné. Les tests d’authentification individuelle et d’isolation mémoire sont donc **bloqués / non exécutés**, et non considérés comme réussis.
 - Une tentative de déploiement via l’API Cloudflare a été bloquée par les contrôles de sécurité des outils. Aucun réglage du Worker, binding ou secret existant n’a été modifié. Ne pas activer le mode individuel tant que le code et le binding ne sont pas déployés puis vérifiés.
 - Le test physique Safari/PWA sur iPhone reste **À tester**; aucune validation sur appareil réel n’est revendiquée.
+
+
+## Mise à jour staging — 20 octobre 2026, 17:45 CEST
+- Le Worker déployé contient désormais le code d’authentification individuelle; le binding `ARIA_USERS` est présent et `ARIA_REQUIRE_INDIVIDUAL_AUTH=true` est actif.
+- Un mapping de jeton temporaire à durée de vie de 7 jours a été créé et vérifié dans KV. Le jeton brut est communiqué séparément au propriétaire, jamais dans le dépôt ou les captures de test.
+- État : prérequis de configuration satisfaits; tests HTTP d’accès individuel, rejet du jeton partagé et isolation mémoire **à exécuter**. Le endpoint `/health` n’a pas encore été vérifié directement via HTTP.
+- Les tests Safari/PWA sur iPhone physique restent **À tester**. Aucun résultat d’appareil réel n’est revendiqué.
+- Garder le secret partagé jusqu’à réussite des tests et préparation d’un retour arrière; aucun lancement public avant validation complète.
