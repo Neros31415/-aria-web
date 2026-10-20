@@ -26,10 +26,10 @@ Le contrôle contre V1.1 révèle deux catégories :
 | Voix prioritaire, pas de chat permanent | Partiellement conforme | Le HUD est vocal et le composeur permanent est absent. La reconnaissance dépend du navigateur et n’a pas été validée sur appareil réel. |
 | Orbe expressive non cliquable | Conforme au niveau HTML/CSS | L’orbe a le rôle d’image; valider les états en situation réelle et l’accessibilité. |
 | Première rencontre vocale unique | Partiel | Le flux existe et peut être relancé manuellement. Le parcours « passer » existe; vérifier les cas de reprise et d’interruption sur mobile. |
-| Préférences de proactivité, longueur, humour | Partiel | Les préférences sont sauvegardées. Le comportement conversationnel doit encore être relié de manière fiable à ces paramètres côté moteur. |
-| Consentement mémoire explicite | Correction engagée | Le dernier commit exige une réponse affirmative/non claire et permet de passer. CI à confirmer avant de considérer le correctif validé. |
+| Préférences de proactivité, longueur, humour | Partiellement conforme | Les préférences sont sauvegardées et transmises au Worker, qui les valide et les inclut dans les instructions du modèle. La qualité comportementale doit encore être évaluée par scénarios. |
+| Consentement mémoire explicite | Partiellement conforme | Le réglage est accessible dans les paramètres et le client envoie le consentement au Worker. Le Worker n’enregistre plus et ne charge plus de souvenirs dans le contexte de chat si le consentement est désactivé. Tests automatisés réussis; test réel de bout en bout encore requis. |
 | Mémoire vierge et purge honnête | Partiel | Purge locale et route DELETE distante existent; la confirmation de purge doit couvrir tous les identifiants connus et les erreurs serveur. |
-| Conversation avec un modèle réel | Partiel | Le frontend appelle /chat sur le Worker avec un jeton alpha de session. Un parcours réel avec jeton valide et fournisseur disponible reste nécessaire. |
+| Conversation avec un modèle réel | Partiel | Le frontend appelle /chat sur le Worker avec un jeton alpha de session. La gestion des tours empêche les doublons, permet l’annulation d’une requête en cours et empêche une réponse retardée de parler après la pause. Un parcours réel avec jeton valide et fournisseur disponible reste nécessaire. |
 | Secrets hors frontend | Conforme pour les secrets fournisseur | Le jeton alpha est saisi par le testeur et gardé dans sessionStorage; le modèle d’accès partagé reste temporaire et insuffisant pour une bêta publique. |
 | Widgets contextuels latéraux | Absent/incomplet | Le panneau mémoire existe, mais les widgets contextuels latéraux ne sont pas encore intégrés à une scène centrale immersive. |
 | Visualisation 3D au centre | Non conforme au niveau fonctionnel | Le globe actuel est un visuel SVG. Globe/cartographie, relief, moteur et modèles scientifiques ne sont pas encore des scènes 3D de données manipulables. |
@@ -48,7 +48,7 @@ Le correctif de la branche :
 - conserve la mémoire désactivée lorsqu’on passe la question de consentement;
 - demande aussi une réponse reconnaissable pour les préférences de proactivité, de longueur et d’humour plutôt que de sauvegarder silencieusement une valeur par défaut.
 
-Le test statique de ce comportement a été ajouté. Le workflow « ARIA voice-first checks » a réussi sur le commit applicatif 75b19bcb58e6568fb6c9ec1ddac813e5d215c587; le workflow du commit documentaire courant 332e1c10f932214ccbdb9edad16243f578f51a0b a également terminé avec succès.
+Le test statique de ce comportement a été ajouté. La suite automatisée a ensuite été étendue à la boucle vocale interrompable et au consentement mémoire. Le dernier run associé au commit 60b2a79af9237feebecd85cd0dc50be1bb539d61 a réussi.
 
 ## 5. Risques et limites
 1. **Accès alpha :** jeton partagé, aucune authentification individuelle; limiter aux testeurs contrôlés et révoquer le jeton en cas de fuite.
@@ -67,13 +67,15 @@ Le test statique de ce comportement a été ajouté. Le workflow « ARIA voice-f
 - Garder la PR #15 en brouillon; ne pas fusionner ni déployer.
 
 ### P1 — Valider la boucle vocale
-- Tester sur iPhone Safari : permission microphone, début de rencontre, questions, réponses, synthèse, interruption, pause/reprise et retour après erreur réseau.
-- Confirmer qu’une seule requête est envoyée par énoncé final et que la parole ne se chevauche pas.
+- Correctif de tours vocaux appliqué : déduplication pendant le traitement, annulation de la requête via AbortController et invalidation des réponses après pause.
+- La CI couvre les gardes de concurrence et les erreurs vocales; les tests automatisés ont réussi sur le commit 60b2a79af9237feebecd85cd0dc50be1bb539d61.
+- Test physique iPhone Safari toujours requis : permissions, première rencontre, aller-retour vocal, interruption, pause/reprise et erreurs réseau. Consigner le résultat dans docs/TEST_PLAN_IPHONE_ALPHA.md.
 
 ### P2 — Sécuriser mémoire et accès
-- Vérifier l’état du consentement après réponse ambiguë, refus et passage.
-- Tester purge locale + distante avec jeton valide, jeton invalide et indisponibilité réseau.
-- Préparer l’authentification individuelle avant toute ouverture plus large.
+- Réglage mémoire ajouté aux paramètres; le consentement est transmis explicitement au Worker.
+- Avec consentement désactivé, le Worker n’effectue ni lecture ni écriture de souvenirs lors d’une requête de chat, même si l’utilisateur formule une demande de mémorisation.
+- Les tests automatisés couvrent ce cas. Tester encore la purge locale + distante avec jeton valide, jeton invalide et indisponibilité réseau.
+- Bloqueur avant toute ouverture plus large : le jeton Bearer reste partagé. L’authentification individuelle, l’isolation par compte, la révocation et la récupération de compte ne sont pas implémentées.
 
 ### P3 — Construire l’interface HUD cible
 - Garder la scène au centre et intégrer les widgets contextuels latéraux, discrets et fermables.
