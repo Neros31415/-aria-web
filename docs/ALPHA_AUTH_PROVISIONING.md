@@ -48,3 +48,12 @@ Ne pas ouvrir l’inscription publique tant que l’authentification n’inclut 
 - Le déploiement du code avec authentification individuelle n’a pas été effectué. Ne pas ajouter `ARIA_REQUIRE_INDIVIDUAL_AUTH=true` avant que le code compatible et le binding `ARIA_USERS` soient tous deux déployés, au risque de verrouiller l’accès au service.
 - Prochaine séquence autorisée : déployer le code de la branche sur staging en préservant les secrets et bindings existants; ajouter le binding KV; vérifier `/health`; provisionner un jeton temporaire avec expiration; tester l’accès individuel et le refus du jeton partagé; supprimer le secret partagé uniquement après validation et préparation d’un retour arrière.
 - Aucun jeton brut n’a été créé ou transmis. Aucun secret fournisseur n’a été lu ou exposé. Aucune modification du code déployé ni aucune modification des bindings du Worker n’a été effectuée.
+
+
+## Mise à jour de provisionnement — 20 octobre 2026, 17:45 CEST
+- Déploiement du code de branche effectué sur `aria-brain-staging` par remplacement du contenu sans écraser la configuration existante.
+- Namespace `ARIA_USERS_STAGING` lié sous le binding `ARIA_USERS`.
+- Secrets existants conservés par héritage de bindings; leur présence a été confirmée après modification.
+- Mode `ARIA_REQUIRE_INDIVIDUAL_AUTH=true` activé après création d’un mapping temporaire aléatoire. TTL : 604800 secondes (7 jours). Le dépôt ne contient ni le jeton brut ni sa valeur hashée.
+- La lecture de la clé KV confirme le mapping vers l’identifiant opaque `alpha-user-001`. Le jeton a été fourni séparément au propriétaire du projet dans la conversation et ne doit pas être partagé publiquement.
+- À faire avant de déclarer le staging validé : tests HTTP individuels, refus du jeton partagé, isolement mémoire, test de purge, puis test Safari/PWA sur appareil physique. Ne pas supprimer `ARIA_ACCESS_TOKEN` avant ces validations et la préparation d’un retour arrière.
