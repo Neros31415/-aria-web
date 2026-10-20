@@ -102,3 +102,11 @@ La boucle vocale ne passe en alpha testeur qu’après réussite des scénarios 
 - [ ] Vérifier qu’un jeton individuel provisionné est accepté, qu’un jeton inconnu est refusé et que deux identités ne partagent pas la mémoire.
 - [ ] Vérifier `/health`: le champ `configured` décrit uniquement la présence des bindings/secrets nécessaires; il ne garantit pas la disponibilité du fournisseur IA ni la validité d’un jeton.
 - [ ] Aucun changement de configuration ou déploiement staging ne doit être fait sans autorisation explicite; aucune de ces vérifications ne remplace le test Safari/PWA sur iPhone physique.
+
+
+## État réel du staging — contrôle du 20 octobre 2026
+- Le namespace `ARIA_USERS_STAGING` existe mais est vide et non lié au Worker.
+- Le Worker déployé utilise encore le jeton partagé; le code d’authentification individuelle dans la branche Git n’est pas encore déployé.
+- Aucun jeton individuel n’a été provisionné. Les tests d’authentification individuelle et d’isolation mémoire sont donc **bloqués / non exécutés**, et non considérés comme réussis.
+- Une tentative de déploiement via l’API Cloudflare a été bloquée par les contrôles de sécurité des outils. Aucun réglage du Worker, binding ou secret existant n’a été modifié. Ne pas activer le mode individuel tant que le code et le binding ne sont pas déployés puis vérifiés.
+- Le test physique Safari/PWA sur iPhone reste **À tester**; aucune validation sur appareil réel n’est revendiquée.
