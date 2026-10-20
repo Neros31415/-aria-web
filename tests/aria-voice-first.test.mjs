@@ -114,6 +114,14 @@ test("backend rejects an invalid token without deleting memory", async () => {
   assert.deepEqual(deleted, []);
 });
 
+test("memory deletion and synchronization require explicit server confirmation", () => {
+  assert.match(app, /result\.deleted === true && result\.persisted === true/);
+  assert.match(app, /result\?\.deleted !== true \|\| result\?\.persisted !== true/);
+  assert.match(app, /data\.persisted !== true \|\| !Array\.isArray\(data\.memories\)/);
+  assert.match(app, /la suppression distante n’est pas confirmée/i);
+  assert.match(app, /l’état serveur reste incertain/i);
+});
+
 test("contextual HUD widgets are responsive, explicit, and do not claim a real 3D scene", () => {
   assert.match(html, /id="contextWidget"/);
   assert.match(html, /id="sceneToolsWidget"/);
@@ -123,6 +131,9 @@ test("contextual HUD widgets are responsive, explicit, and do not claim a real 3
   assert.match(app, /la scène 3D connectée reste à intégrer/i);
   assert.match(app, /AUCUNE DONNÉE EXTERNE/);
   assert.match(css, /\.context-widget\[hidden\]/);
+  assert.match(css, /\.visualization-stage\{grid-column:2;grid-row:1\}/);
+  assert.match(css, /\.context-widget-right\{grid-column:3;grid-row:1/);
+  assert.match(css, /\.visualization-stage\{grid-column:1;grid-row:1\}/);
   assert.match(css, /@media\(max-width:800px\)/);
   assert.match(css, /prefers-reduced-motion/);
 });
