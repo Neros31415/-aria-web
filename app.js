@@ -71,6 +71,8 @@ let profile = safeRead(KEYS.profile, {
 });
 let memories = safeRead(KEYS.memory, []);
 let transcriptVisible = false;
+let visualizationOpen = false;
+let transitionTimer = null;
 
 function safeRead(key, fallback) {
   try { const value = JSON.parse(localStorage.getItem(key)); return value ?? fallback; }
@@ -286,6 +288,43 @@ function renderMemory() {
     list.appendChild(li);
   }
 }
+function openVisualization(title, note) {
+  if (transitionTimer) window.clearTimeout(transitionTimer);
+  visualizationOpen = true;
+  $("visualizationTitle").textContent = title;
+  $("visualizationNote").textContent = note;
+  $("coreStage").hidden = true;
+  $("visualizationStage").hidden = false;
+  $("logoTransition").hidden = false;
+  $("logoTransition").dataset.phase = "enter";
+  showContextWidgets(title, note);
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  transitionTimer = window.setTimeout(() => {
+    $("logoTransition").hidden = true;
+    $("logoTransition").removeAttribute("data-phase");
+    transitionTimer = null;
+  }, reducedMotion ? 40 : 850);
+}
+function closeVisualization() {
+  if (!visualizationOpen) {
+    hideContextWidgets();
+    return;
+  }
+  if (transitionTimer) window.clearTimeout(transitionTimer);
+  $("logoTransition").hidden = false;
+  $("logoTransition").dataset.phase = "return";
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  transitionTimer = window.setTimeout(() => {
+    visualizationOpen = false;
+    $("visualizationStage").hidden = true;
+    $("coreStage").hidden = false;
+    $("logoTransition").hidden = true;
+    $("logoTransition").removeAttribute("data-phase");
+    hideContextWidgets();
+    setState("presence", "Je suis là.", "De retour dans notre espace principal.");
+    transitionTimer = null;
+  }, reducedMotion ? 40 : 850);
+}
 function showContextWidgets(title, description) {
   $("contextTitle").textContent = title;
   $("contextDescription").textContent = description;
@@ -301,6 +340,10 @@ function hideContextWidgets() {
 }
 function localDemoReply(text) {
   const lower = text.toLocaleLowerCase("fr");
+  if (/(retour à aria|retourne à aria|reviens à aria|ferme la visualisation|retour à l'accueil)/i.test(lower)) {
+    closeVisualization();
+    return {text:"Je vous ramène à notre espace principal."};
+  }
   if (/(ferme|masque|cache).*(widgets|panneaux|détails)/i.test(lower)) {
     hideContextWidgets();
     return {text:"Les widgets contextuels sont fermés."};
@@ -309,8 +352,8 @@ function localDemoReply(text) {
       /^(globe|carte|visualisation 3d|modèle 3d)$/i.test(lower.trim())) {
     const topic = /moteur/i.test(lower) ? "Mécanisme / moteur"
       : /carte|planète|globe|monde/i.test(lower) ? "Globe et cartographie" : "Visualisation 3D";
-    showContextWidgets(topic, "Espace contextuel préparé à partir de votre demande. La scène 3D et les données métier ne sont pas encore connectées dans cette version.");
-    return {text:"J’ai préparé les widgets contextuels autour de mon interface. Pour être précise, la scène 3D réelle n’est pas encore connectée : ce que vous voyez est le cadre du HUD, pas une simulation de données."};
+    openVisualization(topic, "Espace de visualisation en préparation. La scène 3D réelle et les données métier ne sont pas encore connectées dans cette version.");
+    return {text:"J’ouvre l’espace visuel avec ses widgets contextuels. Je préfère être transparente : la transition immersive est active, mais la scène 3D métier n’est pas encore connectée."};
   }
   if (/mémoire|souviens|retiens/.test(lower)) {
     openPanel("memoryPanel");
@@ -602,6 +645,7 @@ $("transcriptClose").addEventListener("click", () => {
   $("transcriptWidget").hidden = true;
 });
 $("contextClose").addEventListener("click", hideContextWidgets);
+$("visualizationBack").addEventListener("click", closeVisualization);
 $("memoryToggle").addEventListener("click", () => openPanel("memoryPanel"));
 $("memoryClose").addEventListener("click", () => closePanel("memoryPanel"));
 $("settingsBtn").addEventListener("click", () => {
