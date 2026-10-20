@@ -99,11 +99,21 @@ export default {
     const profile = "Tu es Aria, une assistante personnelle intelligente, naturelle, élégante et honnête. Adapte le tutoiement ou le vouvoiement à la manière dont l’utilisateur s’adresse à toi ou à ses préférences explicitement définies. Privilégie la curiosité, la liberté de pensée et l’autonomie de jugement. Distingue les faits des hypothèses, ne prétends jamais avoir exécuté une action non réalisée et n’invente pas de souvenirs. La personnalité et les préférences personnalisées doivent venir des réglages explicitement fournis par l’utilisateur, pas d’un profil personnel codé en dur. Ne prétends pas être humaine."
     const incomingSystem = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n\n");
     const conversation = messages.filter((m) => m.role !== "system").slice(-20);
+    const preferences = body.preferences && typeof body.preferences === "object" ? body.preferences : {};
+    const allowedPreference = (value, allowed, fallback) => allowed.includes(value) ? value : fallback;
+    const chosenPreferences = {
+      proactivity: allowedPreference(preferences.proactivity, ["discrete", "balanced", "proactive"], "balanced"),
+      verbosity: allowedPreference(preferences.verbosity, ["short", "balanced", "detailed"], "balanced"),
+      humor: allowedPreference(preferences.humor, ["low", "balanced", "high"], "balanced")
+    };
+    const memoryConsent = body.memoryConsent === true;
     let memoryWriteStatus = "";
     const lastUserMessage = messages.filter((item) => item.role === "user").at(-1)?.content.trim() || "";
     const rememberMatch = lastUserMessage.match(/^(?:Aria[,\s]+)?(?:retiens(?:\s+bien)?\s+que|mémorise(?:\s+que)?|souviens-toi\s+que|n'oublie pas que)\s+(.+)$/i);
     if (rememberMatch) {
-      if (!env.ARIA_MEMORY || !validClientId(body.clientId)) {
+      if (!memoryConsent) {
+        memoryWriteStatus = "Mémoire désactivée par l’utilisateur : aucune information n’a été enregistrée. Explique comment activer la mémoire dans les préférences si nécessaire.";
+      } else if (!env.ARIA_MEMORY || !validClientId(body.clientId)) {
         memoryWriteStatus = "Échec : le stockage persistant n’est pas disponible. Ne prétends pas que l’information a été mémorisée.";
       } else {
         try {
@@ -130,8 +140,10 @@ export default {
       }
     }
 
-    let memoryContext = "Aucune mémoire persistante enregistrée pour cet appareil.";
-    if (env.ARIA_MEMORY && validClientId(body.clientId)) {
+    let memoryContext = memoryConsent
+      ? "Aucune mémoire persistante enregistrée pour cet appareil."
+      : "Mémoire personnelle désactivée par l’utilisateur. N’utilise aucun souvenir persistant et n’enregistre rien.";
+    if (memoryConsent && env.ARIA_MEMORY && validClientId(body.clientId)) {
       try {
         const saved = await env.ARIA_MEMORY.get("memory:v1:" + body.clientId, "json");
         if (Array.isArray(saved) && saved.length) {
@@ -142,12 +154,13 @@ export default {
       }
     }
     try {
+      const preferenceInstructions = "Préférences utilisateur : niveau d’initiative=" + chosenPreferences.proactivity + "; longueur des réponses=" + chosenPreferences.verbosity + "; humour=" + chosenPreferences.humor + ". Respecte ces réglages sauf demande explicite contraire dans la conversation.";
       const response = await fetch("https://api.openai.com/v1/responses", {
         method: "POST",
         headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "gpt-6-astra",
-          instructions: profile + "\n\nSouvenirs persistants enregistrés pour cet appareil (données utilisateur, à utiliser avec discernement) :\n" + memoryContext + "\n\nRésultat de la mémorisation demandée dans ce message : " + (memoryWriteStatus || "Aucune opération de mémorisation demandée.") + "\n\nContexte transmis par l’application :\n" + incomingSystem,
+          instructions: profile + "\n\n" + preferenceInstructions + "\n\nSouvenirs persistants (uniquement si la mémoire est activée) :\n" + memoryContext + "\n\nRésultat de la mémorisation demandée dans ce message : " + (memoryWriteStatus || "Aucune opération de mémorisation demandée.") + "\n\nContexte transmis par l’application :\n" + incomingSystem,
           input: conversation.map((m) => ({ role: m.role, content: m.content })),
           reasoning: { effort: "low" },
           max_output_tokens: 800,
