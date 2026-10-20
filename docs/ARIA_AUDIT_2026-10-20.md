@@ -127,3 +127,15 @@ La configuration du Worker déployé a été interrogée sans modifier de param�
 - Le déploiement du code avec authentification individuelle n’a pas été effectué. Ne pas ajouter `ARIA_REQUIRE_INDIVIDUAL_AUTH=true` avant que le code compatible et le binding `ARIA_USERS` soient tous deux déployés, au risque de verrouiller l’accès au service.
 - Prochaine séquence autorisée : déployer le code de la branche sur staging en préservant les secrets et bindings existants; ajouter le binding KV; vérifier `/health`; provisionner un jeton temporaire avec expiration; tester l’accès individuel et le refus du jeton partagé; supprimer le secret partagé uniquement après validation et préparation d’un retour arrière.
 - Aucun jeton brut n’a été créé ou transmis. Aucun secret fournisseur n’a été lu ou exposé. Aucune modification du code déployé ni aucune modification des bindings du Worker n’a été effectuée.
+
+
+## Mise à jour de l’audit — 20 octobre 2026, 17:45 CEST
+**État modifié :** le code compatible a maintenant été déployé sur `aria-brain-staging`; le binding `ARIA_USERS` a été ajouté et le mode individuel activé après provisionnement d’un jeton temporaire.
+
+Vérifications réalisées :
+- version active 24 confirmée dans les déploiements Cloudflare;
+- bindings `AI`, `ARIA_MEMORY`, `ARIA_USERS`, `ARIA_REQUIRE_INDIVIDUAL_AUTH=true` présents;
+- secrets `ARIA_ACCESS_TOKEN` et `OPENAI_API_KEY` toujours présents après mise à jour;
+- entrée KV de session trouvée avec l’identité opaque attendue et une expiration de 7 jours.
+
+Vérifications restantes : appel HTTP de `/health`, authentification du jeton individuel sur le Worker, refus du jeton partagé en mode individuel, tests d’isolation mémoire et vérification Safari/PWA sur iPhone physique. L’accès réseau direct au endpoint n’a pas pu être vérifié par les outils disponibles; l’état runtime ne doit donc pas être considéré entièrement validé. Garder le secret partagé jusqu’à la fin des tests et du plan de retour arrière.
