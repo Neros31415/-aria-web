@@ -292,12 +292,28 @@ function openVisualization(title, note) {
   if (transitionTimer) window.clearTimeout(transitionTimer);
   visualizationOpen = true;
   $("visualizationTitle").textContent = title;
-  $("visualizationNote").textContent = note;
   $("coreStage").hidden = true;
   $("visualizationStage").hidden = false;
+  const sceneType = /globe|cartographie/i.test(title) ? "globe" : "placeholder";
+  const hasInteractiveGlobe = window.AriaVisualization?.open({type:sceneType}) === true;
+  if (sceneType === "globe" && hasInteractiveGlobe) {
+    note = "Globe filaire 3D généré localement, sans données géographiques externes. Faites glisser pour le faire tourner.";
+  } else if (sceneType === "globe") {
+    note = "WebGL n’est pas disponible dans ce navigateur. Le globe interactif ne peut pas être affiché ici.";
+  }
+  $("visualizationNote").textContent = note;
   $("logoTransition").hidden = false;
   $("logoTransition").dataset.phase = "enter";
   showContextWidgets(title, note);
+  if (hasInteractiveGlobe) {
+    $("contextStatus").textContent = "GLOBE 3D ACTIF";
+    $("sceneToolsDescription").textContent = "Glissez sur le globe pour le faire tourner. La sphère est générée localement et ne contient pas de données cartographiques.";
+    $("sceneSourceStatus").textContent = "GÉNÉRÉ LOCALEMENT";
+  } else if (sceneType === "globe") {
+    $("contextStatus").textContent = "WEBGL INDISPONIBLE";
+    $("sceneToolsDescription").textContent = "Le navigateur ne permet pas d’initialiser la scène WebGL.";
+    $("sceneSourceStatus").textContent = "NON DISPONIBLE";
+  }
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   transitionTimer = window.setTimeout(() => {
     $("logoTransition").hidden = true;
@@ -311,6 +327,7 @@ function closeVisualization() {
     return;
   }
   if (transitionTimer) window.clearTimeout(transitionTimer);
+  window.AriaVisualization?.close();
   $("logoTransition").hidden = false;
   $("logoTransition").dataset.phase = "return";
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
