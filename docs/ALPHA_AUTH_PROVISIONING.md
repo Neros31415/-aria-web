@@ -4,7 +4,7 @@
 
 ## But et limites
 
-Le Worker peut authentifier des jetons individuels sans exposer de secret fournisseur au navigateur. Le jeton brut est envoyé dans l’en-tête Bearer; le Worker calcule son SHA-256 et recherche uniquement son empreinte dans le binding KV `ARIA_USERS`. La valeur KV est un identifiant opaque de compte, pas un nom ou une adresse e-mail.
+Le Worker peut authentifier des jetons individuels sans exposer de secret fournisseur au navigateur. Le jeton brut est envoyé dans l’en-tête Bearer; le Worker accepte uniquement les jetons de 43 à 256 caractères pour le mode individuel, calcule leur SHA-256 et recherche uniquement leur empreinte dans le binding KV `ARIA_USERS`. La valeur KV est un identifiant opaque de compte, pas un nom ou une adresse e-mail.
 
 Cette procédure permet des accès alpha individuels et une isolation mémoire par compte. **Ce n’est pas encore une authentification publique complète** : inscription, vérification d’adresse e-mail, récupération de compte, renouvellement automatique et interface de gestion des sessions ne sont pas implémentés.
 
