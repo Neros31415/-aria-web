@@ -42,7 +42,7 @@
       vSurface = aPosition;
       vRotated = r;
       float perspective = 2.65 / (3.65 - r.z);
-      gl_Position = vec4(r.xy * perspective, r.z * perspective * 0.45, 1.0);
+      gl_Position = vec4(r.xy * perspective, -r.z * perspective * 0.45, 1.0);
     }
   `;
 
