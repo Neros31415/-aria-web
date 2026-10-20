@@ -45,8 +45,9 @@ dialog .text-button{border:0;background:none;color:var(--muted);font-size:11px;p
 .voice-main{grid-template-columns:minmax(0,1fr) minmax(0,760px) minmax(0,1fr);gap:clamp(12px,2.2vw,32px);width:100%;place-items:center stretch}
 .context-widget{width:100%;max-width:230px;align-self:center;padding:17px 15px 15px;border:1px solid #ffffff1c;border-radius:15px;background:linear-gradient(145deg,#101820b8,#070a0db8);backdrop-filter:blur(18px);box-shadow:0 15px 50px #0003;animation:widget-arrive .28s ease-out both}
 .context-widget[hidden]{display:none!important}
-.context-widget-left{justify-self:end}
-.context-widget-right{justify-self:start}
+.context-widget-left{grid-column:1;grid-row:1;justify-self:end}
+.context-widget-right{grid-column:3;grid-row:1;justify-self:start}
+.visualization-stage{grid-column:2;grid-row:1}
 .widget-kicker,.widget-status-label{font-size:8px;letter-spacing:.2em;color:#91a0aa}
 .widget-rule{width:26px;height:1px;background:var(--gold);opacity:.75;margin:12px 0 15px}
 .context-widget h2{font-size:17px;line-height:1.35;font-weight:350;letter-spacing:-.025em;margin:0 0 9px;overflow-wrap:anywhere}
@@ -86,7 +87,7 @@ dialog .text-button{border:0;background:none;color:var(--muted);font-size:11px;p
 @keyframes logo-zoom-back{0%{transform:scale(28);opacity:0}45%{opacity:.8}100%{transform:scale(1);opacity:1}}
 @keyframes scene-ring{to{rotate:360deg}}
 @keyframes scene-reveal{from{opacity:0;translate:0 8px}to{opacity:1;translate:0 0}}
-@media(max-width:800px){.visualization-stage{grid-row:1}.visualization-viewport{height:clamp(280px,43vh,430px)}.visualization-rings{width:min(65%,260px)}.visualization-header h2{font-size:22px}.visualization-mark{width:68px;height:68px;font-size:50px}}
+@media(max-width:800px){.visualization-stage{grid-column:1;grid-row:1}.context-widget-left,.context-widget-right{grid-column:1;grid-row:auto}.visualization-viewport{height:clamp(280px,43vh,430px)}.visualization-rings{width:min(65%,260px)}.visualization-header h2{font-size:22px}.visualization-mark{width:68px;height:68px;font-size:50px}}
 @media(prefers-reduced-motion:reduce){.visualization-stage{animation:none!important}.visualization-rings span{animation:none!important}.logo-transition[data-phase="enter"] .transition-mark,.logo-transition[data-phase="return"] .transition-mark{animation-duration:.01ms!important}}
 
 .visualization-canvas{position:absolute;inset:0;width:100%;height:100%;display:none;touch-action:none;cursor:grab;outline:none}
