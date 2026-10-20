@@ -59,3 +59,32 @@ dialog .text-button{border:0;background:none;color:var(--muted);font-size:11px;p
 @media(max-width:1000px){.voice-main{grid-template-columns:minmax(0,1fr) minmax(0,560px) minmax(0,1fr);gap:10px}.context-widget{padding:13px 11px}.context-widget h2{font-size:14px}.context-widget p{font-size:9px}}
 @media(max-width:800px){.voice-main{grid-template-columns:1fr;gap:10px;align-content:center}.voice-main .core-stage{grid-row:1}.context-widget{max-width:none;width:min(100%,520px);justify-self:center;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:12px;align-items:start;padding:12px 14px}.context-widget[hidden]{display:none!important}.context-widget .widget-kicker,.context-widget .widget-rule{grid-column:1/-1}.context-widget .widget-rule{margin:3px 0 7px}.context-widget h2{font-size:13px;margin:0}.context-widget p{font-size:9px;margin:0}.context-widget .widget-state,.context-widget .widget-status-box,.context-widget .widget-close{grid-column:1/-1;margin-top:9px}.context-widget-right{grid-row:auto}.voice-main .memory-drawer{z-index:14}}
 @media(prefers-reduced-motion:reduce){.context-widget{animation:none!important}}
+
+/* Immersive logo-to-scene transition and central visualization workspace. */
+.visualization-stage{width:100%;max-width:760px;min-width:0;align-self:center;animation:scene-reveal .35s ease-out both}
+.visualization-stage[hidden]{display:none!important}
+.visualization-header{display:flex;align-items:center;justify-content:space-between;gap:14px;width:100%;padding:6px 4px 13px;border-bottom:1px solid var(--line)}
+.visualization-header h2{font-size:clamp(20px,2.5vw,30px);font-weight:300;letter-spacing:-.04em;margin:6px 0 0}
+.visualization-header .quiet-action{white-space:nowrap;border:1px solid var(--line);border-radius:30px;padding:9px 12px;font-size:9px;color:#d4dfe3}
+.visualization-viewport{height:clamp(300px,48vh,510px);position:relative;overflow:hidden;display:grid;place-items:center;isolation:isolate;background:radial-gradient(ellipse at 50% 48%,#18303d65 0,transparent 56%);border-bottom:1px solid #ffffff12}
+.visualization-grid{position:absolute;inset:-20%;z-index:-1;opacity:.22;background-image:linear-gradient(#9edff31c 1px,transparent 1px),linear-gradient(90deg,#9edff31c 1px,transparent 1px);background-size:34px 34px;transform:perspective(450px) rotateX(62deg) scale(1.25);mask-image:radial-gradient(ellipse at center,#000 0,transparent 68%)}
+.visualization-rings{position:absolute;width:min(58%,300px);aspect-ratio:1;display:grid;place-items:center;perspective:600px}
+.visualization-rings span{position:absolute;inset:0;border:1px solid #a9e7f735;border-radius:50%;box-shadow:inset 0 0 24px #9edff308,0 0 24px #9edff308}
+.visualization-rings span:nth-child(1){transform:rotateX(68deg) rotateZ(-20deg);animation:scene-ring 19s linear infinite}
+.visualization-rings span:nth-child(2){inset:9%;transform:rotateY(65deg) rotateZ(20deg);border-style:dashed;animation:scene-ring 23s linear infinite reverse}
+.visualization-rings span:nth-child(3){inset:20%;transform:rotateX(72deg) rotateY(22deg);border-color:#e2c79a50;animation:scene-ring 29s linear infinite}
+.visualization-center{display:flex;flex-direction:column;align-items:center;gap:16px;z-index:2}
+.visualization-mark{width:82px;height:82px;display:grid;place-items:center;font-size:62px;font-weight:200;line-height:1;color:#edfaff;text-shadow:0 0 40px #a9e7f766;clip-path:polygon(50% 0,100% 100%,76% 100%,50% 40%,24% 100%,0 100%);background:linear-gradient(145deg,#f5ffff,#8da8b5);color:#081016}
+.visualization-caption{font-size:8px;letter-spacing:.24em;color:#94aab5}
+.visualization-note{max-width:500px;margin:14px auto 0;text-align:center;font-size:10px;line-height:1.7;color:#82919b}
+.logo-transition{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;overflow:hidden;pointer-events:none;background:radial-gradient(ellipse at center,#10202a 0,#05080c 70%);opacity:1}
+.logo-transition[hidden]{display:none!important}
+.transition-mark{display:block;font-size:clamp(100px,20vw,230px);font-weight:200;line-height:1;color:#f2fcff;clip-path:polygon(50% 0,100% 100%,76% 100%,50% 40%,24% 100%,0 100%);background:linear-gradient(145deg,#ffffff,#8ea6b3);color:transparent;background-clip:text;filter:drop-shadow(0 0 24px #a9e7f777);transform-origin:center}
+.logo-transition[data-phase="enter"] .transition-mark{animation:logo-zoom-through .82s cubic-bezier(.55,0,.8,.25) both}
+.logo-transition[data-phase="return"] .transition-mark{transform:scale(24);opacity:0;animation:logo-zoom-back .82s cubic-bezier(.16,.8,.35,1) both}
+@keyframes logo-zoom-through{0%{transform:scale(1);opacity:1}65%{opacity:.85}100%{transform:scale(28);opacity:0}}
+@keyframes logo-zoom-back{0%{transform:scale(28);opacity:0}45%{opacity:.8}100%{transform:scale(1);opacity:1}}
+@keyframes scene-ring{to{rotate:360deg}}
+@keyframes scene-reveal{from{opacity:0;translate:0 8px}to{opacity:1;translate:0 0}}
+@media(max-width:800px){.visualization-stage{grid-row:1}.visualization-viewport{height:clamp(280px,43vh,430px)}.visualization-rings{width:min(65%,260px)}.visualization-header h2{font-size:22px}.visualization-mark{width:68px;height:68px;font-size:50px}}
+@media(prefers-reduced-motion:reduce){.visualization-stage{animation:none!important}.visualization-rings span{animation:none!important}.logo-transition[data-phase="enter"] .transition-mark,.logo-transition[data-phase="return"] .transition-mark{animation-duration:.01ms!important}}
