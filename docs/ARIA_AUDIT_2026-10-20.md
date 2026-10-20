@@ -20,7 +20,10 @@ Le dépôt contient une PWA statique et plusieurs branches de travail. La branch
 - La PR #14 est un brouillon et n'a pas été fusionnée. La CI alpha PR #12 a un run réussi, mais cela ne prouve pas le parcours vocal/mobile ni la connexion réelle du fournisseur.
 - Le précédent signalement de panne réseau vers aria-brain-staging doit être revalidé sur le déploiement actuel.
 - Cette branche ajoute une interface vocale expérimentale basée sur les API Web Speech natives. La disponibilité de SpeechRecognition, particulièrement sur iOS Safari et en arrière-plan, reste à tester sur appareil réel.
+- Le Worker `aria-brain-staging` a été déployé sur Cloudflare le 20 octobre 2026 avec la route DELETE protégée et un profil générique. Les bindings AI, KV et les deux secrets sont toujours présents.
+- La liste de clés du namespace KV `ARIA_MEMORY_STAGING` a été vérifiée : aucune clé avec le préfixe `memory:v1:` n'est actuellement présente.
 - La réinitialisation locale est déclenchée au premier lancement de cette branche. La suppression distante est seulement tentée si l'ancien clientId et le jeton de session sont présents; elle ne peut être déclarée réussie que si le Worker répond positivement.
+- Le frontend voice-first n'est pas encore déployé sur l'URL publique; le nettoyage du stockage local de l'appareil se produira seulement lorsque cette version sera ouverte.
 
 ## Risques prioritaires
 1. Aucune expérience vocale principale dans la base de référence.
