@@ -163,7 +163,7 @@ test("logo transition opens and returns from the central visualization workspace
   assert.match(app, /prefers-reduced-motion: reduce/);
   assert.match(css, /logo-zoom-through/);
   assert.match(css, /logo-zoom-back/);
-  assert.match(app, /la scène 3D métier n’est pas encore connectée/i);
+  assert.match(app, /La scène demandée n’est pas encore disponible/i);
 });
 
 test("the globe scene uses WebGL locally and supports pointer rotation without external map data", () => {
