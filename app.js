@@ -1,163 +1,391 @@
 const $ = (id) => document.getElementById(id);
-const STORAGE_MESSAGES = "aria.v07.messages";
-const STORAGE_MEMORY = "aria.v07.memory";
-const messagesEl = $("messages");
-const input = $("messageInput");
-let messages = safeRead(STORAGE_MESSAGES, []);
-let memories = safeRead(STORAGE_MEMORY, []);
+const KEYS = {
+  messages: "aria.v07.messages",
+  memory: "aria.v07.memory",
+  profile: "aria.voice.profile.v1",
+  onboarded: "aria.voice.onboarded.v1",
+  reset: "aria.voice.reset.20261020"
+};
+
+// The user explicitly requested a fresh personal start. Remove legacy ARIA
+// profile/history keys on this build's first launch; keep unrelated site data.
+if (!localStorage.getItem(KEYS.reset)) {
+  for (const key of Object.keys(localStorage)) {
+    if (key.startsWith("aria.")) localStorage.removeItem(key);
+  }
+  for (const key of Object.keys(sessionStorage)) {
+    if (key.startsWith("aria.")) sessionStorage.removeItem(key);
+  }
+  localStorage.setItem(KEYS.reset, "done");
+}
+
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition = null;
+let listening = false;
+let speaking = false;
+let shouldResumeListening = false;
+let onboarding = false;
+let onboardingStep = 0;
+let profile = safeRead(KEYS.profile, {
+  proactivity: "balanced",
+  verbosity: "balanced",
+  humor: "balanced",
+  memoryConsent: false
+});
+let memories = safeRead(KEYS.memory, []);
+let transcriptVisible = false;
 
 function safeRead(key, fallback) {
-  try { const value = JSON.parse(localStorage.getItem(key)); return Array.isArray(value) ? value : fallback; }
+  try { const value = JSON.parse(localStorage.getItem(key)); return value ?? fallback; }
   catch { return fallback; }
 }
-function persist() {
-  try {
-    localStorage.setItem(STORAGE_MESSAGES, JSON.stringify(messages.slice(-50)));
-    localStorage.setItem(STORAGE_MEMORY, JSON.stringify(memories.slice(-100)));
-  } catch { setStatus("STOCKAGE INDISPONIBLE"); }
+function saveProfile() {
+  try { localStorage.setItem(KEYS.profile, JSON.stringify(profile)); }
+  catch { announceVisual("Le navigateur ne permet pas de sauvegarder les préférences."); }
 }
-function setStatus(text) { $("statusText").textContent = text; }
-function addMessage(role, text, save = true) {
-  const item = {role, text, time: Date.now()};
-  if (save) { messages.push(item); persist(); }
-  renderMessage(item);
-  if ($("chatPanel").hidden) openPanel("chatPanel");
+function setState(state, title, subtitle, spokenText = "") {
+  const root = $("coreStage");
+  root.dataset.state = state;
+  $("coreState").textContent = ({
+    presence: "PRÉSENTE",
+    listening: "À L'ÉCOUTE",
+    thinking: "JE RÉFLÉCHIS",
+    speaking: "JE VOUS RÉPONDS",
+    initiative: "JE PRENDS LA PAROLE",
+    attention: "VOTRE ATTENTION",
+    unavailable: "VOIX INDISPONIBLE"
+  })[state] || "PRÉSENTE";
+  $("sceneTitle").textContent = title || ({
+    presence: "Je suis là.",
+    listening: "Je vous écoute.",
+    thinking: "Laissez-moi un instant.",
+    speaking: "Je vous réponds.",
+    initiative: "Si je peux me permettre…",
+    attention: "Un point important.",
+    unavailable: "Je ne peux pas écouter ici."
+  })[state];
+  if (subtitle) $("sceneSubtitle").textContent = subtitle;
+  $("statusText").textContent = ({
+    presence: "PRÉSENCE",
+    listening: "ÉCOUTE",
+    thinking: "RÉFLEXION",
+    speaking: "PAROLE",
+    initiative: "INTERVENTION",
+    attention: "ATTENTION",
+    unavailable: "VOIX INDISPONIBLE"
+  })[state] || "PRÉSENCE";
+  $("statusDot").dataset.state = state;
+  if (spokenText) speak(spokenText, {resume: true});
 }
-function renderMessage(item) {
-  const article = document.createElement("article");
-  article.className = "message " + (item.role === "user" ? "user-message" : "aria-message");
-  const avatar = document.createElement("div"); avatar.className = "avatar"; avatar.textContent = item.role === "user" ? "Q" : "A";
-  const bubble = document.createElement("div"); bubble.className = "bubble";
-  const label = document.createElement("div"); label.className = "message-label"; label.textContent = item.role === "user" ? "VOUS" : "ARIA";
-  const tag = document.createElement("span"); tag.textContent = item.role === "user" ? "COMMANDE" : "MODE DÉMO"; label.appendChild(tag);
-  const p = document.createElement("p"); p.textContent = item.text;
-  bubble.append(label, p); article.append(avatar, bubble); messagesEl.appendChild(article);
-  const panel = $("chatPanel"); if (!panel.hidden) panel.scrollTop = panel.scrollHeight;
+function announceVisual(text) {
+  $("voiceNote").textContent = text;
 }
-function renderAllMessages() {
-  messagesEl.replaceChildren();
-  if (!messages.length) {
-    renderMessage({role:"assistant", text:"Je suis prête. Le HUD est interactif ; le moteur IA distant doit encore être validé avant de traiter vos demandes comme des actions réelles."});
+function updateTranscript(text, role = "ARIA") {
+  $("transcriptText").textContent = role + " : " + text;
+  if (transcriptVisible) $("transcriptWidget").hidden = false;
+}
+function speak(text, options = {}) {
+  if (!("speechSynthesis" in window)) {
+    announceVisual("La synthèse vocale n'est pas disponible dans ce navigateur.");
     return;
   }
-  messages.forEach(renderMessage);
-}
-function setScene(scene) {
-  const root = document.querySelector(".core-stage");
-  const scenes = {
-    presence: {title:"À votre écoute.", subtitle:"Un espace vivant. Une seule interface. Votre intention donne le mouvement.", mode:"PRÉSENCE", description:"En attente de commande", visual:"Aucune scène active", hint:"Choisissez une démonstration ou demandez à ARIA.", state:"PRÊTE À RECEVOIR"},
-    globe: {title:"Le monde, au centre.", subtitle:"Une scène holographique de démonstration — prête à accueillir une vraie carte interactive.", mode:"GLOBE", description:"Scène d'interface activée", visual:"Globe holographique", hint:"Le globe animé est une maquette visuelle, pas une carte géographique réelle.", state:"SCÈNE DE DÉMONSTRATION"},
-    mountain: {title:"Cap sur le Mont-Blanc.", subtitle:"La transition vers une scène géographique est simulée ici ; le relief réel reste à connecter.", mode:"EXPLORATION", description:"Cible : Alpes françaises", visual:"Mont-Blanc · aperçu", hint:"Le zoom géographique réel nécessite l'intégration de données cartographiques et du moteur 3D.", state:"CIBLE SÉLECTIONNÉE"},
-    engine: {title:"Explorer la mécanique.", subtitle:"Une scène technique sera rendue dans cet espace central, sans ouvrir une page annexe.", mode:"OBJET 3D", description:"Exploration technique", visual:"Moteur · aperçu", hint:"Cette prévisualisation n'est pas encore un modèle 3D manipulable.", state:"SCÈNE DE DÉMONSTRATION"}
+  window.speechSynthesis.cancel();
+  speaking = true;
+  if (recognition && listening) {
+    shouldResumeListening = options.resume !== false;
+    try { recognition.stop(); } catch {}
+  }
+  setState(options.initiative ? "initiative" : "speaking", options.initiative ? "Si je peux me permettre…" : "Je vous réponds.", text);
+  updateTranscript(text, "ARIA");
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "fr-FR";
+  utterance.rate = 1;
+  const voices = window.speechSynthesis.getVoices();
+  utterance.voice = voices.find(v => v.lang.toLowerCase().startsWith("fr") && /female|amélie|audrey|marie|hortense/i.test(v.name)) ||
+    voices.find(v => v.lang.toLowerCase().startsWith("fr")) || null;
+  utterance.onend = () => {
+    speaking = false;
+    if (shouldResumeListening) {
+      shouldResumeListening = false;
+      window.setTimeout(startListening, 300);
+    } else setState("presence");
   };
-  const item = scenes[scene] || scenes.presence;
-  root.dataset.scene = scene;
-  $("sceneTitle").textContent = item.title;
-  $("sceneSubtitle").textContent = item.subtitle;
-  $("modeLabel").textContent = item.mode;
-  $("modeDescription").textContent = item.description;
-  $("visualMode").textContent = item.visual;
-  $("visualHint").textContent = item.hint;
-  $("coreState").textContent = item.state;
-  document.querySelectorAll("[data-scene]").forEach(button => {
-    const active = button.dataset.scene === scene;
-    button.classList.toggle("active", active);
-    button.setAttribute("aria-pressed", String(active));
-  });
-  document.body.classList.toggle("scene-active", scene !== "presence");
-  setStatus(scene === "presence" ? "HUD ACTIF · IA À VALIDER" : "SCÈNE DÉMO · DONNÉES RÉELLES À CONNECTER");
+  utterance.onerror = () => {
+    speaking = false;
+    if (shouldResumeListening) { shouldResumeListening = false; startListening(); }
+    else setState("presence");
+  };
+  window.speechSynthesis.speak(utterance);
+}
+function startListening() {
+  if (!recognition) {
+    announceVisual("La reconnaissance vocale n'est pas prise en charge par ce navigateur. Essayez Safari ou un navigateur compatible, ou utilisez les commandes système.");
+    setState("unavailable");
+    return;
+  }
+  if (listening || speaking) return;
+  shouldResumeListening = false;
+  try {
+    recognition.start();
+    listening = true;
+    $("voiceStart").hidden = true;
+    $("voiceStop").hidden = false;
+    setState("listening", "Je vous écoute.", "Parlez naturellement. Vous pouvez m'interrompre à tout moment.");
+    announceVisual("Écoute active au premier plan. Le navigateur peut interrompre l'écoute en arrière-plan.");
+  } catch (error) {
+    announceVisual("Impossible de démarrer l'écoute. Vérifiez l'autorisation du microphone et réessayez.");
+  }
+}
+function stopListening() {
+  shouldResumeListening = false;
+  listening = false;
+  if (recognition) { try { recognition.stop(); } catch {} }
+  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  speaking = false;
+  setState("presence", "Je suis là.", "L'écoute est en pause. Vous pouvez la reprendre quand vous le souhaitez.");
+  $("voiceStart").hidden = false;
+  $("voiceStop").hidden = true;
+  $("voiceStart").textContent = "Reprendre l'écoute";
 }
 function openPanel(id) {
-  const panel = $(id);
-  const other = id === "chatPanel" ? $("memoryPanel") : $("chatPanel");
-  other.hidden = true;
-  panel.hidden = false;
+  $(id).hidden = false;
+  if (id === "memoryPanel") renderMemory();
 }
 function closePanel(id) { $(id).hidden = true; }
-function localReply(text) {
-  const lower = text.toLowerCase();
-  if (lower.includes("mont-blanc") || lower.includes("mont blanc") || lower.includes("alpes")) {
-    setScene("mountain");
-    return "J'ai activé l'aperçu visuel du Mont-Blanc dans l'interface centrale. Transparence : le zoom géographique, le relief réel et les données cartographiques ne sont pas encore connectés.";
-  }
-  if (lower.includes("moteur") || lower.includes("ferrari") || lower.includes("objet 3d") || lower.includes("objet 3d")) {
-    setScene("engine");
-    return "J'ai activé l'espace de prévisualisation technique. Transparence : le modèle 3D du moteur, son démontage et ses animations physiques restent à intégrer.";
-  }
-  if (lower.includes("globe") || lower.includes("carte") || lower.includes("monde")) {
-    setScene("globe");
-    return "Le globe holographique est activé au centre. Il s'agit actuellement d'une maquette visuelle : les cartes et les données réelles ne sont pas encore reliées.";
-  }
-  if (lower.includes("mémoire") || lower.includes("souviens")) {
-    openPanel("memoryPanel");
-    return memories.length
-      ? "Voici les notes conservées localement :\n" + memories.map((m,i) => `${i+1}. ${m}`).join("\n") + "\n\nElles restent sur cet appareil et ne sont pas encore transmises à un modèle distant."
-      : "Votre mémoire locale est vide. Le panneau mémoire est ouvert : vous pouvez y ajouter ou supprimer vos notes.";
-  }
-  if (lower.includes("état") || lower.includes("fonctionne") || lower.includes("capable")) {
-    return "État honnête du prototype : HUD interactif, animations CSS/SVG, scènes de démonstration et stockage local disponibles. Le modèle IA distant, les cartes réelles, les objets 3D manipulables et les actions système doivent encore être validés ou intégrés.";
-  }
-  return "Commande reçue et conservée dans l'historique local. Le HUD peut déjà ouvrir des scènes de démonstration ; sans backend IA connecté et validé, je ne peux pas encore interpréter librement cette demande ni exécuter une action réelle.";
-}
-$("chatForm").addEventListener("submit", (event) => {
-  event.preventDefault();
-  const text = input.value.trim();
-  if (!text) return;
-  addMessage("user", text);
-  input.value = ""; resizeInput(); $("charCount").textContent = "0/2000";
-  window.setTimeout(() => addMessage("assistant", localReply(text)), 180);
-});
-input.addEventListener("input", () => {
-  resizeInput(); $("charCount").textContent = `${input.value.length}/2000`;
-});
-input.addEventListener("keydown", (event) => {
-  if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); $("chatForm").requestSubmit(); }
-});
-function resizeInput() { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 120) + "px"; }
-$("clearBtn").addEventListener("click", () => {
-  if (!confirm("Effacer l’historique local de conversation ?")) return;
-  messages = []; persist(); renderAllMessages();
-});
 function renderMemory() {
-  const list = $("memoryList"); list.replaceChildren();
-  memories.forEach((memory, index) => {
+  const list = $("memoryList");
+  list.replaceChildren();
+  memories.forEach((item) => {
     const li = document.createElement("li");
-    const span = document.createElement("span"); span.textContent = memory;
-    const remove = document.createElement("button"); remove.type = "button"; remove.textContent = "×"; remove.setAttribute("aria-label", "Supprimer cette note");
-    remove.addEventListener("click", () => { memories.splice(index, 1); persist(); renderMemory(); updateMemoryCount(); });
-    li.append(span, remove); list.appendChild(li);
+    const span = document.createElement("span");
+    span.textContent = typeof item === "string" ? item : item.text;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.textContent = "×";
+    remove.setAttribute("aria-label", "Supprimer ce souvenir");
+    remove.addEventListener("click", () => {
+      memories = memories.filter(entry => entry !== item);
+      localStorage.setItem(KEYS.memory, JSON.stringify(memories));
+      renderMemory();
+    });
+    li.append(span, remove);
+    list.appendChild(li);
   });
   if (!memories.length) {
-    const li = document.createElement("li"); li.textContent = "Aucune note enregistrée."; li.style.color = "#66778e"; list.appendChild(li);
+    const li = document.createElement("li");
+    li.textContent = "Mémoire personnelle vierge.";
+    list.appendChild(li);
   }
-  updateMemoryCount();
 }
-function updateMemoryCount() { $("memoryCount").textContent = String(memories.length).padStart(2, "0") + (memories.length === 1 ? " NOTE" : " NOTES"); }
-$("memoryForm").addEventListener("submit", (event) => {
-  event.preventDefault();
-  const field = $("memoryInput");
-  const value = field.value.trim();
-  if (!value) return;
-  memories.push(value); persist(); field.value = ""; renderMemory();
+function localDemoReply(text) {
+  const lower = text.toLocaleLowerCase("fr");
+  if (/mont.?blanc|alpes/.test(lower)) return {text:"Je peux afficher une scène de démonstration du Mont-Blanc. Pour le moment, ce visuel n'est pas relié à une carte ou à des données de relief réelles.", scene:"mountain"};
+  if (/moteur|ferrari|objet 3d/.test(lower)) return {text:"Je peux ouvrir l'aperçu mécanique. Le modèle 3D interactif reste à intégrer.", scene:"engine"};
+  if (/globe|carte|monde/.test(lower)) return {text:"Le globe central est une maquette visuelle. Les données géographiques réelles restent à connecter.", scene:"globe"};
+  if (/mémoire|souviens|retiens/.test(lower)) {
+    openPanel("memoryPanel");
+    return {text: memories.length ? "Votre panneau mémoire est ouvert. Je peux vous montrer les notes présentes sur cet appareil." : "Votre mémoire personnelle est actuellement vierge."};
+  }
+  return {text:"Je vous ai entendue. Le parcours vocal et l'interface sont actifs, mais le moteur conversationnel distant n'est pas encore relié à cette version. Je ne vais pas faire semblant d'avoir compris ou exécuté une tâche que je ne peux pas encore traiter."};
+}
+async function handleUtterance(text) {
+  if (!text.trim()) return;
+  updateTranscript(text, "VOUS");
+  setState("thinking", "Je réfléchis.", "Je traite votre demande.");
+  if (onboarding) {
+    await handleOnboardingAnswer(text.trim());
+    return;
+  }
+  const result = localDemoReply(text);
+  if (result.scene) {
+    document.querySelector(".core-stage").dataset.scene = result.scene;
+    document.body.classList.add("scene-active");
+  }
+  window.setTimeout(() => speak(result.text, {resume: true}), 250);
+}
+const onboardingQuestions = [
+  {key:"proactivity", prompt:"Pour commencer, préférez-vous que je sois discrète, que je vous signale parfois les choses utiles, ou que je prenne davantage l'initiative ?"},
+  {key:"verbosity", prompt:"Et pour mes réponses : plutôt courtes, équilibrées, ou détaillées quand le sujet le mérite ?"},
+  {key:"humor", prompt:"Concernant l'humour, préférez-vous quelque chose de discret, naturel, ou plus fréquent ?"},
+  {key:"memoryConsent", prompt:"Dernière question : souhaitez-vous que je puisse vous proposer de mémoriser certaines informations, en vous laissant toujours le contrôle ?"}
+];
+function normalizeChoice(text, choices) {
+  const value = text.toLocaleLowerCase("fr");
+  for (const [key, terms] of Object.entries(choices)) if (terms.some(term => value.includes(term))) return key;
+  return null;
+}
+async function handleOnboardingAnswer(text) {
+  const q = onboardingQuestions[onboardingStep];
+  if (!q) return finishOnboarding();
+  if (q.key === "proactivity") profile.proactivity = normalizeChoice(text, {
+    discrete:["discrète","discret","seulement si","uniquement si"],
+    balanced:["équilibrée","équilibré","parfois","de temps en temps"],
+    proactive:["proactive","initiative","spontanément","souvent"]
+  }) || profile.proactivity;
+  if (q.key === "verbosity") profile.verbosity = normalizeChoice(text, {
+    short:["courte","court","bref","brève"],
+    balanced:["équilibrée","équilibré","normal"],
+    detailed:["détaillée","détaillé","longue","long"]
+  }) || profile.verbosity;
+  if (q.key === "humor") profile.humor = normalizeChoice(text, {
+    low:["discret","discrète","peu"],
+    balanced:["naturel","naturelle","équilibré"],
+    high:["fréquent","souvent","beaucoup"]
+  }) || profile.humor;
+  if (q.key === "memoryConsent") profile.memoryConsent = !/(non|pas du tout|jamais|aucune)/i.test(text);
+  saveProfile();
+  onboardingStep += 1;
+  if (onboardingStep < onboardingQuestions.length) {
+    speak(onboardingQuestions[onboardingStep].prompt, {resume:true});
+  } else {
+    finishOnboarding();
+  }
+}
+function beginOnboarding() {
+  onboarding = true;
+  onboardingStep = 0;
+  $("onboardingDialog").close();
+  speak("Bonjour. Je suis Aria. Je suis conçue pour vous aider à réfléchir, découvrir, organiser et accomplir des tâches. Nous allons régler ensemble la manière dont je vous parle, le degré d'initiative que vous souhaitez me laisser et la façon dont je peux utiliser la mémoire. Vous pourrez modifier ces choix plus tard. Commençons.", {resume:true});
+  window.setTimeout(() => speak(onboardingQuestions[0].prompt, {resume:true}), 6500);
+}
+function finishOnboarding() {
+  onboarding = false;
+  saveProfile();
+  localStorage.setItem(KEYS.onboarded, "done");
+  speak("Parfait. Vous pourrez modifier ces préférences à tout moment. Je vais maintenant vous expliquer les états de mon orbe.", {resume:false});
+  window.setTimeout(() => {
+    const states = [
+      ["presence","Quand je suis calme, je suis présente et disponible."],
+      ["listening","Quand l'orbe s'anime doucement, je vous écoute."],
+      ["thinking","Quand sa lumière se concentre, je réfléchis à votre demande."],
+      ["speaking","Quand elle pulse avec ma voix, je vous réponds."],
+      ["initiative","Quand l'animation change avant que vous me sollicitiez, c'est que je prends la parole pour signaler un point pertinent."]
+    ];
+    let i = 0;
+    const next = () => {
+      if (i >= states.length) {
+        speak("Voilà pour mes états essentiels. Je vous laisse découvrir la suite. Vous pouvez me parler naturellement.", {resume:true});
+        return;
+      }
+      const [state, text] = states[i++];
+      setState(state, undefined, undefined);
+      speak(text, {resume:false});
+      window.setTimeout(next, 2600);
+    };
+    next();
+  }, 3000);
+}
+function finishSetupIfReturning() {
+  if (!localStorage.getItem(KEYS.onboarded)) {
+    $("onboardingDialog").showModal();
+  } else {
+    setState("presence");
+    $("voiceStart").textContent = "Commencer à parler";
+  }
+}
+function saveSettingsFromDialog() {
+  profile.proactivity = $("proactivitySetting").value;
+  profile.verbosity = $("verbositySetting").value;
+  profile.humor = $("humorSetting").value;
+  saveProfile();
+  $("settingsDialog").close();
+  speak("Vos préférences sont enregistrées.", {resume:true});
+}
+function updateClock() {
+  $("clockLabel").textContent = new Date().toLocaleTimeString("fr-FR", {hour:"2-digit",minute:"2-digit"});
+}
+if (SpeechRecognition) {
+  recognition = new SpeechRecognition();
+  recognition.lang = "fr-FR";
+  recognition.continuous = true;
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+  recognition.onresult = (event) => {
+    const result = event.results[event.results.length - 1];
+    if (result.isFinal && result[0]?.transcript) handleUtterance(result[0].transcript);
+  };
+  recognition.onerror = (event) => {
+    listening = false;
+    if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+      announceVisual("L'accès au microphone a été refusé. Autorisez-le dans les réglages du navigateur.");
+      setState("unavailable");
+      $("voiceStart").hidden = false;
+      $("voiceStop").hidden = true;
+    }
+  };
+  recognition.onend = () => {
+    listening = false;
+    if (shouldResumeListening && !speaking) {
+      shouldResumeListening = false;
+      window.setTimeout(startListening, 350);
+    } else if (!speaking && $("voiceStop").hidden === false) {
+      // Best-effort continuous listening while foregrounded; browsers may stop it.
+      window.setTimeout(startListening, 500);
+    }
+  };
+}
+$("voiceStart").addEventListener("click", () => {
+  if (!localStorage.getItem(KEYS.onboarded)) beginOnboarding();
+  else startListening();
 });
-$("settingsBtn").addEventListener("click", () => $("settingsDialog").showModal());
-$("chatToggle").addEventListener("click", () => openPanel("chatPanel"));
-$("chatClose").addEventListener("click", () => closePanel("chatPanel"));
+$("voiceStop").addEventListener("click", stopListening);
+$("pauseToggle").addEventListener("click", () => listening || speaking ? stopListening() : startListening());
+$("transcriptToggle").addEventListener("click", () => {
+  transcriptVisible = !transcriptVisible;
+  $("transcriptWidget").hidden = !transcriptVisible;
+});
+$("transcriptClose").addEventListener("click", () => {
+  transcriptVisible = false;
+  $("transcriptWidget").hidden = true;
+});
 $("memoryToggle").addEventListener("click", () => openPanel("memoryPanel"));
 $("memoryClose").addEventListener("click", () => closePanel("memoryPanel"));
-document.querySelectorAll("[data-scene]").forEach(button => button.addEventListener("click", () => setScene(button.dataset.scene)));
-$("coreTrigger").addEventListener("click", () => setScene(document.querySelector(".core-stage").dataset.scene === "presence" ? "globe" : "presence"));
-$("coreTrigger").addEventListener("keydown", event => {
-  if (event.key === "Enter" || event.key === " ") { event.preventDefault(); $("coreTrigger").click(); }
+$("settingsBtn").addEventListener("click", () => {
+  $("proactivitySetting").value = profile.proactivity;
+  $("verbositySetting").value = profile.verbosity;
+  $("humorSetting").value = profile.humor;
+  $("settingsDialog").showModal();
 });
-document.addEventListener("keydown", event => {
-  if (event.key === "Escape") { closePanel("chatPanel"); closePanel("memoryPanel"); }
+$("saveSettings").addEventListener("click", saveSettingsFromDialog);
+$("restartOnboarding").addEventListener("click", () => {
+  $("settingsDialog").close();
+  localStorage.removeItem(KEYS.onboarded);
+  $("onboardingDialog").showModal();
 });
-function updateClock() {
-  const now = new Date();
-  $("clockLabel").textContent = now.toLocaleTimeString("fr-FR", {hour:"2-digit",minute:"2-digit",second:"2-digit"});
-}
+$("settingsMemory").addEventListener("click", () => {
+  $("settingsDialog").close();
+  openPanel("memoryPanel");
+});
+$("onboardingBegin").addEventListener("click", (event) => {
+  event.preventDefault();
+  beginOnboarding();
+});
+$("onboardingSkip").addEventListener("click", () => {
+  onboarding = false;
+  localStorage.setItem(KEYS.onboarded, "skipped");
+});
+$("resetMemoryBtn").addEventListener("click", () => {
+  if (!confirm("Effacer les données personnelles conservées localement par cette version d'ARIA ? Cette opération est irréversible sur cet appareil.")) return;
+  memories = [];
+  profile = {proactivity:"balanced",verbosity:"balanced",humor:"balanced",memoryConsent:false};
+  for (const key of Object.keys(localStorage)) {
+    if (key.startsWith("aria.")) localStorage.removeItem(key);
+  }
+  localStorage.setItem(KEYS.reset, "done");
+  localStorage.setItem(KEYS.memory, "[]");
+  localStorage.setItem(KEYS.profile, JSON.stringify(profile));
+  renderMemory();
+  $("memoryStatus").textContent = "Données locales effacées. Les éventuelles données distantes ne sont pas encore supprimées par cette version.";
+  speak("La mémoire personnelle de cet appareil est vierge. Je ne peux pas confirmer la suppression d'éventuelles données distantes depuis cette version.", {resume:true});
+});
+$("settingsDialog").addEventListener("close", () => {});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") { closePanel("memoryPanel"); }
+});
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
 }
-setScene("presence"); renderAllMessages(); renderMemory(); updateClock(); window.setInterval(updateClock, 1000);
+updateClock();
+window.setInterval(updateClock, 1000);
+renderMemory();
+finishSetupIfReturning();
