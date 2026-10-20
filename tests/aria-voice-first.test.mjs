@@ -148,7 +148,7 @@ test("the globe scene uses WebGL locally and supports pointer rotation without e
   assert.match(visualEngine, /gl\.drawElements\(gl\.TRIANGLES/);
   assert.match(visualEngine, /pointermove/);
   assert.match(visualEngine, /rotationY \+= dx \* 0\.008/);
-  assert.match(app, /Généré localement, sans données géographiques externes/);
+  assert.match(app, /généré localement, sans données géographiques externes/i);
   assert.match(app, /window\.AriaVisualization\?\.open/);
 });
 
