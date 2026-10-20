@@ -35,7 +35,8 @@ export default {
     if (url.pathname !== "/chat" && url.pathname !== "/memory") return json({ error: "not_found" }, 404);
     if (url.pathname === "/chat" && req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
     if (url.pathname === "/memory" && !["GET", "PUT", "DELETE"].includes(req.method)) return json({ error: "method_not_allowed" }, 405);
-    if (!env.OPENAI_API_KEY || (!env.ARIA_ACCESS_TOKEN && !env.ARIA_USERS)) {
+    const requireIndividualAuth = env.ARIA_REQUIRE_INDIVIDUAL_AUTH === "true";
+    if (!env.OPENAI_API_KEY || (!env.ARIA_USERS && (requireIndividualAuth || !env.ARIA_ACCESS_TOKEN))) {
       return json({ error: "service_not_configured" }, 503);
     }
 
@@ -55,7 +56,7 @@ export default {
       }
     }
     // Shared-token access remains a temporary closed-alpha fallback only.
-    if (!principal && bearerToken && env.ARIA_ACCESS_TOKEN && bearerToken === env.ARIA_ACCESS_TOKEN) {
+    if (!principal && !requireIndividualAuth && bearerToken && env.ARIA_ACCESS_TOKEN && bearerToken === env.ARIA_ACCESS_TOKEN) {
       principal = { type: "shared", id: null };
     }
     if (!principal) return json({ error: "unauthorized" }, 401);
