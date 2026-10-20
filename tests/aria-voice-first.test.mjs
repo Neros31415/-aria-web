@@ -8,6 +8,7 @@ const app = await readFile(new URL("../app.js", import.meta.url), "utf8");
 const css = await readFile(new URL("../voice.css", import.meta.url), "utf8");
 const sw = await readFile(new URL("../sw.js", import.meta.url), "utf8");
 const workerSource = await readFile(new URL("../cloudflare/aria-brain-staging.mjs", import.meta.url), "utf8");
+const visualEngine = await readFile(new URL("../visualization-engine.js", import.meta.url), "utf8");
 
 test("voice-first HUD has no permanent chat composer and the orb is not a control", () => {
   assert.match(html, /id="ariaOrb" role="img"/);
@@ -43,7 +44,8 @@ test("legacy local ARIA data is purged on first launch and remote deletion is ex
 });
 
 test("the voice-first stylesheet and cache version are included in the PWA", () => {
-  assert.match(sw, /aria-voice-v09-shell-1/);
+  assert.match(sw, /aria-voice-v10-shell-1/);
+  assert.match(sw, /"\.\/visualization-engine\.js"/);
   assert.match(sw, /"\.\/voice\.css"/);
   assert.match(css, /data-state="listening"/);
   assert.match(css, /prefers-reduced-motion/);
@@ -137,6 +139,17 @@ test("logo transition opens and returns from the central visualization workspace
   assert.match(css, /logo-zoom-through/);
   assert.match(css, /logo-zoom-back/);
   assert.match(app, /la scène 3D métier n’est pas encore connectée/i);
+});
+
+test("the globe scene uses WebGL locally and supports pointer rotation without external map data", () => {
+  assert.match(html, /id="visualizationCanvas"/);
+  assert.match(html, /src="visualization-engine.js"/);
+  assert.match(visualEngine, /getContext\("webgl"/);
+  assert.match(visualEngine, /gl\.drawElements\(gl\.TRIANGLES/);
+  assert.match(visualEngine, /pointermove/);
+  assert.match(visualEngine, /rotationY \+= dx \* 0\.008/);
+  assert.match(app, /Généré localement, sans données géographiques externes/);
+  assert.match(app, /window\.AriaVisualization\?\.open/);
 });
 
 test("backend never reads or writes persistent memories when consent is disabled", async () => {
