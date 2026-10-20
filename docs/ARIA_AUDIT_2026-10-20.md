@@ -14,7 +14,7 @@ Le contrôle contre V1.1 révèle deux catégories :
 ## 2. État du dépôt et du backend
 - La branche de travail est feat/aria-voice-first-onboarding; la PR #15 est un brouillon vers main.
 - main n’a pas été modifiée par cette branche.
-- Le Worker Cloudflare aria-brain-staging a été déployé en staging le 20 octobre 2026; les bindings AI, KV et secrets étaient présents lors de l’audit précédent.
+- Le Worker Cloudflare aria-brain-staging a été déployé en staging le 20 octobre 2026. Une nouvelle lecture en consultation seule de sa configuration Cloudflare confirme les bindings `AI` et `ARIA_MEMORY`, ainsi que les secrets `ARIA_ACCESS_TOKEN` et `OPENAI_API_KEY`; aucun binding `ARIA_USERS` ni variable `ARIA_REQUIRE_INDIVIDUAL_AUTH` n’est présent dans la configuration retournée. Le staging reste donc en mode alpha partagé; la migration vers l’authentification individuelle n’est pas activée.
 - Le namespace mémoire de staging était vide au moment de la vérification antérieure. Cet état est une observation datée, pas une garantie permanente.
 - Le Worker de la branche prend désormais en charge des jetons individuels provisionnés via le binding KV `ARIA_USERS` (empreinte SHA-256 → identifiant opaque), avec mémoire `memory:v2:user:<id>` et un mode `ARIA_REQUIRE_INDIVIDUAL_AUTH=true` qui refuse le jeton partagé. La configuration réelle du Worker déployé n’a pas été vérifiée ni modifiée dans cette tâche; jusqu’à preuve du contraire, considérer le staging comme utilisant encore le mode alpha partagé.
 - Le frontend de cette branche n’est pas déployé sur l’URL publique. Les tests unitaires ne prouvent ni l’accessibilité du fournisseur IA ni le fonctionnement complet sur iPhone.
@@ -113,3 +113,8 @@ Correctif appliqué dans `cloudflare/aria-brain-staging.mjs` :
 - un test automatisé vérifie le mode individuel avec `ARIA_USERS` et sans jeton partagé.
 
 **Limite importante :** `configured: true` signifie uniquement que la configuration requise est présente. Cela ne prouve ni qu’un jeton individuel a été provisionné, ni que le fournisseur IA répond, ni que le Worker déployé utilise ce code. Aucun déploiement n’a été effectué. La validation iPhone physique et la vérification du staging restent en attente.
+
+
+### Vérification Cloudflare en lecture seule — 20 octobre 2026
+
+La configuration du Worker déployé a été interrogée sans modifier de paramètres ni créer de déploiement. Les bindings et secrets visibles confirment que le mode individuel n’est pas encore configuré : le jeton partagé reste actif et le binding `ARIA_USERS` manque. Ne pas considérer le support de code dans Git comme preuve d’activation en staging. La prochaine action technique sera de préparer puis valider la configuration de staging avec un accès individuel et une procédure de retour arrière; aucune modification Cloudflare n’a été appliquée dans cette session.
