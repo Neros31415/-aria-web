@@ -28,6 +28,10 @@ test("first-run onboarding explains voice and personal preferences", () => {
   assert.match(app, /Souhaitez-vous autoriser la mémoire : oui ou non/);
   assert.match(app, /Vous pouvez aussi dire « passer »/);
   assert.match(app, /profile\.memoryConsent = affirmative/);
+  assert.match(html, /id="memoryConsentSetting" type="checkbox"/);
+  assert.match(app, /profile\.memoryConsent = \$\("memoryConsentSetting"\)\.checked/);
+  assert.match(app, /memoryConsent: profile\.memoryConsent === true/);
+  assert.match(app, /preferences: \{/);
 });
 
 test("legacy local ARIA data is purged on first launch and remote deletion is explicit", () => {
@@ -106,6 +110,50 @@ test("backend rejects an invalid token without deleting memory", async () => {
   ), env);
   assert.equal(response.status, 401);
   assert.deepEqual(deleted, []);
+});
+
+test("backend never reads or writes persistent memories when consent is disabled", async () => {
+  const writes = [];
+  const reads = [];
+  const env = {
+    ARIA_ACCESS_TOKEN: "test-token",
+    OPENAI_API_KEY: "test-key",
+    ARIA_MEMORY: {
+      async delete() {},
+      async get(key) { reads.push(key); return [{id:"existing",text:"private memory"}]; },
+      async put(key, value) { writes.push({key,value}); }
+    }
+  };
+  const originalFetch = globalThis.fetch;
+  let providerRequest;
+  globalThis.fetch = async (_url, options) => {
+    providerRequest = JSON.parse(options.body);
+    return new Response(JSON.stringify({
+      model:"test-model",
+      output:[{type:"message",content:[{type:"output_text",text:"Je ne l’ai pas mémorisé."}]}]
+    }), {status:200,headers:{"Content-Type":"application/json"}});
+  };
+  try {
+    const response = await worker.fetch(new Request(
+      "https://aria-brain-staging.quentineros-sevesi.workers.dev/chat",
+      {
+        method:"POST",
+        headers:{Origin:"https://neros31415.github.io",Authorization:"Bearer test-token","Content-Type":"application/json"},
+        body:JSON.stringify({
+          clientId:"123e4567-e89b-42d3-a456-426614174000",
+          memoryConsent:false,
+          messages:[{role:"user",content:"Retiens que je préfère le thé."}]
+        })
+      }
+    ), env);
+    assert.equal(response.status, 200);
+    assert.deepEqual(writes, []);
+    assert.deepEqual(reads, []);
+    assert.match(providerRequest.instructions, /Mémoire personnelle désactivée par l’utilisateur/);
+    assert.match(providerRequest.instructions, /aucune information n’a été enregistrée/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("backend no longer embeds a personal profile", () => {
