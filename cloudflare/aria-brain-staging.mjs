@@ -43,7 +43,7 @@ export default {
     const authorization = req.headers.get("Authorization") || "";
     const bearerToken = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
     let principal = null;
-    if (bearerToken && env.ARIA_USERS) {
+    if (bearerToken.length >= 43 && bearerToken.length <= 256 && env.ARIA_USERS) {
       try {
         const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(bearerToken));
         const tokenHash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
