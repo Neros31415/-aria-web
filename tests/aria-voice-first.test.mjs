@@ -118,7 +118,7 @@ test("contextual HUD widgets are responsive, explicit, and do not claim a real 3
   assert.match(html, /id="contextClose"/);
   assert.match(app, /function showContextWidgets/);
   assert.match(app, /function hideContextWidgets/);
-  assert.match(app, /La scène 3D réelle n’est pas encore connectée/);
+  assert.match(app, /la scène 3D réelle n’est pas encore connectée/i);
   assert.match(app, /AUCUNE DONNÉE EXTERNE/);
   assert.match(css, /\.context-widget\[hidden\]/);
   assert.match(css, /@media\(max-width:800px\)/);
