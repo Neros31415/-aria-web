@@ -132,5 +132,14 @@ Première rencontre vocale unique, choix compréhensibles, consentement explicit
 - **P5 — Visualisations :** première scène réellement manipulable, transition immersive logo↔scène, distinction entre démo et données réelles.
 - **P6 — Actions et extension :** recherche, missions, automatisations, intégrations iPhone/ordinateur et publication après validations de sécurité.
 
-## 11. État de la référence au 20 octobre 2026
-La branche feat/aria-voice-first-onboarding contient le premier socle vocal, un onboarding, un panneau mémoire, un accès alpha au Worker de staging et des tests automatisés. Elle n’est pas fusionnée dans main. Les visualisations avancées, la transition caméra à travers le logo, l’authentification individuelle et les tests réels sur iPhone restent à réaliser ou à valider. Voir docs/ARIA_AUDIT_2026-10-20.md pour l’état technique vérifié.
+## 11. État de la référence au 20 octobre 2026 — suivi d’implémentation
+Le cahier des charges ci-dessus reste la source normative; cet état ne remplace pas les critères d’acceptation.
+
+La branche `feat/aria-voice-first-onboarding` contient :
+- un socle vocal prioritaire et une première rencontre conversationnelle;
+- un consentement mémoire explicite, une mémoire désactivée par défaut et des retours de purge/synchronisation exigeant une confirmation serveur;
+- un protocole d’intention structuré (`reply`, `action`, `scene`) généré par le modèle, validé côté Worker et limité à des actions d’interface autorisées;
+- des widgets contextuels, une transition immersive logo↔scène et un globe WebGL local manipulable;
+- des tests automatisés de syntaxe, de consentement mémoire, de purge, d’intentions et de rendu de scène.
+
+Restent non validés ou incomplets : authentification individuelle et isolation des données par compte, test du fournisseur réel de bout en bout, tests Safari/PWA sur iPhone physique, données géographiques fiables, visualisations métier 3D et intégrations Action Engine. La branche n’est pas fusionnée dans `main`; aucun déploiement public ne doit être annoncé sans preuve observable. Voir `docs/ARIA_AUDIT_2026-10-20.md` et `docs/TEST_PLAN_IPHONE_ALPHA.md` pour le suivi détaillé.
