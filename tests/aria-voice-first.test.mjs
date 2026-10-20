@@ -68,8 +68,8 @@ test("voice turns are serialized, abortable, and cannot speak after the user pau
   assert.match(app, /activeChatController\.abort\(\)/);
   assert.match(app, /signal:activeChatController\.signal/);
   assert.match(app, /thisTurn !== turnGeneration/);
-  assert.match(app, /event\.error === "audio-capture"/);
-  assert.match(app, /event\.error === "language-not-supported"/);
+  assert.match(app, /"audio-capture": "Aucun microphone utilisable/);
+  assert.match(app, /"language-not-supported": "La reconnaissance vocale française/);
 });
 
 test("backend memory deletion requires a valid bearer token and deletes only the requested profile key", async () => {
