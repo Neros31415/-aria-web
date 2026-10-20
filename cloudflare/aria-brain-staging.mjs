@@ -160,21 +160,48 @@ export default {
         headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "gpt-6-astra",
-          instructions: profile + "\n\n" + preferenceInstructions + "\n\nSouvenirs persistants (uniquement si la mémoire est activée) :\n" + memoryContext + "\n\nRésultat de la mémorisation demandée dans ce message : " + (memoryWriteStatus || "Aucune opération de mémorisation demandée.") + "\n\nContexte transmis par l’application :\n" + incomingSystem,
+          instructions: profile + "\n\n" + preferenceInstructions + "\n\nSouvenirs persistants (uniquement si la mémoire est activée) :\n" + memoryContext + "\n\nRésultat de la mémorisation demandée dans ce message : " + (memoryWriteStatus || "Aucune opération de mémorisation demandée.") + "\n\nContexte transmis par l’application :\n" + incomingSystem + "\n\nAnalyse l’intention réelle de l’utilisateur, pas seulement des mots-clés. Les actions d’interface sont des intentions structurées et limitées. Choisis action=none par défaut. Ouvre une visualisation uniquement si l’utilisateur demande clairement de voir, ouvrir ou explorer visuellement quelque chose; une question qui mentionne un objet ne suffit pas. Si la scène demandée n’est pas implémentée, annonce cette limite dans reply. Ne prétends jamais avoir ouvert une scène, utilisé un outil ou enregistré une donnée si ce n’est pas confirmé. Pour une demande de mémorisation, ne confirme que si le résultat de mémorisation ci-dessus indique un succès. Réponds avec l’objet JSON imposé par le schéma.",
           input: conversation.map((m) => ({ role: m.role, content: m.content })),
+          text: {
+            format: {
+              type: "json_schema",
+              name: "aria_turn",
+              strict: true,
+              schema: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  reply: { type: "string" },
+                  action: { type: "string", enum: ["none", "open_visualization", "close_visualization", "open_memory", "close_widgets"] },
+                  scene: { type: "string", enum: ["none", "globe", "map", "engine", "scientific_model", "other"] }
+                },
+                required: ["reply", "action", "scene"]
+              }
+            }
+          },
           reasoning: { effort: "low" },
-          max_output_tokens: 800,
+          max_output_tokens: 900,
           store: false
         })
       });
       const data = await response.json();
       if (!response.ok) return json({ error: "provider_error", status: response.status }, 502);
-      const reply = data.output?.filter((item) => item.type === "message")
+      const outputText = data.output?.filter((item) => item.type === "message")
         .flatMap((item) => item.content || [])
         .filter((part) => part.type === "output_text")
         .map((part) => part.text).join("\n").trim();
-      if (!reply) return json({ error: "empty_response" }, 502);
-      return json({ reply, model: data.model || "gpt-6-astra" });
+      if (!outputText) return json({ error: "empty_response" }, 502);
+      let turn;
+      try { turn = JSON.parse(outputText); } catch { return json({ error: "invalid_provider_output" }, 502); }
+      const allowedActions = new Set(["none", "open_visualization", "close_visualization", "open_memory", "close_widgets"]);
+      const allowedScenes = new Set(["none", "globe", "map", "engine", "scientific_model", "other"]);
+      if (!turn || typeof turn.reply !== "string" || !turn.reply.trim() ||
+          !allowedActions.has(turn.action) || !allowedScenes.has(turn.scene)) {
+        return json({ error: "invalid_provider_output" }, 502);
+      }
+      const action = turn.action;
+      const scene = action === "open_visualization" ? turn.scene : "none";
+      return json({ reply: turn.reply.trim(), action, scene, model: data.model || "gpt-6-astra" });
     } catch {
       return json({ error: "provider_unavailable" }, 502);
     }
