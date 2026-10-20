@@ -48,6 +48,9 @@ test("frontend calls the real chat endpoint and keeps alpha credentials in sessi
   assert.doesNotMatch(app, /localStorage\.setItem\(SESSION_TOKEN_KEY/);
   assert.match(html, /id="apiTokenSetting" type="password"/);
   assert.match(app, /clientId: getClientId\(\)/);
+  assert.match(app, /async function syncRemoteMemory/);
+  assert.match(app, /async function saveRemoteMemory/);
+  assert.match(app, /localStorage\.removeItem\(KEYS\.clientId\)/);
 });
 
 test("backend memory deletion requires a valid bearer token and deletes only the requested profile key", async () => {
