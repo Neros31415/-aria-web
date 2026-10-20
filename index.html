@@ -69,7 +69,8 @@
           <div><span class="widget-kicker">ARIA / IMMERSIVE SPACE</span><h2 id="visualizationTitle">Visualisation</h2></div>
           <button class="quiet-action" id="visualizationBack" type="button">Retour à ARIA</button>
         </header>
-        <div class="visualization-viewport" aria-live="polite">
+        <div class="visualization-viewport" id="visualizationViewport" aria-live="polite">
+          <canvas id="visualizationCanvas" class="visualization-canvas" aria-label="Globe filaire 3D interactif, faites glisser pour le faire tourner" hidden></canvas>
           <div class="visualization-rings" aria-hidden="true"><span></span><span></span><span></span></div>
           <div class="visualization-center"><span class="visualization-mark">A</span><span class="visualization-caption">ESPACE VISUEL</span></div>
           <div class="visualization-grid" aria-hidden="true"></div>
@@ -131,6 +132,7 @@
     </form>
   </dialog>
 
+  <script src="visualization-engine.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
