@@ -93,3 +93,12 @@ Pour chaque échec, consigner : modèle d’iPhone, version iOS, Safari ou PWA, 
 
 ## Critère de sortie
 La boucle vocale ne passe en alpha testeur qu’après réussite des scénarios A et B, et la mémoire ne passe qu’après réussite des scénarios C. L’authentification individuelle reste un prérequis séparé à toute ouverture publique.
+
+
+## Prévalidation du backend alpha — 20 octobre 2026
+
+- [ ] Avant de tester un accès individuel, vérifier côté Cloudflare que le Worker possède le binding KV `ARIA_USERS` et que `ARIA_REQUIRE_INDIVIDUAL_AUTH=true` est activé.
+- [ ] Vérifier que le jeton partagé est refusé une fois le mode individuel activé.
+- [ ] Vérifier qu’un jeton individuel provisionné est accepté, qu’un jeton inconnu est refusé et que deux identités ne partagent pas la mémoire.
+- [ ] Vérifier `/health`: le champ `configured` décrit uniquement la présence des bindings/secrets nécessaires; il ne garantit pas la disponibilité du fournisseur IA ni la validité d’un jeton.
+- [ ] Aucun changement de configuration ou déploiement staging ne doit être fait sans autorisation explicite; aucune de ces vérifications ne remplace le test Safari/PWA sur iPhone physique.
