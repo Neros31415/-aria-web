@@ -359,22 +359,54 @@ function normalizeChoice(text, choices) {
 async function handleOnboardingAnswer(text) {
   const q = onboardingQuestions[onboardingStep];
   if (!q) return finishOnboarding();
-  if (q.key === "proactivity") profile.proactivity = normalizeChoice(text, {
-    discrete:["discrète","discret","seulement si","uniquement si"],
-    balanced:["équilibrée","équilibré","parfois","de temps en temps"],
-    proactive:["proactive","initiative","spontanément","souvent"]
-  }) || profile.proactivity;
-  if (q.key === "verbosity") profile.verbosity = normalizeChoice(text, {
-    short:["courte","court","bref","brève"],
-    balanced:["équilibrée","équilibré","normal"],
-    detailed:["détaillée","détaillé","longue","long"]
-  }) || profile.verbosity;
-  if (q.key === "humor") profile.humor = normalizeChoice(text, {
-    low:["discret","discrète","peu"],
-    balanced:["naturel","naturelle","équilibré"],
-    high:["fréquent","souvent","beaucoup"]
-  }) || profile.humor;
-  if (q.key === "memoryConsent") profile.memoryConsent = !/(non|pas du tout|jamais|aucune)/i.test(text);
+
+  // A skipped question must not silently grant a permission or overwrite a preference.
+  if (/^(passer|je passe|skip|je ne sais pas|je préfère ne pas répondre)$/i.test(text.trim())) {
+    if (q.key === "memoryConsent") profile.memoryConsent = false;
+    saveProfile();
+    onboardingStep += 1;
+    if (onboardingStep < onboardingQuestions.length) {
+      speak(onboardingQuestions[onboardingStep].prompt, {resume:true});
+    } else finishOnboarding();
+    return;
+  }
+
+  if (q.key === "proactivity") {
+    const choice = normalizeChoice(text, {
+      discrete:["discrète","discret","seulement si","uniquement si"],
+      balanced:["équilibrée","équilibré","parfois","de temps en temps"],
+      proactive:["proactive","initiative","spontanément","souvent"]
+    });
+    if (!choice) return speak("Je n'ai pas bien compris. Vous pouvez choisir discrète, équilibrée, proactive, ou dire « passer ».", {resume:true});
+    profile.proactivity = choice;
+  }
+  if (q.key === "verbosity") {
+    const choice = normalizeChoice(text, {
+      short:["courte","court","bref","brève"],
+      balanced:["équilibrée","équilibré","normal"],
+      detailed:["détaillée","détaillé","longue","long"]
+    });
+    if (!choice) return speak("Vous préférez des réponses courtes, équilibrées ou détaillées ? Vous pouvez aussi dire « passer ».", {resume:true});
+    profile.verbosity = choice;
+  }
+  if (q.key === "humor") {
+    const choice = normalizeChoice(text, {
+      low:["discret","discrète","peu"],
+      balanced:["naturel","naturelle","équilibré"],
+      high:["fréquent","souvent","beaucoup"]
+    });
+    if (!choice) return speak("Vous préférez un humour discret, naturel ou fréquent ? Vous pouvez aussi dire « passer ».", {resume:true});
+    profile.humor = choice;
+  }
+  if (q.key === "memoryConsent") {
+    const answer = text.toLocaleLowerCase("fr").trim();
+    const affirmative = /^(oui|oui bien sûr|d'accord|je veux bien|tu peux|vous pouvez|autorise|j'accepte|accepte|volontiers)([.! ]|$)/i.test(answer);
+    const negative = /^(non|non merci|pas maintenant|je refuse|je préfère pas|je ne veux pas|n'enregistre rien)([.! ]|$)/i.test(answer);
+    if (!affirmative && !negative) {
+      return speak("Je veux être certaine de respecter votre choix. Souhaitez-vous autoriser la mémoire : oui ou non ? Vous pouvez aussi dire « passer »; dans ce cas, elle restera désactivée.", {resume:true});
+    }
+    profile.memoryConsent = affirmative;
+  }
   saveProfile();
   onboardingStep += 1;
   if (onboardingStep < onboardingQuestions.length) {
