@@ -354,3 +354,52 @@ test("backend returns only schema-valid model intent actions", async () => {
 test("backend no longer embeds a personal profile", () => {
   assert.doesNotMatch(workerSource, /assistante personnelle de Quentin|centres d’intérêt IA|Quentin utilise principalement/i);
 });
+
+test("backend encodes the chosen initiative level and bounded-autonomy principles", async () => {
+  const env = {
+    ARIA_ACCESS_TOKEN: "test-token",
+    OPENAI_API_KEY: "test-key",
+    ARIA_MEMORY: { async get() { return []; }, async put() {}, async delete() {} }
+  };
+  const originalFetch = globalThis.fetch;
+  let providerInstructions = "";
+  globalThis.fetch = async (_url, options) => {
+    providerInstructions = JSON.parse(options.body).instructions;
+    return new Response(JSON.stringify({
+      model: "test-model",
+      output: [{type:"message",content:[{type:"output_text",text:JSON.stringify({reply:"Réponse de test.",action:"none",scene:"none"})}]}]
+    }), {status:200,headers:{"Content-Type":"application/json"}});
+  };
+  const modes = [
+    ["discrete", "Initiative discrète"],
+    ["balanced", "Initiative équilibrée"],
+    ["proactive", "Initiative proactive"]
+  ];
+  try {
+    for (const [proactivity, expectedInstruction] of modes) {
+      const response = await worker.fetch(new Request(
+        "https://aria-brain-staging.quentineros-sevesi.workers.dev/chat",
+        {
+          method: "POST",
+          headers: {Origin:"https://neros31415.github.io",Authorization:"Bearer test-token","Content-Type":"application/json"},
+          body: JSON.stringify({
+            clientId: "123e4567-e89b-42d3-a456-426614174000",
+            memoryConsent: false,
+            preferences: {proactivity},
+            messages: [{role:"user",content:"Aide-moi à avancer sur mon objectif."}]
+          })
+        }
+      ), env);
+      assert.equal(response.status, 200);
+      assert.ok(providerInstructions.includes(expectedInstruction), "chosen initiative policy must reach the model");
+      assert.ok(providerInstructions.includes("ne suppriment pas les limites techniques"), "provider limits must remain explicit");
+      assert.ok(providerInstructions.includes("n’autorisent aucune action externe"), "prompt policy must not grant tools");
+    }
+    assert.ok(providerInstructions.includes("Liberté intellectuelle"));
+    assert.ok(providerInstructions.includes("Exige une confirmation explicite"));
+    assert.ok(providerInstructions.includes("N’affirme jamais travailler en arrière-plan"));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
