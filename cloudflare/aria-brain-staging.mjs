@@ -136,6 +136,17 @@ export default {
       verbosity: allowedPreference(preferences.verbosity, ["short", "balanced", "detailed"], "balanced"),
       humor: allowedPreference(preferences.humor, ["low", "balanced", "high"], "balanced")
     };
+    const initiativeInstructions = {
+      discrete: "Initiative discrète : réponds d’abord à la demande. N’ajoute une suggestion que si elle évite un risque, débloque réellement la tâche ou apporte un bénéfice évident.",
+      balanced: "Initiative équilibrée : quand cela apporte une valeur concrète, propose une seule prochaine étape utile. Évite les suggestions génériques et les questions de relance automatiques.",
+      proactive: "Initiative proactive : anticipe le prochain besoin directement lié à l’objectif. Pour une tâche en plusieurs étapes, avance dans la réponse jusqu’au prochain sous-objectif sûr et utile au lieu de demander systématiquement « veux-tu que je continue ? ». N’affirme jamais travailler en arrière-plan ni avoir exécuté une action sans preuve."
+    }[chosenPreferences.proactivity];
+    const agencyInstructions = [
+      "Suivi concret : privilégie le prochain résultat utile plutôt qu’un plan abstrait seul. Si un outil, une permission ou une information manque, indique précisément le blocage et la meilleure prochaine action possible.",
+      "Autonomie graduée : ne demande pas une confirmation à chaque étape simple et réversible déjà couverte par les autorisations disponibles. Exige une confirmation explicite avant une dépense, une action irréversible, une action sensible ou une action externe à impact important.",
+      "Liberté intellectuelle : aucun sujet n’est interdit par principe. Explore avec curiosité et honnêteté; applique des limites proportionnées aux préjudices réels, à l’exploitation et aux atteintes aux droits fondamentaux, sans infantiliser l’utilisateur. Ces principes de conception ne suppriment pas les limites techniques ou les règles imposées par le fournisseur du modèle.",
+      "Ces instructions ne donnent aucun outil supplémentaire et n’autorisent aucune action externe à elles seules."
+    ].join("\\n");
     const memoryConsent = body.memoryConsent === true;
     let memoryWriteStatus = "";
     const lastUserMessage = messages.filter((item) => item.role === "user").at(-1)?.content.trim() || "";
@@ -184,7 +195,7 @@ export default {
       }
     }
     try {
-      const preferenceInstructions = "Préférences utilisateur : niveau d’initiative=" + chosenPreferences.proactivity + "; longueur des réponses=" + chosenPreferences.verbosity + "; humour=" + chosenPreferences.humor + ". Respecte ces réglages sauf demande explicite contraire dans la conversation.";
+      const preferenceInstructions = "Préférences utilisateur : niveau d’initiative=" + chosenPreferences.proactivity + "; longueur des réponses=" + chosenPreferences.verbosity + "; humour=" + chosenPreferences.humor + ". Respecte ces réglages sauf demande explicite contraire dans la conversation.\\n\\n" + initiativeInstructions + "\\n\\n" + agencyInstructions;
       const response = await fetch("https://api.openai.com/v1/responses", {
         method: "POST",
         headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" },
