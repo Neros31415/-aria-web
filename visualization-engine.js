@@ -416,6 +416,9 @@
         if (sceneId === sceneEpoch && viewport.dataset.scene === "map") {
           status.textContent = error.message || "Une erreur est survenue lors de la recherche.";
           routePanel.hidden = true;
+          if (activeMap && activeMapLayer) {
+            try { activeMap.fitBounds(activeMapLayer.getBounds().pad(.18), { maxZoom: 13 }); } catch {}
+          }
           updateContextStatus("ITINÉRAIRE INDISPONIBLE", "SERVICE EXTERNE");
         }
       } finally {
