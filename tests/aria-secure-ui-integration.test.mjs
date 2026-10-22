@@ -204,7 +204,7 @@ test("finance scene provides a local manual portfolio tracker with explicit data
   assert.match(visualEngine, /Valeur estimée/);
   assert.match(visualEngine, /Gain \/ perte latent/);
   assert.match(visualEngine, /Mettre à jour le prix/);
-  assert.match(visualEngine, /Aucune connexion à un courtier/);
+  assert.match(visualEngine, /aucune connexion à un courtier/i);
   assert.match(visualEngine, /pas envoyées au serveur ARIA/);
   assert.match(visualEngine, /aucune conversion de devise/i);
   assert.match(visualEngine, /Effacer le portefeuille/);
