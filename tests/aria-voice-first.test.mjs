@@ -434,3 +434,13 @@ test("science scene searches the NASA public media catalogue without claiming to
   assert.match(visualEngine, /ne constitue pas un laboratoire de simulation scientifique/i);
   assert.match(app, /Exploration scientifique/);
 });
+
+
+test("async visualization results are ignored after the user switches or closes scenes", () => {
+  assert.match(visualEngine, /let sceneEpoch = 0/);
+  assert.match(visualEngine, /const sceneId = \+\+sceneEpoch/);
+  assert.match(visualEngine, /sceneId !== sceneEpoch \|\| viewport\.dataset\.scene !== "scientific_model"/);
+  assert.match(visualEngine, /sceneId !== sceneEpoch \|\| !activeMap \|\| viewport\.dataset\.scene !== "map"/);
+  assert.match(visualEngine, /if \(sceneId === sceneEpoch && viewport\.dataset\.scene === "finance"\)/);
+  assert.match(visualEngine, /function close\(\) \{\s*sceneEpoch\+\+/);
+});
