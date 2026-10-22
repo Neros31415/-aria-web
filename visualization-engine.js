@@ -466,9 +466,11 @@
         remove.setAttribute("aria-label", "Supprimer " + item.name + " du portefeuille");
         remove.addEventListener("click", () => {
           portfolio = portfolio.filter(entry => entry.id !== item.id);
-          persistPortfolio();
+          const saved = persistPortfolio();
           renderPortfolio();
-          portfolioStatus.textContent = "Position supprimée du stockage local.";
+          portfolioStatus.textContent = saved
+            ? "Position supprimée et changement enregistré localement."
+            : "Position retirée de cette session, mais le stockage local est indisponible.";
         });
         heading.appendChild(remove);
         const metrics = element("div", "aria-portfolio-holding-metrics");
@@ -514,6 +516,7 @@
       }
       if (loadWarning) portfolioStatus.textContent = "Les données locales sont illisibles ou ont un format inattendu ; vérifiez avant de les remplacer.";
       else if (!portfolio.length && !portfolioStatus.textContent.startsWith("Stockage local indisponible")) portfolioStatus.textContent = "Portefeuille local vide.";
+      else if (portfolio.length && portfolioStatus.textContent === "Aucune position enregistrée.") portfolioStatus.textContent = "Positions chargées depuis le stockage local du navigateur.";
     };
 
     const loadChart = () => {
