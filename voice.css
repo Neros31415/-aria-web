@@ -156,3 +156,23 @@ dialog .text-button{border:0;background:none;color:var(--muted);font-size:11px;p
 #visualizationViewport .aria-portfolio-panel>button{align-self:flex-start}
 @media(max-width:800px){.aria-portfolio-form{grid-template-columns:repeat(2,minmax(0,1fr))}.aria-portfolio-form>button{grid-column:1/-1}}
 @media(max-width:520px){.aria-portfolio-summary{grid-template-columns:1fr}.aria-portfolio-form{grid-template-columns:1fr}.aria-portfolio-form>button{grid-column:auto}.aria-portfolio-holdings{grid-template-columns:1fr}}
+
+
+.aria-map-toolbar{align-items:stretch}
+.aria-map-toolbar button{flex:0 1 auto}
+.aria-map-layout{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(220px,1fr);gap:12px;align-items:stretch;min-height:0}
+.aria-map-canvas{height:clamp(320px,56vh,580px);min-height:320px;flex:initial}
+.aria-map-canvas .leaflet-container{height:100%;min-height:320px}
+.aria-route-panel{display:flex;flex-direction:column;gap:12px;min-width:0;max-height:clamp(320px,56vh,580px);overflow:auto;padding:12px;border:1px solid #263d52;border-radius:14px;background:linear-gradient(150deg,rgba(12,26,40,.97),rgba(6,14,24,.97))}
+.aria-route-panel[hidden]{display:none}
+.aria-route-summary{display:grid;grid-template-columns:1fr;gap:8px}
+.aria-route-metric{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px;border:1px solid rgba(86,136,167,.28);border-radius:10px;background:rgba(17,35,51,.7)}
+.aria-route-metric span{font-size:.78rem;color:#92a9bd}
+.aria-route-metric strong{font-size:.95rem;color:#d9f5ff;text-align:right}
+.aria-route-heading{margin:4px 0 0;font-size:.98rem;font-weight:650;color:#d8eaff}
+.aria-route-steps{display:flex;flex-direction:column;gap:8px;margin:0;padding-left:24px}
+.aria-route-step{padding:9px 10px;border:1px solid rgba(86,136,167,.18);border-radius:9px;background:rgba(12,27,42,.65);color:#a9bfd2;font-size:.8rem;line-height:1.45}
+.aria-route-step strong{display:block;margin-bottom:3px;color:#e3f5ff;font-size:.86rem}
+.aria-route-panel>button{align-self:flex-start;flex:0 0 auto}
+@media(max-width:850px){.aria-map-layout{grid-template-columns:1fr}.aria-map-canvas{height:clamp(300px,48vh,440px)}.aria-route-panel{max-height:none}.aria-route-summary{grid-template-columns:repeat(3,minmax(0,1fr))}.aria-route-metric{flex-direction:column;align-items:flex-start;gap:4px}.aria-route-metric strong{text-align:left}}
+@media(max-width:520px){.aria-map-toolbar button{flex:1 1 100%}.aria-route-summary{grid-template-columns:1fr}.aria-route-metric{flex-direction:row;align-items:center}.aria-route-metric strong{text-align:right}}

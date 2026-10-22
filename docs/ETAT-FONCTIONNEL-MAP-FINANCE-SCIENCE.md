@@ -1,14 +1,14 @@
 # ARIA — État fonctionnel des scènes carte, finance et science
 
 Date de travail : 22 octobre 2026  
-Branche : `feat/aria-finance-portfolio-tracker`  
+Branche : `feat/aria-map-route-guidance`  
 Statut : intégration en cours, non fusionnée et non déployée. Cette branche part de `feat/aria-brain-staging-integration` pour conserver les contrôles D1 et l’authentification par session hachée.
 
 ## Objectif
 Relier les scènes contextuelles du HUD à des sources réelles plutôt que de présenter des écrans de démonstration comme des fonctionnalités opérationnelles. Cette livraison ne réduit pas le périmètre ARIA 1.0.
 
 ## Changements de cette branche
-- Carte : charge Leaflet et les tuiles OpenStreetMap ; permet une recherche de lieu via Nominatim ; permet de calculer un itinéraire en voiture, à pied ou à vélo via des profils publics OSRM, avec distance/durée annoncées par le service et limitation du rythme des requêtes de géocodage.
+- Carte : charge Leaflet et les tuiles OpenStreetMap ; permet une recherche de lieu via Nominatim ; calcule des itinéraires en voiture, à pied ou à vélo via les profils publics OSRM. Ajoute un résumé visuel distance/durée/mode, des étapes de navigation localisées, un effacement d’itinéraire et une mise en page responsive, avec limitation du rythme de géocodage.
 - Finance : conserve le graphique TradingView avec symbole/période configurables et ajoute un portefeuille manuel local : positions, quantité, prix d’achat, prix actuel saisi, valeur estimée, capital investi, gain/perte latent, mise à jour de prix et suppression. Les données restent dans le stockage local du navigateur et ne sont pas envoyées au serveur ARIA.
 - Science : recherche et affiche des médias du catalogue public NASA avec accès à la source ; ajoute un simulateur orbital local animé du Soleil et des huit planètes, avec pause, reprise, remise à zéro et réglage de vitesse. Les périodes sont illustratives ; tailles, distances et positions ne sont pas à l’échelle et ne constituent pas des éphémérides.
 - HUD : les scènes sont ouvertes dans l'espace visuel contextuel existant ; styles responsives et commandes accessibles au clavier.
