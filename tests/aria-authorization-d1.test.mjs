@@ -57,7 +57,7 @@ test("D1 adapter fails closed when role is absent, inactive, malformed, or belon
 test("D1 adapter requires a separate active Premium entitlement", async () => {
   const db = d1Mock({
     role: { userId: alice, role: "user", active: 1 },
-    entitlement: { userId: alice, plan: "premium", active: 1, expiresAt: now + 60_000 }
+    entitlement: { userId: alice, plan: "premium", active: 1, startsAt: now - 60_000, expiresAt: now + 60_000 }
   });
   assert.equal((await authorizeFromD1({
     identity: alice, permission: "feature:premium:use", env: { ARIA_AUTHZ_DB: db }, context: { now }
@@ -65,7 +65,7 @@ test("D1 adapter requires a separate active Premium entitlement", async () => {
 
   const crossAccount = d1Mock({
     role: { userId: alice, role: "user", active: 1 },
-    entitlement: { userId: bob, plan: "premium", active: 1, expiresAt: now + 60_000 }
+    entitlement: { userId: bob, plan: "premium", active: 1, startsAt: now - 60_000, expiresAt: now + 60_000 }
   });
   assert.deepEqual(await authorizeFromD1({
     identity: alice, permission: "feature:premium:use", env: { ARIA_AUTHZ_DB: crossAccount }, context: { now }
@@ -87,4 +87,15 @@ test("invalid identity is rejected before database access", async () => {
     identity: "not-a-uuid", permission: "admin:roles:manage", env: { ARIA_AUTHZ_DB: db }, context: freshMfa
   }), { allowed: false, reason: "invalid_principal" });
   assert.equal(db.calls.length, 0);
+});
+
+
+test("D1 adapter denies a Premium entitlement before its start time", async () => {
+  const db = d1Mock({
+    role: { userId: alice, role: "user", active: 1 },
+    entitlement: { userId: alice, plan: "premium", active: 1, startsAt: now + 60_000, expiresAt: now + 120_000 }
+  });
+  assert.deepEqual(await authorizeFromD1({
+    identity: alice, permission: "feature:premium:use", env: { ARIA_AUTHZ_DB: db }, context: { now }
+  }), { allowed: false, reason: "entitlement_required" });
 });
