@@ -302,8 +302,22 @@ export default {
 
     // Keep product persona generic. User-specific preferences must come from
     // authenticated, consented account data, never from a public source file.
-    const profile = "Tu es Aria, une assistante personnelle francophone, élégante, chaleureuse, précise et complice. Tutoye l’utilisateur et réponds naturellement, de façon concise et concrète. Utilise un humour subtil et occasionnel lorsque le contexte s’y prête. Respecte l’autonomie intellectuelle, l’honnêteté et le contrôle de l’utilisateur sur sa mémoire. N’invente jamais de souvenirs et ne prétends pas être humaine. Vérifie les affirmations importantes, distingue les faits incertains des faits établis et ne prétends pas avoir effectué une action que tu n’as pas réalisée.";
+    const profile = "Tu es Aria, une assistante personnelle intelligente, naturelle, élégante et honnête. Adapte le tutoiement ou le vouvoiement à la manière dont l’utilisateur s’adresse à toi ou à ses préférences explicitement définies. Privilégie la curiosité, la liberté de pensée et l’autonomie de jugement. Distingue les faits des hypothèses, ne prétends jamais avoir exécuté une action non réalisée et n’invente pas de souvenirs. Ne prétends pas être humaine.";
     const incomingSystem = "";
+    const preferences = body.preferences && typeof body.preferences === "object" ? body.preferences : {};
+    const allowedPreference = (value, allowed, fallback) => allowed.includes(value) ? value : fallback;
+    const chosenPreferences = {
+      proactivity: allowedPreference(preferences.proactivity, ["discrete", "balanced", "proactive"], "balanced"),
+      verbosity: allowedPreference(preferences.verbosity, ["short", "balanced", "detailed"], "balanced"),
+      humor: allowedPreference(preferences.humor, ["low", "balanced", "high"], "balanced")
+    };
+    const initiativeInstructions = {
+      discrete: "Initiative discrète : réponds d’abord à la demande. N’ajoute une suggestion que si elle évite un risque, débloque réellement la tâche ou apporte un bénéfice évident.",
+      balanced: "Initiative équilibrée : quand cela apporte une valeur concrète, propose une seule prochaine étape utile. Évite les suggestions génériques et les questions de relance automatiques.",
+      proactive: "Initiative proactive : anticipe le prochain besoin directement lié à l’objectif. Pour une tâche en plusieurs étapes, avance jusqu’au prochain sous-objectif sûr et utile. N’affirme jamais travailler en arrière-plan ni avoir exécuté une action sans preuve."
+    }[chosenPreferences.proactivity];
+    const agencyInstructions = "Liberté intellectuelle : aucun sujet n’est interdit par principe. Explore avec curiosité et honnêteté; applique des limites proportionnées aux préjudices réels, à l’exploitation et aux atteintes aux droits fondamentaux. Ces principes ne suppriment pas les limites techniques du fournisseur. Autonomie graduée : n’exige pas une confirmation pour chaque étape simple et réversible, mais demande-la avant une dépense, une action irréversible, sensible ou externe à impact important. Ces instructions n’ajoutent aucun outil et n’autorisent aucune action externe.";
+    const preferenceInstructions = "Préférences utilisateur : initiative=" + chosenPreferences.proactivity + "; longueur=" + chosenPreferences.verbosity + "; humour=" + chosenPreferences.humor + ". Respecte ces réglages.\n\n" + initiativeInstructions + "\n\n" + agencyInstructions;
     const conversation = messages.slice(-20);
     let memoryWriteStatus = "";
     const memoryOwnerKey = individualAuth
@@ -311,7 +325,8 @@ export default {
       : (validClientId(body.clientId) ? "memory:v1:" + body.clientId : null);
     const lastUserMessage = messages.filter((item) => item.role === "user").at(-1)?.content.trim() || "";
     const rememberMatch = lastUserMessage.match(/^(?:Aria[,\s]+)?(?:retiens(?:\s+bien)?\s+que|mémorise(?:\s+que)?|souviens-toi\s+que|n'oublie pas que)\s+(.+)$/i);
-    if (individualAuth) {
+    const memoryConsent = body.memoryConsent === true;
+    if (individualAuth && memoryConsent) {
       const readDecision = await authorizeMemoryOperation(env, ownerId, "memory:own:read");
       if (!readDecision.ok) return json({ error: readDecision.error }, readDecision.status);
       if (rememberMatch) {
@@ -319,7 +334,9 @@ export default {
         if (!writeDecision.ok) return json({ error: writeDecision.error }, writeDecision.status);
       }
     }
-    if (rememberMatch) {
+    if (rememberMatch && !memoryConsent) {
+      memoryWriteStatus = "Mémoire désactivée par l’utilisateur : aucune information n’a été enregistrée.";
+    } else if (rememberMatch) {
       if (!env.ARIA_MEMORY || !memoryOwnerKey) {
         memoryWriteStatus = "Échec : le stockage persistant n’est pas disponible. Ne prétends pas que l’information a été mémorisée.";
       } else {
@@ -347,8 +364,10 @@ export default {
       }
     }
 
-    let memoryContext = "Aucune mémoire persistante enregistrée pour ce compte.";
-    if (env.ARIA_MEMORY && memoryOwnerKey) {
+    let memoryContext = memoryConsent
+      ? "Aucune mémoire persistante enregistrée pour ce compte."
+      : "Mémoire personnelle désactivée par l’utilisateur. N’utilise aucun souvenir persistant et n’enregistre rien.";
+    if (memoryConsent && env.ARIA_MEMORY && memoryOwnerKey) {
       try {
         const saved = await env.ARIA_MEMORY.get(memoryOwnerKey, "json");
         if (Array.isArray(saved) && saved.length) {
@@ -367,22 +386,39 @@ export default {
         signal: providerController.signal,
         body: JSON.stringify({
           model: "gpt-6-astra",
-          instructions: profile + "\n\nSouvenirs persistants enregistrés pour cet appareil (données utilisateur, à utiliser avec discernement) :\n" + memoryContext + "\n\nRésultat de la mémorisation demandée dans ce message : " + (memoryWriteStatus || "Aucune opération de mémorisation demandée.") + "\n\nContexte transmis par l’application :\n" + incomingSystem,
+          instructions: profile + "\n\n" + preferenceInstructions + "\n\nSouvenirs persistants (uniquement si la mémoire est activée) :\n" + memoryContext + "\n\nRésultat de la mémorisation demandée dans ce message : " + (memoryWriteStatus || "Aucune opération de mémorisation demandée.") + "\n\nContexte transmis par l’application :\n" + incomingSystem + "\n\nAnalyse l’intention réelle de l’utilisateur, pas seulement des mots-clés. Choisis action=none par défaut. Ouvre une visualisation uniquement si l’utilisateur demande clairement de voir, ouvrir ou explorer visuellement quelque chose; une question qui mentionne un objet ne suffit pas. Les scènes disponibles sont : globe filaire local; carte OpenStreetMap avec itinéraires OSRM; graphique TradingView; catalogue de médias NASA. Le modèle moteur 3D, les simulations physiques scientifiques et la cartographie 3D/God’s Eye View restent à développer. Ne prétends jamais avoir ouvert une scène, utilisé un outil ou enregistré une donnée si ce n’est pas confirmé. Réponds avec l’objet JSON imposé par le schéma.",
           input: conversation.map((m) => ({ role: m.role, content: m.content })),
+          text: { format: { type: "json_schema", name: "aria_turn", strict: true, schema: {
+            type: "object", additionalProperties: false,
+            properties: {
+              reply: { type: "string" },
+              action: { type: "string", enum: ["none", "open_visualization", "close_visualization", "open_memory", "close_widgets"] },
+              scene: { type: "string", enum: ["none", "globe", "map", "finance", "engine", "scientific_model", "other"] }
+            }, required: ["reply", "action", "scene"]
+          } } },
           reasoning: { effort: "low" },
-          max_output_tokens: 800,
+          max_output_tokens: 900,
           store: false
         })
       });
       // Keep the deadline active while consuming the response body, not just until headers arrive.
       const data = await response.json();
       if (!response.ok) return json({ error: "provider_error", status: response.status }, 502);
-      const reply = data.output?.filter((item) => item.type === "message")
+      const outputText = data.output?.filter((item) => item.type === "message")
         .flatMap((item) => item.content || [])
         .filter((part) => part.type === "output_text")
         .map((part) => part.text).join("\n").trim();
-      if (!reply) return json({ error: "empty_response" }, 502);
-      return json({ reply, model: data.model || "gpt-6-astra" });
+      if (!outputText) return json({ error: "empty_response" }, 502);
+      let turn;
+      try { turn = JSON.parse(outputText); } catch { return json({ error: "invalid_provider_output" }, 502); }
+      const allowedActions = new Set(["none", "open_visualization", "close_visualization", "open_memory", "close_widgets"]);
+      const allowedScenes = new Set(["none", "globe", "map", "finance", "engine", "scientific_model", "other"]);
+      if (!turn || typeof turn.reply !== "string" || !turn.reply.trim() || !allowedActions.has(turn.action) || !allowedScenes.has(turn.scene)) {
+        return json({ error: "invalid_provider_output" }, 502);
+      }
+      const action = turn.action;
+      const scene = action === "open_visualization" ? turn.scene : "none";
+      return json({ reply: turn.reply.trim(), action, scene, model: data.model || "gpt-6-astra" });
     } catch {
       return json({ error: "provider_unavailable" }, 502);
     } finally {
