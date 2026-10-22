@@ -88,3 +88,7 @@ Si l’identité, le registre de rôles, l’offre ou la politique ne peut pas �
 - Le module `cloudflare/aria-authorization.mjs` implémente une décision d’accès et une lecture en mode fermé via le binding serveur `ARIA_AUTHZ`, sans méthode publique de mutation.
 - Tests CI couvrent désormais les permissions et la lecture du registre simulé ; cela ne valide ni un binding KV réel ni l’intégration aux routes.
 - Ce document formalise le contrat ; il ne prétend pas que les fonctionnalités décrites existent déjà.
+
+
+## 7. Limite importante du stockage KV
+Le binding `ARIA_AUTHZ` est actuellement une interface de lecture testée, pas un registre déployé. Cloudflare KV étant éventuellement cohérent, il ne doit pas être retenu seul comme source d’autorité pour les changements de privilèges qui exigent une révocation immédiate. Avant d’activer les opérations administratives, choisir et valider un stockage autoritatif adapté (par exemple D1 avec contraintes et opérations transactionnelles, ou une base serveur équivalente), documenter la révocation, l’audit et la restauration, puis intégrer le dépôt aux routes. Le binding KV reste un adaptateur/prototype tant que cette décision n’est pas validée.
