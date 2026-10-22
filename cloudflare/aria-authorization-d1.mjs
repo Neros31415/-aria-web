@@ -5,12 +5,10 @@
  * must be performed by a separate, authenticated, audited administrative path.
  * The D1 binding must remain server-side; never expose it to a client.
  */
-import { authorize } from "./aria-authorization.mjs";
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+import { authorize, isValidAuthorizationIdentity } from "./aria-authorization.mjs";
 
 function validIdentity(value) {
-  return typeof value === "string" && UUID.test(value);
+  return isValidAuthorizationIdentity(value);
 }
 
 function normalizeRole(row, identity) {
@@ -69,5 +67,40 @@ export async function authorizeFromD1({ identity, permission, env, context = {} 
     return authorize({ identity, roleRecord, entitlementRecord, permission, context });
   } catch {
     return { allowed: false, reason: "authorization_store_unavailable" };
+  }
+}
+
+
+/**
+ * Give a newly authenticated principal the least-privileged default role.
+ * The caller supplies identity only after server-side authentication. This
+ * operation can create only role=user, never an admin role, and writes an audit
+ * record atomically with the insert. Existing inactive/elevated roles are not
+ * overwritten or reactivated.
+ */
+export async function ensureDefaultUserRole({ identity, env, now = Date.now() } = {}) {
+  if (!validIdentity(identity)) return { ok: false, reason: "invalid_principal" };
+  const db = env?.ARIA_AUTHZ_DB;
+  if (!db || typeof db.prepare !== "function" || typeof db.batch !== "function") {
+    return { ok: false, reason: "authorization_store_unavailable" };
+  }
+  if (!Number.isSafeInteger(now) || now < 0) {
+    return { ok: false, reason: "invalid_time" };
+  }
+  try {
+    const result = await db.batch([
+      db.prepare(
+        "INSERT OR IGNORE INTO aria_user_roles (user_id, role, active, created_at_ms, updated_at_ms, updated_by_user_id, version) VALUES (?, 'user', 1, ?, ?, ?, 1)"
+      ).bind(identity, now, now, identity),
+      db.prepare(
+        "INSERT INTO aria_authorization_audit (id, actor_user_id, target_user_id, action, occurred_at_ms, details_json) SELECT ?, ?, ?, 'role.created', ?, json_object('source', 'authenticated_first_use') WHERE changes() = 1"
+      ).bind(crypto.randomUUID(), identity, identity, now)
+    ]);
+    if (!Array.isArray(result) || result.some((item) => item?.success === false)) {
+      return { ok: false, reason: "authorization_store_unavailable" };
+    }
+    return { ok: true };
+  } catch {
+    return { ok: false, reason: "authorization_store_unavailable" };
   }
 }
