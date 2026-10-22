@@ -4,6 +4,19 @@
 **Périmètre :** ARIA iOS, depuis l’état actuel du projet jusqu’à une première version publique approuvée sur l’App Store.  
 **Statut :** plan d’exécution proposé — les jalons ne sont pas réputés accomplis tant que leurs critères de sortie n’ont pas été vérifiés.
 
+## Règle de gouvernance non négociable
+
+Cette feuille de route et le périmètre complet d’ARIA 1.0 constituent la référence de pilotage du projet jusqu’à la publication sur l’Apple App Store.
+
+- Aucune fonctionnalité prévue par le cahier des charges et ses compléments ne doit être supprimée, minimisée ou repoussée à une version publique ultérieure au seul motif de simplifier le lancement.
+- L’ordre des phases organise le développement interne ; il ne réduit pas le périmètre de la version publique 1.0.
+- Toute dépendance, difficulté technique, contrainte de plateforme, de sécurité, de droit ou de coût doit être documentée avec des options de résolution. Elle ne constitue pas une autorisation de changer silencieusement le périmètre.
+- Si une exigence s’avère impossible, dangereuse ou incompatible avec les règles applicables, suspendre la partie concernée, expliquer précisément le blocage et proposer une solution conforme qui préserve autant que possible l’objectif initial. Ne jamais prétendre qu’une fonction est livrée si elle ne l’est pas.
+- Toute proposition qui modifierait le périmètre, la cible ou l’ordre de priorité doit être présentée explicitement à Quentin et nécessite son accord avant modification de la feuille de route.
+- Les exigences de sécurité, les permissions explicites, la protection des données et les règles d’Apple ne peuvent pas être contournées pour respecter le calendrier. Il faut résoudre le blocage avant publication.
+
+**Critère de réussite final :** ARIA 1.0 n’est considérée comme prête que lorsque toutes les familles fonctionnelles du périmètre défini sont implémentées, testées et validées, et que la version est effectivement approuvée et disponible sur l’App Store.
+
 ## 1. Objectif de livraison
 
 Livrer une première application iPhone ARIA utile, stable, sécurisée et conforme, centrée sur une interaction vocale naturelle, un HUD discret, une mémoire contrôlée par l’utilisateur et un backend IA sécurisé. Cette version doit être un vrai produit iOS, pas seulement un site web emballé dans une coquille.
