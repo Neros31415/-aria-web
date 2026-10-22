@@ -203,6 +203,8 @@ test("returns a provider reply without enabling provider-side storage", async (t
   let providerRequest;
   t.mock.method(globalThis, "fetch", async (_url, options) => {
     providerRequest = JSON.parse(options.body);
+    assert.ok(options.signal instanceof AbortSignal, "provider request must have an abort signal");
+    assert.equal(options.signal.aborted, false);
     return new Response(JSON.stringify({
       model: "test-model",
       output: [{
