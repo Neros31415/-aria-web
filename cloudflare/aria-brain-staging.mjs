@@ -55,6 +55,7 @@ async function authenticateRequest(req, env) {
     if (!match) return { ok: false, status: 401, error: "unauthorized" };
 
     let response;
+    let user;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
     try {
@@ -67,22 +68,18 @@ async function authenticateRequest(req, env) {
         },
         signal: controller.signal
       });
+
+      // Keep the deadline active while reading the body too; a stalled body
+      // must not leave an authenticated request hanging indefinitely.
+      if (response.status === 401 || response.status === 403) {
+        return { ok: false, status: 401, error: "unauthorized" };
+      }
+      if (!response.ok) return { ok: false, status: 503, error: "auth_service_unavailable" };
+      user = await response.json();
     } catch {
       return { ok: false, status: 503, error: "auth_service_unavailable" };
     } finally {
       clearTimeout(timeout);
-    }
-
-    if (response.status === 401 || response.status === 403) {
-      return { ok: false, status: 401, error: "unauthorized" };
-    }
-    if (!response.ok) return { ok: false, status: 503, error: "auth_service_unavailable" };
-
-    let user;
-    try {
-      user = await response.json();
-    } catch {
-      return { ok: false, status: 503, error: "auth_service_unavailable" };
     }
 
     const isUuid = (value) =>
