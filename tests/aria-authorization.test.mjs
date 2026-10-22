@@ -93,7 +93,7 @@ test("gift-key permission cannot grant role-management privileges", () => {
 });
 
 test("invalid identity and permission fail closed", () => {
-  assert.equal(authorize({ identity: "alice", roleRecord: userRole, permission: "memory:own:read" }).reason, "invalid_principal");
+  assert.equal(authorize({ identity: "invalid identity!", roleRecord: userRole, permission: "memory:own:read" }).reason, "invalid_principal");
   assert.equal(authorize({ identity: alice, roleRecord: userRole, permission: "" }).reason, "invalid_principal");
 });
 
