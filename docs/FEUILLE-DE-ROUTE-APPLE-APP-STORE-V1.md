@@ -20,7 +20,7 @@ Livrer une première application iPhone ARIA utile, stable, sécurisée et confo
 - Mémoire des décisions, hypothèses, options et raisons.
 - Proactivité configurable, ordonnanceur opérationnel, notifications, périodes silencieuses, déduplication et désactivation.
 - Abstraction fournisseur IA, gestion des indisponibilités, quotas et coûts.
-- Profil professionnel, offres gratuites/premium, paiements et gestion des abonnements si retenus, avec parcours complets et conformes.
+- Profil professionnel, offres gratuites/premium, paiements et gestion complète des abonnements si une offre payante est proposée ; la gestion des droits, paiements, renouvellements, annulations, restaurations et états d’échec fait partie du périmètre de lancement.
 - Inscription newsletter facultative et désinscription.
 - Site web associé cohérent : HTTPS, API côté serveur, pages RGPD/CGU, cookies lorsque requis, SEO, métadonnées et support.
 - Modules de visualisation 3D et God’s Eye View prévus par le cahier des charges, avec données réelles/simulées clairement distinguées, provenance, limites, sécurité des échanges et transition immersive via le logo.
@@ -195,6 +195,31 @@ Privilégier une application iOS native SwiftUI pour une expérience robuste du 
 - Les échecs, incertitudes et indisponibilités sont signalés honnêtement.
 - Aucune action sensible ne s’exécute sans contrôle requis.
 
+### Phase 5B — Capacités avancées, compagnon PC et visualisations
+**Durée indicative :** 4 à 10 semaines, à ajuster après prototype et tests de faisabilité  
+**Priorité :** P0 — fait partie du périmètre de lancement
+
+**Travail**
+1. Implémenter l’état de tâche durable : objectif, plan, étape, dépendances, résultats vérifiés, prochaine action, permissions et reprise après interruption.
+2. Créer le registre des compétences versionnées avec schémas, permissions, tests reproductibles, revue, versionnement et rollback.
+3. Implémenter la mémoire des décisions en distinguant choix explicites, hypothèses, options et raisons, avec consultation et correction.
+4. Construire l’ordonnanceur de proactivité, les déclencheurs autorisés, les préférences de fréquence, les périodes silencieuses, la déduplication et l’arrêt immédiat.
+5. Construire l’abstraction fournisseur IA et vérifier le comportement en cas de timeout, quota, indisponibilité et changement d’adaptateur.
+6. Implémenter le compagnon PC : appairage, identité de l’appareil, chiffrement, permissions granulaires, liste des appareils, révocation et état de connexion.
+7. Exposer uniquement les commandes PC autorisées, avec confirmation pour les opérations sensibles et vérification indépendante du résultat.
+8. Implémenter les modules de visualisation 3D/God’s Eye View prévus, les contrats d’échange, la provenance des données, les unités, les états de chargement/erreur et la distinction visible entre données réelles, simulées et démonstrations.
+9. Intégrer la transition immersive via le logo comme navigation, avec annulation et retour accessible à l’interface principale.
+10. Tester les capacités sur les appareils cibles, les limites de performances, la consommation, les pertes réseau, les erreurs de données et les accès non autorisés.
+
+**Critères de sortie**
+- Les tâches peuvent être interrompues et reprises sans rejouer aveuglément une action incertaine.
+- Les compétences sont versionnées, testées, limitées par permissions et réversibles.
+- Les décisions sont consultables et ne transforment pas des inférences en faits explicitement décidés par l’utilisateur.
+- La proactivité respecte les autorisations, les plages silencieuses et les limites de fréquence.
+- Le compagnon PC ne permet aucun contrôle arbitraire ; l’appairage et la révocation ont passé leurs tests.
+- Les visualisations indiquent la provenance et le statut des données ; les échanges inter-modules sont validés.
+- Les fonctions prévues dans cette phase sont testées de bout en bout et disponibles dans le build candidat.
+
 ### Phase 6 — Conformité juridique, confidentialité et monétisation
 **Durée indicative :** 1 à 3 semaines, en parallèle des phases 3 à 5  
 **Priorité :** P0 avant soumission
@@ -209,7 +234,7 @@ Privilégier une application iOS native SwiftUI pour une expérience robuste du 
 7. Remplir les déclarations de confidentialité App Store Connect à partir des pratiques réelles et des SDK effectivement utilisés.
 8. Si les comptes sont créables dans l’app, intégrer la suppression du compte dans l’app.
 9. Si une connexion tierce est utilisée pour le compte principal, vérifier si les règles Apple imposent une option de connexion équivalente, notamment Sign in with Apple.
-10. Si des fonctionnalités numériques premium sont vendues dans l’application, définir le modèle de paiement et implémenter les achats intégrés Apple selon les règles applicables ; ne pas lancer un écran d’abonnement factice.
+10. Si une offre premium est proposée dans l’application, définir et implémenter le parcours de paiement conforme aux règles Apple applicables ; ne pas lancer un écran d’abonnement factice.
 11. Préparer les conditions d’abonnement, prix, renouvellement, annulation et restauration des achats si applicables.
 12. Vérifier droits sur le nom ARIA, le logo, les polices, les illustrations, les sons et toutes les ressources.
 
@@ -217,7 +242,7 @@ Privilégier une application iOS native SwiftUI pour une expérience robuste du 
 - Tous les liens légaux fonctionnent et reflètent les traitements réellement en place.
 - Déclarations de confidentialité cohérentes avec le code et les SDK.
 - Consentement, retrait, suppression et contact de support testés.
-- Parcours de paiement entièrement fonctionnel ou fonctionnalités payantes retirées de la version 1.0.
+- Si les offres payantes font partie du lancement, leur parcours de paiement est entièrement fonctionnel, testé et conforme ; sinon, les offres payantes ne doivent pas être annoncées dans la V1.0.
 
 ### Phase 7 — Tests internes et bêta TestFlight
 **Durée indicative :** 1 à 3 semaines  
@@ -514,7 +539,7 @@ Pour chaque outil, définir une fiche avec nom/version, description, schéma d�
 8. Ne pas réexécuter automatiquement une action non idempotente dont le résultat est incertain.
 9. Offrir une annulation ou un retour arrière lorsque la capacité le permet.
 
-**Version 1.0 :** limiter les outils aux capacités sûres nécessaires à la conversation et aux fonctions réellement implémentées. L’exécution générale d’actions système reste désactivée tant que sa surface de risque n’est pas auditée.
+**Exigence V1.0 :** implémenter l’ensemble des outils et boucles d’exécution prévus par le cahier des charges, avec un registre de capacités explicite, permissions minimales, confirmations adaptées au risque, sandboxing, journalisation minimisée et vérification du résultat. Le contrôle arbitraire non autorisé reste interdit ; cela ne justifie pas de repousser les fonctions d’exécution autorisées et spécifiées.
 
 ## A9. Continuité et reprise de tâches — obligatoire en V1.0
 
