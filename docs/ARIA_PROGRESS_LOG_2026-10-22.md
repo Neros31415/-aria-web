@@ -1,0 +1,1 @@
+2026-10-22 — Prototype mission-step selector added. Persistent storage, Worker API integration, and repository tests remain outstanding.
