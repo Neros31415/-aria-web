@@ -315,21 +315,32 @@ function openVisualization(title, note, requestedScene = "other") {
   $("visualizationTitle").textContent = title;
   $("coreStage").hidden = true;
   $("visualizationStage").hidden = false;
-  const sceneType = requestedScene === "globe" ? "globe" : "placeholder";
-  const hasInteractiveGlobe = window.AriaVisualization?.open({type:sceneType}) === true;
-  if (sceneType === "globe" && hasInteractiveGlobe) {
-    note = "Globe filaire 3D généré localement, sans données géographiques externes. Faites glisser pour le faire tourner.";
-  } else if (sceneType === "globe") {
+  const supportedScenes = ["globe", "map", "finance", "scientific_model"];
+  const sceneType = supportedScenes.includes(requestedScene) ? requestedScene : "placeholder";
+  const sceneStarted = window.AriaVisualization?.open({type:sceneType}) === true;
+  const sceneLabels = {
+    globe: {status:"GLOBE 3D ACTIF", source:"GÉNÉRÉ LOCALEMENT", description:"Globe WebGL manipulable, généré localement sans données géographiques réelles."},
+    map: {status:"CARTE CONNECTÉE", source:"OPENSTREETMAP / OSRM", description:"Carte interactive avec recherche de lieux et calcul d’itinéraires routiers. Les services externes peuvent être indisponibles."},
+    finance: {status:"GRAPHIQUE DE MARCHÉ", source:"TRADINGVIEW", description:"Graphique de marché externe avec sélection du symbole et de la période ; ce n’est pas un conseil financier."},
+    scientific_model: {status:"EXPLORATION SCIENTIFIQUE", source:"CATALOGUE NASA", description:"Recherche de médias scientifiques NASA. Les simulations physiques interactives restent à développer."}
+  };
+  if (sceneType === "globe" && !sceneStarted) {
     note = "WebGL n’est pas disponible dans ce navigateur. Le globe interactif ne peut pas être affiché ici.";
+  } else if (sceneType === "map") {
+    note = "Carte OpenStreetMap avec recherche géographique et itinéraires routiers OSRM. Les requêtes sont transmises à ces services externes ; aucune géolocalisation automatique n’est activée.";
+  } else if (sceneType === "finance") {
+    note = "Graphique de marché TradingView. Les données, délais et instruments dépendent du fournisseur et de la place ; ce module ne donne pas de conseil financier.";
+  } else if (sceneType === "scientific_model") {
+    note = "Exploration du catalogue public NASA. Les médias sont authentiques, mais ce module ne constitue pas encore un laboratoire de simulation scientifique.";
   }
   $("visualizationNote").textContent = note;
   $("logoTransition").hidden = false;
   $("logoTransition").dataset.phase = "enter";
   showContextWidgets(title, note);
-  if (hasInteractiveGlobe) {
-    $("contextStatus").textContent = "GLOBE 3D ACTIF";
-    $("sceneToolsDescription").textContent = "Glissez sur le globe pour le faire tourner. La sphère est générée localement et ne contient pas de données cartographiques.";
-    $("sceneSourceStatus").textContent = "GÉNÉRÉ LOCALEMENT";
+  if (sceneLabels[sceneType] && sceneStarted) {
+    $("contextStatus").textContent = sceneLabels[sceneType].status;
+    $("sceneToolsDescription").textContent = sceneLabels[sceneType].description;
+    $("sceneSourceStatus").textContent = sceneLabels[sceneType].source;
   } else if (sceneType === "globe") {
     $("contextStatus").textContent = "WEBGL INDISPONIBLE";
     $("sceneToolsDescription").textContent = "Le navigateur ne permet pas d’initialiser la scène WebGL.";
@@ -399,12 +410,13 @@ function applyIntentAction(result) {
   if (!result || typeof result !== "object") return;
   switch (result.action) {
     case "open_visualization": {
-      const scene = ["globe", "map", "engine", "scientific_model", "other"].includes(result.scene) ? result.scene : "other";
+      const scene = ["globe", "map", "finance", "engine", "scientific_model", "other"].includes(result.scene) ? result.scene : "other";
       const scenes = {
         globe: {title:"Globe 3D", note:"Globe filaire généré localement. Il ne contient pas de données géographiques réelles."},
-        map: {title:"Carte géographique", note:"La scène cartographique réelle n’est pas encore connectée. Aucune carte ni donnée géographique n’est simulée."},
+        map: {title:"Carte et itinéraires", note:"Chargement de la carte OpenStreetMap et des services de recherche et de routage."},
         engine: {title:"Mécanisme / moteur", note:"Le modèle 3D de mécanisme n’est pas encore connecté dans cette version."},
-        scientific_model: {title:"Modèle scientifique", note:"Le modèle scientifique interactif n’est pas encore connecté dans cette version."},
+        finance: {title:"Finance et marchés", note:"Chargement du graphique de marché externe."},
+        scientific_model: {title:"Exploration scientifique", note:"Chargement du catalogue public de médias scientifiques NASA."},
         other: {title:"Espace de visualisation", note:"La scène demandée n’est pas encore disponible. Je ne présente pas de données fictives comme réelles."}
       };
       const target = scenes[scene];
