@@ -320,8 +320,8 @@ function openVisualization(title, note, requestedScene = "other") {
   const sceneStarted = window.AriaVisualization?.open({type:sceneType}) === true;
   const sceneLabels = {
     globe: {status:"GLOBE 3D ACTIF", source:"GÉNÉRÉ LOCALEMENT", description:"Globe WebGL manipulable, généré localement sans données géographiques réelles."},
-    map: {status:"CARTE CONNECTÉE", source:"OPENSTREETMAP / OSRM", description:"Carte interactive avec recherche de lieux et calcul d’itinéraires routiers. Les services externes peuvent être indisponibles."},
-    finance: {status:"GRAPHIQUE DE MARCHÉ", source:"TRADINGVIEW", description:"Graphique de marché externe avec sélection du symbole et de la période ; ce n’est pas un conseil financier."},
+    map: {status:"CARTE EN CHARGEMENT", source:"OPENSTREETMAP / OSRM", description:"Carte interactive avec recherche de lieux et calcul d’itinéraires routiers. Les services externes peuvent être indisponibles."},
+    finance: {status:"GRAPHIQUE EN CHARGEMENT", source:"TRADINGVIEW", description:"Graphique de marché externe avec sélection du symbole et de la période ; ce n’est pas un conseil financier."},
     scientific_model: {status:"EXPLORATION SCIENTIFIQUE", source:"CATALOGUE NASA", description:"Recherche de médias scientifiques NASA. Les simulations physiques interactives restent à développer."}
   };
   if (sceneType === "globe" && !sceneStarted) {
