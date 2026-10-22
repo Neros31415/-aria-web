@@ -129,3 +129,23 @@ test("default role provisioning fails closed without transactional D1 batch", as
     identity: "account_user_01", env: { ARIA_AUTHZ_DB: { prepare() {} } }, now
   }), { ok: false, reason: "authorization_store_unavailable" });
 });
+
+
+test("D1 authorization supports trusted opaque IDs from the server-side session registry", async () => {
+  const identity = "account_user_01";
+  const db = d1Mock({ role: { userId: identity, role: "user", active: 1 } });
+  const result = await authorizeFromD1({
+    identity,
+    permission: "memory:own:read",
+    env: { ARIA_AUTHZ_DB: db }
+  });
+  assert.deepEqual(result, {
+    allowed: true,
+    reason: "allowed",
+    identity,
+    role: "user",
+    permission: "memory:own:read"
+  });
+  assert.ok(db.calls.length > 0);
+  assert.ok(db.calls.every(call => call.values[0] === identity));
+});
