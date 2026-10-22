@@ -221,7 +221,7 @@ test("map route guidance renders localized steps, distance, duration and a clear
   assert.match(visualEngine, /aria-route-steps/);
   assert.match(visualEngine, /const formatDistance =/);
   assert.match(visualEngine, /const formatDuration =/);
-  assert.match(visualEngine, /function maneuverText/);
+  assert.match(visualEngine, /const maneuverText =/);
   assert.match(visualEngine, /ITINÉRAIRE CALCULÉ/);
   assert.match(css, /aria-map-layout/);
   assert.match(css, /aria-route-panel/);
