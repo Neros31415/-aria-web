@@ -26,6 +26,80 @@ async function readLimitedBody(request, maxBytes) {
   return { text: new TextDecoder().decode(bytes) };
 }
 
+
+async function authenticateRequest(req, env) {
+  const authorization = req.headers.get("Authorization") || "";
+
+  if (env.ARIA_AUTH_MODE === "individual") {
+    if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) {
+      return { ok: false, status: 503, error: "auth_not_configured" };
+    }
+
+    let authEndpoint;
+    try {
+      authEndpoint = new URL("/auth/v1/user", env.SUPABASE_URL);
+      if (authEndpoint.protocol !== "https:") {
+        return { ok: false, status: 503, error: "auth_not_configured" };
+      }
+    } catch {
+      return { ok: false, status: 503, error: "auth_not_configured" };
+    }
+
+    const match = authorization.match(/^Bearer\\s+(.+)$/i);
+    if (!match) return { ok: false, status: 401, error: "unauthorized" };
+
+    let response;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    try {
+      response = await fetch(authEndpoint.toString(), {
+        method: "GET",
+        headers: {
+          "apikey": env.SUPABASE_ANON_KEY,
+          "Authorization": "Bearer " + match[1],
+          "Accept": "application/json"
+        },
+        signal: controller.signal
+      });
+    } catch {
+      return { ok: false, status: 503, error: "auth_service_unavailable" };
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      return { ok: false, status: 401, error: "unauthorized" };
+    }
+    if (!response.ok) return { ok: false, status: 503, error: "auth_service_unavailable" };
+
+    let user;
+    try {
+      user = await response.json();
+    } catch {
+      return { ok: false, status: 503, error: "auth_service_unavailable" };
+    }
+
+    const isUuid = (value) =>
+      typeof value === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+    if (!user || !isUuid(user.id)) {
+      return { ok: false, status: 401, error: "unauthorized" };
+    }
+
+    return { ok: true, mode: "individual", ownerId: user.id };
+  }
+
+  // Legacy alpha mode is retained only for existing staging tests/clients.
+  // Public multi-user distribution must use ARIA_AUTH_MODE=individual.
+  if (!env.ARIA_ACCESS_TOKEN) {
+    return { ok: false, status: 503, error: "service_not_configured" };
+  }
+  if (authorization !== "Bearer " + env.ARIA_ACCESS_TOKEN) {
+    return { ok: false, status: 401, error: "unauthorized" };
+  }
+  return { ok: true, mode: "legacy", ownerId: null };
+}
+
 export default {
   async fetch(req, env) {
     const origin = req.headers.get("Origin") || "";
@@ -54,7 +128,7 @@ export default {
       return json({
         status: "ok",
         service: "aria-api",
-        configured: Boolean(env.ARIA_ACCESS_TOKEN && env.OPENAI_API_KEY),
+        configured: Boolean(env.OPENAI_API_KEY && (env.ARIA_AUTH_MODE === "individual" ? env.SUPABASE_URL && env.SUPABASE_ANON_KEY : env.ARIA_ACCESS_TOKEN)),
         provider: "openai",
         model: "gpt-6-astra",
         persistentMemory: Boolean(env.ARIA_MEMORY)
@@ -63,10 +137,11 @@ export default {
     if (url.pathname !== "/chat" && url.pathname !== "/memory") return json({ error: "not_found" }, 404);
     if (url.pathname === "/chat" && req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
     if (url.pathname === "/memory" && !["GET", "PUT"].includes(req.method)) return json({ error: "method_not_allowed" }, 405);
-    if (!env.ARIA_ACCESS_TOKEN || !env.OPENAI_API_KEY) return json({ error: "service_not_configured" }, 503);
-    if ((req.headers.get("Authorization") || "") !== "Bearer " + env.ARIA_ACCESS_TOKEN) {
-      return json({ error: "unauthorized" }, 401);
-    }
+    if (!env.OPENAI_API_KEY) return json({ error: "service_not_configured" }, 503);
+    const auth = await authenticateRequest(req, env);
+    if (!auth.ok) return json({ error: auth.error }, auth.status);
+    const individualAuth = auth.mode === "individual";
+    const ownerId = auth.ownerId;
 
     const validClientId = (value) =>
       typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
@@ -89,10 +164,11 @@ export default {
         if (!body || typeof body !== "object" || Array.isArray(body)) {
           return json({ error: "invalid_memory_payload" }, 400);
         }
-        clientId = body.clientId;
+        if (!individualAuth) clientId = body.clientId;
       }
-      if (!validClientId(clientId)) return json({ error: "invalid_client_id" }, 400);
-      const key = "memory:v1:" + clientId;
+      if (!individualAuth && !validClientId(clientId)) return json({ error: "invalid_client_id" }, 400);
+      if (individualAuth && !ownerId) return json({ error: "unauthorized" }, 401);
+      const key = individualAuth ? "memory:v2:" + ownerId : "memory:v1:" + clientId;
       try {
         if (req.method === "GET") {
           const saved = await env.ARIA_MEMORY.get(key, "json");
@@ -158,14 +234,17 @@ export default {
     const incomingSystem = "";
     const conversation = messages.slice(-20);
     let memoryWriteStatus = "";
+    const memoryOwnerKey = individualAuth
+      ? (ownerId ? "memory:v2:" + ownerId : null)
+      : (validClientId(body.clientId) ? "memory:v1:" + body.clientId : null);
     const lastUserMessage = messages.filter((item) => item.role === "user").at(-1)?.content.trim() || "";
     const rememberMatch = lastUserMessage.match(/^(?:Aria[,\s]+)?(?:retiens(?:\s+bien)?\s+que|mémorise(?:\s+que)?|souviens-toi\s+que|n'oublie pas que)\s+(.+)$/i);
     if (rememberMatch) {
-      if (!env.ARIA_MEMORY || !validClientId(body.clientId)) {
+      if (!env.ARIA_MEMORY || !memoryOwnerKey) {
         memoryWriteStatus = "Échec : le stockage persistant n’est pas disponible. Ne prétends pas que l’information a été mémorisée.";
       } else {
         try {
-          const key = "memory:v1:" + body.clientId;
+          const key = memoryOwnerKey;
           const saved = await env.ARIA_MEMORY.get(key, "json");
           const memories = Array.isArray(saved) ? saved : [];
           const text = rememberMatch[1].trim().slice(0, 300);
@@ -188,10 +267,10 @@ export default {
       }
     }
 
-    let memoryContext = "Aucune mémoire persistante enregistrée pour cet appareil.";
-    if (env.ARIA_MEMORY && validClientId(body.clientId)) {
+    let memoryContext = "Aucune mémoire persistante enregistrée pour ce compte.";
+    if (env.ARIA_MEMORY && memoryOwnerKey) {
       try {
-        const saved = await env.ARIA_MEMORY.get("memory:v1:" + body.clientId, "json");
+        const saved = await env.ARIA_MEMORY.get(memoryOwnerKey, "json");
         if (Array.isArray(saved) && saved.length) {
           memoryContext = saved.map((item) => "- " + item.text).join("\n");
         }
