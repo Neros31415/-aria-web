@@ -8,7 +8,7 @@ Statut : intégration en cours, non fusionnée et non déployée.
 Relier les scènes contextuelles du HUD à des sources réelles plutôt que de présenter des écrans de démonstration comme des fonctionnalités opérationnelles. Cette livraison ne réduit pas le périmètre ARIA 1.0.
 
 ## Changements de cette branche
-- Carte : charge Leaflet et les tuiles OpenStreetMap ; permet une recherche de lieu via Nominatim ; permet de calculer un itinéraire routier via OSRM, avec distance/durée annoncées par le service.
+- Carte : charge Leaflet et les tuiles OpenStreetMap ; permet une recherche de lieu via Nominatim ; permet de calculer un itinéraire en voiture, à pied ou à vélo via des profils publics OSRM, avec distance/durée annoncées par le service et limitation du rythme des requêtes de géocodage.
 - Finance : intègre un graphique TradingView, avec symbole modifiable et périodes ; affiche une mise en garde claire qu'il ne s'agit pas d'un conseil financier.
 - Science : recherche et affiche des médias du catalogue public NASA ; donne accès à la source NASA et ne prétend pas que cela constitue une simulation scientifique.
 - HUD : les scènes sont ouvertes dans l'espace visuel contextuel existant ; styles responsives et commandes accessibles au clavier.
