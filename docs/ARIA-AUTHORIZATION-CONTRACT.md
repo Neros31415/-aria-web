@@ -92,3 +92,12 @@ Si l’identité, le registre de rôles, l’offre ou la politique ne peut pas �
 
 ## 7. Limite importante du stockage KV
 Le binding `ARIA_AUTHZ` est actuellement une interface de lecture testée, pas un registre déployé. Cloudflare KV étant éventuellement cohérent, il ne doit pas être retenu seul comme source d’autorité pour les changements de privilèges qui exigent une révocation immédiate. Avant d’activer les opérations administratives, choisir et valider un stockage autoritatif adapté (par exemple D1 avec contraintes et opérations transactionnelles, ou une base serveur équivalente), documenter la révocation, l’audit et la restauration, puis intégrer le dépôt aux routes. Le binding KV reste un adaptateur/prototype tant que cette décision n’est pas validée.
+
+
+## 8. D1 comme source autoritative envisagée
+Le dépôt contient désormais :
+- `migrations/0001_aria_authorization.sql` : tables séparées pour rôles, droits d’offre et journal d’audit.
+- `cloudflare/aria-authorization-d1.mjs` : adaptateur de lecture D1 en lecture seule, requêtes paramétrées et refus fermé si binding, rôle ou données manquent.
+- `tests/aria-authorization-d1.test.mjs` : tests unitaires de l’adaptateur.
+
+**Statut réel :** aucun projet Supabase n’est connecté et aucun D1 n’est encore créé/configuré pour ARIA. La migration est un artefact versionné, pas une migration appliquée. L’adaptateur n’est pas branché au Worker ni aux routes HTTP. Le choix D1 est une option d’architecture à valider sur l’environnement Cloudflare existant ; aucune permission privilégiée n’est active par ce seul ajout.
