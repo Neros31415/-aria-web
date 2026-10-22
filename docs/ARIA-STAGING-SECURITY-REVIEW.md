@@ -19,7 +19,7 @@ Une branche de correction séparée, `fix/staging-worker-input-security`, a ét�
 - lecture du corps HTTP en flux, interrompue dès que la limite de 96 000 octets est dépassée ;
 - tests Node.js pour les rejets de rôles et les limites de taille, y compris `PUT /memory`.
 
-**Validation actuelle :** les tests ont été écrits mais ne sont pas encore exécutés ; aucun run GitHub Actions n'est associé au dernier commit. Il ne faut donc pas qualifier ces correctifs de validés. Les constats ci-dessous décrivent le code de la branche d'intégration examinée ; ils ne signifient pas que les correctifs proposés sont déjà présents dans cette branche.
+**Validation actuelle :** 8 scénarios ciblés ont réussi dans un harnais JavaScript isolé utilisant des substituts HTTP : jeton absent, rôle `system`, longueur d'un message, taille cumulée, taille déclarée, corps chat réellement trop grand, corps mémoire réellement trop grand et payload mémoire `null`. Ce harnais n'est ni le runner Node.js du dépôt, ni GitHub Actions, ni le runtime Cloudflare. Le test officiel `node --test tests/aria-brain-staging.test.mjs` et l'intégration staging restent à exécuter ; aucun run GitHub Actions n'est associé au dernier commit. Ne pas présenter ces résultats ciblés comme une validation complète. Les constats ci-dessous décrivent le code de la branche d'intégration examinée ; ils ne signifient pas que les correctifs proposés sont déjà présents dans cette branche.
 
 Le blocage S0 d'authentification reste entier : le jeton partagé et le `clientId` contrôlé par le client ne fournissent ni identité vérifiée ni isolation mémoire entre utilisateurs. Aucun test ni déploiement de production n'a été effectué.
 
