@@ -543,6 +543,7 @@ test("session_kv mode derives identity only from a server-side hashed session re
   const keys = [];
   const sessionEnv = {
     ARIA_AUTH_MODE: "session_kv",
+    ARIA_AUTHZ_DB: authorizationDb(),
     OPENAI_API_KEY: "test-provider-key",
     ARIA_USERS: {
       async get(key) {
@@ -589,6 +590,7 @@ test("session_kv mode returns unavailable when the session registry throws", asy
     headers: { Authorization: "Bearer " + token }
   }), {
     ARIA_AUTH_MODE: "session_kv",
+    ARIA_AUTHZ_DB: authorizationDb(),
     OPENAI_API_KEY: "test-provider-key",
     ARIA_USERS: { async get() { throw new Error("simulated KV outage"); } }
   });
