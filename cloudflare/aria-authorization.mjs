@@ -5,8 +5,9 @@
  * server-side authentication/storage. Never construct these inputs from
  * request-body fields such as role, isAdmin, plan, or userId.
  *
- * This module is not yet wired to production routes or a persistent role
- * registry. Until that integration exists, privileged routes must remain closed.
+ * The D1-backed reader lives in aria-authorization-d1.mjs. Neither module is
+ * wired to HTTP routes yet; privileged routes must remain closed until the
+ * authoritative database is configured and route-level enforcement is tested.
  */
 
 export const ROLE_PERMISSIONS = Object.freeze({
