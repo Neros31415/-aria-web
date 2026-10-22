@@ -107,11 +107,14 @@ async function authenticateRequest(req, env) {
       const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(match[1]));
       const tokenHash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
       const ownerId = await env.ARIA_USERS.get("session:v1:" + tokenHash);
-      const isUuid = (value) =>
-        typeof value === "string" &&
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-      if (!isUuid(ownerId)) return { ok: false, status: 401, error: "unauthorized" };
-      return { ok: true, mode: "individual", ownerId };
+      // Existing alpha sessions use server-assigned opaque IDs, not necessarily
+      // UUIDs. Accept only the same bounded character set as the active Worker.
+      // D1 role authorization remains unavailable for these IDs until a verified
+      // account-identity migration maps them to canonical UUIDs.
+      if (typeof ownerId !== "string" || !/^[a-zA-Z0-9_-]{1,80}$/.test(ownerId)) {
+        return { ok: false, status: 401, error: "unauthorized" };
+      }
+      return { ok: true, mode: "individual", ownerId, identitySource: "session_kv" };
     } catch {
       return { ok: false, status: 503, error: "auth_storage_unavailable" };
     }
