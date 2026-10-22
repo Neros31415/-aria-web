@@ -121,7 +121,7 @@ export default {
     };
     if (allowedOrigins.has(origin)) {
       headers["Access-Control-Allow-Origin"] = origin;
-      headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, OPTIONS";
+      headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS";
       headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type";
     }
     const json = (data, status = 200) =>
