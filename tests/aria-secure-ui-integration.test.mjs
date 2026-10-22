@@ -81,7 +81,7 @@ test("map, finance and science scenes use real external sources and disclose the
   assert.match(visualEngine, /s\.tradingview\.com\/widgetembed/);
   assert.match(visualEngine, /images-api\.nasa\.gov\/search/);
   assert.match(visualEngine, /pas un conseil financier/);
-  assert.match(visualEngine, /ne constitue pas un laboratoire de simulation scientifique/i);
+  assert.match(visualEngine, /pas un simulateur scientifique/i);
   assert.match(visualEngine, /aucune géolocalisation automatique/i);
 });
 
