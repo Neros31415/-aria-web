@@ -211,3 +211,18 @@ test("finance scene provides a local manual portfolio tracker with explicit data
   assert.match(css, /aria-portfolio-summary/);
   assert.match(css, /aria-portfolio-form/);
 });
+
+
+test("map route guidance renders localized steps, distance, duration and a clear-route control", () => {
+  assert.match(visualEngine, /steps=true/);
+  assert.match(visualEngine, /Étapes du trajet/);
+  assert.match(visualEngine, /Effacer l’itinéraire/);
+  assert.match(visualEngine, /aria-route-summary/);
+  assert.match(visualEngine, /aria-route-steps/);
+  assert.match(visualEngine, /function formatDistance/);
+  assert.match(visualEngine, /function formatDuration/);
+  assert.match(visualEngine, /function maneuverText/);
+  assert.match(visualEngine, /ITINÉRAIRE CALCULÉ/);
+  assert.match(css, /aria-map-layout/);
+  assert.match(css, /aria-route-panel/);
+});
