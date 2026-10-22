@@ -126,8 +126,8 @@ async function authenticateRequest(req, env) {
       const ownerId = await env.ARIA_USERS.get("session:v1:" + tokenHash);
       // Existing alpha sessions use server-assigned opaque IDs, not necessarily
       // UUIDs. Accept only the same bounded character set as the active Worker.
-      // D1 role authorization remains unavailable for these IDs until a verified
-      // account-identity migration maps them to canonical UUIDs.
+      // The D1 authorization layer accepts these server-resolved opaque IDs.
+      // They remain scoped to the trusted session registry; never accept them from client input.
       if (typeof ownerId !== "string" || !/^[a-zA-Z0-9_-]{1,80}$/.test(ownerId)) {
         return { ok: false, status: 401, error: "unauthorized" };
       }
