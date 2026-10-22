@@ -322,9 +322,10 @@ Exemples d’améliorations post-lancement : optimisation de latence/coût, nouv
 | M2 | Voix/HUD fiable | P0 | M1, contrat API | Test iPhone réel |
 | M3 | Application iOS signée | P0 | M0–M2, macOS/Xcode | Build installé sur appareil |
 | M4 | Mémoire et suppression maîtrisées | P0 | M1, M3 | Tests de consentement et suppression |
-| M5 | Qualité des réponses acceptable | P1 | M1–M3 | Suite de scénarios validée |
-| M6 | Conformité et fiche terminées | P0 | Produit stabilisé | Checklist juridique/App Store |
-| M7 | Bêta TestFlight validée | P0 | M1–M6 | Rapport de bêta, aucun blocage critique |
+| M5 | Qualité des réponses et planification validées | P0 | M1–M4 | Suite de scénarios validée |
+| M5B | Tâches, compétences, proactivité, décisions, 3D et compagnon PC livrés | P0 | M1–M5 | Tests d’intégration, de sécurité et appareils cibles |
+| M6 | Conformité, offres et fiche terminées | P0 | M1–M5B | Checklist juridique/App Store et parcours commerciaux testés |
+| M7 | Bêta TestFlight validée sur le périmètre complet | P0 | M1–M6 | Rapport de bêta, aucun blocage critique |
 | M8 | App Store approuvé et publié | P0 | M7 | Fiche publique et installation vérifiée |
 
 ## 7. Règles de décision et conditions de lancement
