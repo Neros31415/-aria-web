@@ -12,6 +12,29 @@ const env = {
   }
 };
 
+
+function authorizationDb() {
+  return {
+    prepare(sql) {
+      return {
+        bind(...values) {
+          return {
+            async first() {
+              if (sql.includes("aria_user_roles")) {
+                return { userId: values[0], role: "user", active: 1 };
+              }
+              return null;
+            }
+          };
+        }
+      };
+    },
+    async batch() {
+      return [{ success: true }, { success: true }];
+    }
+  };
+}
+
 function request(body, extraHeaders = {}) {
   return new Request("https://aria-staging.test/chat", {
     method: "POST",
@@ -292,6 +315,7 @@ test("individual-auth mode fails closed when Supabase configuration is missing",
     body: JSON.stringify({ messages: [{ role: "user", content: "Bonjour" }] })
   }), {
     ARIA_AUTH_MODE: "individual",
+    ARIA_AUTHZ_DB: authorizationDb(),
     OPENAI_API_KEY: "test-provider-key",
     ARIA_MEMORY: env.ARIA_MEMORY
   });
@@ -321,6 +345,7 @@ test("individual-auth mode rejects a token that Supabase does not validate", asy
     body: JSON.stringify({ messages: [{ role: "user", content: "Bonjour" }] })
   }), {
     ARIA_AUTH_MODE: "individual",
+    ARIA_AUTHZ_DB: authorizationDb(),
     SUPABASE_URL: "https://project.supabase.co",
     SUPABASE_ANON_KEY: "test-anon-key",
     OPENAI_API_KEY: "test-provider-key",
@@ -338,6 +363,7 @@ test("individual-auth memory is isolated by the validated account, not clientId"
   const store = new Map();
   const memoryEnv = {
     ARIA_AUTH_MODE: "individual",
+    ARIA_AUTHZ_DB: authorizationDb(),
     SUPABASE_URL: "https://project.supabase.co",
     SUPABASE_ANON_KEY: "test-anon-key",
     OPENAI_API_KEY: "test-provider-key",
@@ -416,6 +442,7 @@ test("individual-auth mode fails closed when the auth service is unavailable", a
     body: JSON.stringify({ messages: [{ role: "user", content: "Bonjour" }] })
   }), {
     ARIA_AUTH_MODE: "individual",
+    ARIA_AUTHZ_DB: authorizationDb(),
     SUPABASE_URL: "https://project.supabase.co",
     SUPABASE_ANON_KEY: "test-anon-key",
     OPENAI_API_KEY: "test-provider-key",
@@ -448,6 +475,7 @@ test("individual-auth mode rejects a successful auth response without a valid us
     body: JSON.stringify({ messages: [{ role: "user", content: "Bonjour" }] })
   }), {
     ARIA_AUTH_MODE: "individual",
+    ARIA_AUTHZ_DB: authorizationDb(),
     SUPABASE_URL: "https://project.supabase.co",
     SUPABASE_ANON_KEY: "test-anon-key",
     OPENAI_API_KEY: "test-provider-key",
@@ -469,6 +497,7 @@ test("individual-auth DELETE removes only the authenticated account memory", asy
   ]);
   const memoryEnv = {
     ARIA_AUTH_MODE: "individual",
+    ARIA_AUTHZ_DB: authorizationDb(),
     SUPABASE_URL: "https://project.supabase.co",
     SUPABASE_ANON_KEY: "test-anon-key",
     OPENAI_API_KEY: "test-provider-key",
