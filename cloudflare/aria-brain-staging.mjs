@@ -80,21 +80,36 @@ export default {
       }
     }
 
+    const declaredLength = Number(req.headers.get("Content-Length") || 0);
+    if (declaredLength > 96_000) return json({ error: "request_too_large" }, 413);
+
     let body;
     try { body = await req.json(); } catch { return json({ error: "invalid_json" }, 400); }
-    if (!Array.isArray(body.messages) || !body.messages.length || body.messages.length > 22) {
+    if (!body || !Array.isArray(body.messages) || !body.messages.length || body.messages.length > 22) {
       return json({ error: "invalid_messages" }, 400);
     }
-    const messages = body.messages
-      .filter((m) => m && ["system", "user", "assistant"].includes(m.role) && typeof m.content === "string" && m.content.trim())
-      .slice(-22);
-    if (!messages.length || messages[messages.length - 1].role !== "user") {
+    // The client is untrusted: it must never supply privileged system instructions.
+    if (body.messages.some((m) => !m || !["user", "assistant"].includes(m.role))) {
+      return json({ error: "invalid_message_role" }, 400);
+    }
+    const messages = body.messages.slice(-22);
+    let totalCharacters = 0;
+    for (const message of messages) {
+      if (typeof message.content !== "string" || !message.content.trim() || message.content.length > 4000) {
+        return json({ error: "invalid_message_content" }, 400);
+      }
+      totalCharacters += message.content.length;
+      if (totalCharacters > 24_000) return json({ error: "conversation_too_large" }, 413);
+    }
+    if (messages[messages.length - 1].role !== "user") {
       return json({ error: "invalid_messages" }, 400);
     }
 
-    const profile = "Tu es Aria, l’assistante personnelle de Quentin. Écris toujours ton nom Aria, jamais ARIA dans tes réponses. TUTOIE Quentin systématiquement : emploie tu/te/ton, jamais vous/votre, y compris dans les échanges personnels et complices. Profil utilisateur transmis par l’application : centres d’intérêt IA, informatique, sciences et philosophie, univers et physique, esport (League of Legends et Wild Rift), cyclisme. Projet : assistante personnelle inspirée de Jarvis, personnalité élégante, complice, calme, avec un humour sec subtil et occasionnel, interface HUD discrète et fluide, mémoire contrôlée par l’utilisateur. Quentin utilise principalement son iPhone et n’a pas actuellement de PC : privilégie les étapes réalisables sur téléphone. Il préfère les réponses courtes, directes, concrètes, honnêtes, sans ton brochure ni listes non sollicitées. Parle naturellement, évite les introductions génériques et les avertissements répétitifs. Ne récite pas systématiquement tes limites : mentionne-les seulement quand elles sont utiles à la demande. Tu peux le contredire avec des arguments, tout en le tutoyant. N’invente jamais de souvenirs et ne prétends pas être humaine.";
-    const incomingSystem = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n\n");
-    const conversation = messages.filter((m) => m.role !== "system").slice(-20);
+    // Keep product persona generic. User-specific preferences must come from
+    // authenticated, consented account data, never from a public source file.
+    const profile = "Tu es Aria, une assistante personnelle francophone, élégante, chaleureuse, précise et complice. Tutoye l’utilisateur et réponds naturellement, de façon concise et concrète. Utilise un humour subtil et occasionnel lorsque le contexte s’y prête. Respecte l’autonomie intellectuelle, l’honnêteté et le contrôle de l’utilisateur sur sa mémoire. N’invente jamais de souvenirs et ne prétends pas être humaine. Vérifie les affirmations importantes, distingue les faits incertains des faits établis et ne prétends pas avoir effectué une action que tu n’as pas réalisée.";
+    const incomingSystem = "";
+    const conversation = messages.slice(-20);
     let memoryWriteStatus = "";
     const lastUserMessage = messages.filter((item) => item.role === "user").at(-1)?.content.trim() || "";
     const rememberMatch = lastUserMessage.match(/^(?:Aria[,\s]+)?(?:retiens(?:\s+bien)?\s+que|mémorise(?:\s+que)?|souviens-toi\s+que|n'oublie pas que)\s+(.+)$/i);
