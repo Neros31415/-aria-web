@@ -443,4 +443,6 @@ test("async visualization results are ignored after the user switches or closes 
   assert.match(visualEngine, /sceneId !== sceneEpoch \|\| !activeMap \|\| viewport\.dataset\.scene !== "map"/);
   assert.match(visualEngine, /if \(sceneId === sceneEpoch && viewport\.dataset\.scene === "finance"\)/);
   assert.match(visualEngine, /function close\(\) \{\s*sceneEpoch\+\+/);
+  assert.match(visualEngine, /script\.onerror = \(\) => \{ script\.remove\(\); reject\(/);
+  assert.match(visualEngine, /if \(sceneId === sceneEpoch && viewport\.dataset\.scene === "map"\) \{\s*status\.textContent = error\.message/);
 });
