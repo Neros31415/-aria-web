@@ -453,6 +453,11 @@
     viewport.dataset.scene = type;
     sceneRoot.hidden = true;
     canvas.hidden = true;
+    if (type !== "map") {
+      activeMap?.remove();
+      activeMap = null;
+      activeMapLayer = null;
+    }
     viewport.querySelectorAll(".visualization-rings,.visualization-center,.visualization-grid").forEach(node => { node.hidden = false; });
     if (type === "map") { void openMap(); return true; }
     if (type === "finance") { openFinance(); return true; }
