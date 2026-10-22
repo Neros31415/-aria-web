@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { authorizeFromD1 } from "../cloudflare/aria-authorization-d1.mjs";
+import { authorizeFromD1, ensureDefaultUserRole } from "../cloudflare/aria-authorization-d1.mjs";
 
 const alice = "123e4567-e89b-42d3-a456-426614174000";
 const bob = "223e4567-e89b-42d3-a456-426614174000";
@@ -84,7 +84,7 @@ test("D1 adapter denies access when binding is absent or the database fails", as
 test("invalid identity is rejected before database access", async () => {
   const db = d1Mock({ role: { userId: alice, role: "super_admin", active: 1 } });
   assert.deepEqual(await authorizeFromD1({
-    identity: "not-a-uuid", permission: "admin:roles:manage", env: { ARIA_AUTHZ_DB: db }, context: freshMfa
+    identity: "invalid identity!", permission: "admin:roles:manage", env: { ARIA_AUTHZ_DB: db }, context: freshMfa
   }), { allowed: false, reason: "invalid_principal" });
   assert.equal(db.calls.length, 0);
 });
@@ -98,4 +98,34 @@ test("D1 adapter denies a Premium entitlement before its start time", async () =
   assert.deepEqual(await authorizeFromD1({
     identity: alice, permission: "feature:premium:use", env: { ARIA_AUTHZ_DB: db }, context: { now }
   }), { allowed: false, reason: "entitlement_required" });
+});
+
+
+test("default role provisioning can create only a basic user and audit it atomically", async () => {
+  const calls = [];
+  const db = {
+    prepare(sql) {
+      return { sql, bind(...values) { return { sql, values }; } };
+    },
+    async batch(statements) {
+      calls.push(...statements);
+      return [{ success: true }, { success: true }];
+    }
+  };
+  const result = await ensureDefaultUserRole({ identity: "account_user_01", env: { ARIA_AUTHZ_DB: db }, now });
+  assert.deepEqual(result, { ok: true });
+  assert.equal(calls.length, 2);
+  assert.match(calls[0].sql, /INSERT OR IGNORE INTO aria_user_roles/);
+  assert.match(calls[0].sql, /VALUES \(\?, 'user', 1,/);
+  assert.deepEqual(calls[0].values, ["account_user_01", now, now, "account_user_01"]);
+  assert.match(calls[1].sql, /INSERT INTO aria_authorization_audit/);
+  assert.match(calls[1].sql, /WHERE changes\(\) = 1/);
+  assert.equal(calls[1].values[1], "account_user_01");
+  assert.equal(calls[1].values[2], "account_user_01");
+});
+
+test("default role provisioning fails closed without transactional D1 batch", async () => {
+  assert.deepEqual(await ensureDefaultUserRole({
+    identity: "account_user_01", env: { ARIA_AUTHZ_DB: { prepare() {} } }, now
+  }), { ok: false, reason: "authorization_store_unavailable" });
 });
