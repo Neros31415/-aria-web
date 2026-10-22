@@ -1,272 +1,829 @@
 const $ = (id) => document.getElementById(id);
-const STORAGE_MESSAGES = "aria.v07.messages";
-const STORAGE_MEMORY = "aria.v07.memory";
-const STORAGE_CLIENT_ID = "aria.v07.memoryClientId";
-const STORAGE_MIGRATED = "aria.v07.memoryMigrated";
-const SESSION_TOKEN = "aria.session.accessToken";
+const KEYS = {
+  messages: "aria.v07.messages",
+  memory: "aria.v07.memory",
+  profile: "aria.voice.profile.v1",
+  onboarded: "aria.voice.onboarded.v1",
+  reset: "aria.voice.reset.20261020",
+  clientId: "aria.voice.clientId.v1"
+};
 const API_BASE = "https://aria-brain-staging.quentineros-sevesi.workers.dev";
-const messagesEl = $("messages");
-const input = $("messageInput");
-let messages = safeRead(STORAGE_MESSAGES, []);
-let memories = normalizeMemories(safeRead(STORAGE_MEMORY, []));
-let isSending = false;
-let memoryMode = "local";
-let memorySyncing = false;
+const SESSION_TOKEN_KEY = "aria.voice.alphaToken";
+let conversation = [];
+let requestInFlight = false;
+let turnInProgress = false;
+let turnGeneration = 0;
+let activeChatController = null;
+function getClientId() {
+  let id = localStorage.getItem(KEYS.clientId);
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem(KEYS.clientId, id);
+  }
+  return id;
+}
+function getApiToken() {
+  return sessionStorage.getItem(SESSION_TOKEN_KEY) || "";
+}
+function setApiToken(value) {
+  const token = value.trim();
+  if (token) sessionStorage.setItem(SESSION_TOKEN_KEY, token);
+  else sessionStorage.removeItem(SESSION_TOKEN_KEY);
+}
+
+// The user explicitly requested a fresh personal start. Remove legacy ARIA
+// profile/history keys on this build's first launch; keep unrelated site data.
+let remoteResetPromise = Promise.resolve(false);
+if (!localStorage.getItem(KEYS.reset)) {
+  // Capture old profile credentials before clearing this device. The staging
+  // Worker supports authenticated DELETE; report failure instead of claiming success.
+  const oldClientId = localStorage.getItem("aria.v07.memoryClientId");
+  const oldToken = sessionStorage.getItem("aria.session.accessToken") || sessionStorage.getItem(SESSION_TOKEN_KEY);
+  if (oldClientId && oldToken) {
+    remoteResetPromise = fetch("https://aria-brain-staging.quentineros-sevesi.workers.dev/memory?clientId=" + encodeURIComponent(oldClientId), {
+      method: "DELETE",
+      headers: { "Authorization": "Bearer " + oldToken }
+    }).then(async response => {
+      if (!response.ok) return false;
+      try {
+        const result = await response.json();
+        return result.deleted === true && result.persisted === true;
+      } catch {
+        return false;
+      }
+    }).catch(() => false);
+  }
+  for (const key of Object.keys(localStorage)) {
+    // Keep only the old profile ID temporarily so a failed remote purge can be retried.
+    if (key.startsWith("aria.") && key !== "aria.v07.memoryClientId") localStorage.removeItem(key);
+  }
+  for (const key of Object.keys(sessionStorage)) {
+    // The old access token is retained only long enough to request deletion of the matching server record.
+    if (key.startsWith("aria.") && key !== "aria.session.accessToken") sessionStorage.removeItem(key);
+  }
+  localStorage.setItem(KEYS.reset, "done");
+}
+
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition = null;
+let listening = false;
+let speaking = false;
+let shouldResumeListening = false;
+let onboarding = false;
+let onboardingStep = 0;
+let profile = safeRead(KEYS.profile, {
+  proactivity: "balanced",
+  verbosity: "balanced",
+  humor: "balanced",
+  memoryConsent: false
+});
+let memories = safeRead(KEYS.memory, []);
+let transcriptVisible = false;
+let visualizationOpen = false;
+let transitionTimer = null;
 
 function safeRead(key, fallback) {
   try { const value = JSON.parse(localStorage.getItem(key)); return value ?? fallback; }
   catch { return fallback; }
 }
-function normalizeMemories(items) {
-  if (!Array.isArray(items)) return [];
-  return items.map((item) => {
-    if (typeof item === "string") return {id: crypto.randomUUID(), text: item.slice(0, 300), createdAt: Date.now()};
-    if (item && typeof item.text === "string") return {
-      id: typeof item.id === "string" ? item.id : crypto.randomUUID(),
-      text: item.text.slice(0, 300),
-      createdAt: Number.isFinite(item.createdAt) ? item.createdAt : Date.now()
-    };
-    return null;
-  }).filter((item) => item && item.text.trim()).slice(0, 100);
+function saveProfile() {
+  try { localStorage.setItem(KEYS.profile, JSON.stringify(profile)); }
+  catch { announceVisual("Le navigateur ne permet pas de sauvegarder les préférences."); }
 }
-function persist() {
-  try {
-    localStorage.setItem(STORAGE_MESSAGES, JSON.stringify(messages.slice(-50)));
-    localStorage.setItem(STORAGE_MEMORY, JSON.stringify(memories.slice(-100)));
-  } catch { setStatus("Stockage local indisponible"); }
+function setState(state, title, subtitle, spokenText = "") {
+  const root = $("coreStage");
+  root.dataset.state = state;
+  $("coreState").textContent = ({
+    presence: "PRÉSENTE",
+    listening: "À L'ÉCOUTE",
+    thinking: "JE RÉFLÉCHIS",
+    speaking: "JE VOUS RÉPONDS",
+    initiative: "JE PRENDS LA PAROLE",
+    attention: "VOTRE ATTENTION",
+    unavailable: "VOIX INDISPONIBLE"
+  })[state] || "PRÉSENTE";
+  $("sceneTitle").textContent = title || ({
+    presence: "Je suis là.",
+    listening: "Je vous écoute.",
+    thinking: "Laissez-moi un instant.",
+    speaking: "Je vous réponds.",
+    initiative: "Si je peux me permettre…",
+    attention: "Un point important.",
+    unavailable: "Je ne peux pas écouter ici."
+  })[state];
+  if (subtitle) $("sceneSubtitle").textContent = subtitle;
+  $("statusText").textContent = ({
+    presence: "PRÉSENCE",
+    listening: "ÉCOUTE",
+    thinking: "RÉFLEXION",
+    speaking: "PAROLE",
+    initiative: "INTERVENTION",
+    attention: "ATTENTION",
+    unavailable: "VOIX INDISPONIBLE"
+  })[state] || "PRÉSENCE";
+  $("statusDot").dataset.state = state;
+  if (spokenText) speak(spokenText, {resume: true});
 }
-function setStatus(text) { $("statusText").textContent = text; }
-function addMessage(role, text, save = true) {
-  const item = {role, text, time: Date.now()};
-  if (save) { messages.push(item); persist(); }
-  renderMessage(item);
+function announceVisual(text) {
+  $("voiceNote").textContent = text;
 }
-function renderMessage(item) {
-  const article = document.createElement("article");
-  article.className = "message " + (item.role === "user" ? "user-message" : "aria-message");
-  const avatar = document.createElement("div"); avatar.className = "avatar"; avatar.textContent = item.role === "user" ? "Q" : "A";
-  const bubble = document.createElement("div"); bubble.className = "bubble";
-  const label = document.createElement("div"); label.className = "message-label"; label.textContent = item.role === "user" ? "VOUS" : "ARIA";
-  const tag = document.createElement("span"); tag.textContent = item.role === "user" ? "MESSAGE" : "IA DISTANTE"; label.appendChild(tag);
-  const p = document.createElement("p"); p.textContent = item.text;
-  bubble.append(label, p); article.append(avatar, bubble); messagesEl.appendChild(article);
-  article.scrollIntoView({behavior:"smooth", block:"nearest"});
+function updateTranscript(text, role = "ARIA") {
+  $("transcriptText").textContent = role + " : " + text;
+  if (transcriptVisible) $("transcriptWidget").hidden = false;
 }
-function renderAllMessages() {
-  messagesEl.replaceChildren();
-  if (!messages.length) {
-    renderMessage({role:"assistant", text:"Bonjour. Je suis prête à tester le moteur IA distant. Configurez votre jeton d’accès dans les paramètres pour commencer."});
-  }
-  messages.forEach(renderMessage);
-}
-function getSessionToken() {
-  try { return sessionStorage.getItem(SESSION_TOKEN) || ""; } catch { return ""; }
-}
-function setSessionToken(value) {
-  try {
-    if (value) sessionStorage.setItem(SESSION_TOKEN, value);
-    else sessionStorage.removeItem(SESSION_TOKEN);
-    return true;
-  } catch { return false; }
-}
-function getClientId() {
-  try {
-    let id = localStorage.getItem(STORAGE_CLIENT_ID);
-    if (!id) {
-      id = crypto.randomUUID();
-      localStorage.setItem(STORAGE_CLIENT_ID, id);
-    }
-    return id;
-  } catch { return ""; }
-}
-async function memoryRequest(method) {
-  const token = getSessionToken();
-  const clientId = getClientId();
-  if (!token || !clientId) throw new Error("Jeton ou identifiant local indisponible.");
-  const response = await fetch(API_BASE + "/memory?clientId=" + encodeURIComponent(clientId), {
-    method,
-    headers: {"Authorization":"Bearer " + token, "Content-Type":"application/json"},
-    ...(method === "PUT" ? {body: JSON.stringify({clientId, memories})} : {})
-  });
-  let data;
-  try { data = await response.json(); } catch { throw new Error("Réponse mémoire illisible."); }
-  if (!response.ok) throw new Error(data.error || "Erreur mémoire (" + response.status + ").");
-  return data;
-}
-async function syncMemories() {
-  if (memorySyncing || !getSessionToken()) return;
-  memorySyncing = true;
-  try {
-    const data = await memoryRequest("GET");
-    const remote = normalizeMemories(data.memories);
-    // Never discard device-only notes merely because a previous sync was attempted.
-    // If the server is empty but this device has notes, seed the remote store from this device.
-    if (!remote.length && memories.length) {
-      const saved = await memoryRequest("PUT");
-      memories = normalizeMemories(saved.memories);
-    } else {
-      memories = remote;
-    }
-    localStorage.setItem(STORAGE_MIGRATED, "true");
-    memoryMode = "remote";
-    persist();
-    renderMemory();
-    setStatus("Connectée · mémoire persistante active");
-  } catch (error) {
-    memoryMode = "local";
-    renderMemory();
-    setStatus("Chat connecté · mémoire locale uniquement");
-    $("memoryStatus").textContent = "Serveur indisponible : notes conservées sur cet appareil. " + error.message;
-  } finally {
-    memorySyncing = false;
-  }
-}
-async function saveMemoriesToServer() {
-  if (!getSessionToken()) {
-    memoryMode = "local";
-    renderMemory();
+function speak(text, options = {}) {
+  if (options.resume === true && recognition) shouldResumeListening = true;
+  if (!("speechSynthesis" in window)) {
+    announceVisual("La synthèse vocale n'est pas disponible dans ce navigateur.");
+    speaking = false;
+    if (typeof options.onEnd === "function") options.onEnd();
     return;
   }
+  window.speechSynthesis.cancel();
+  speaking = true;
+  if (recognition && listening) {
+    shouldResumeListening = options.resume !== false;
+    try { recognition.stop(); } catch {}
+  }
+  setState(options.initiative ? "initiative" : "speaking", options.initiative ? "Si je peux me permettre…" : "Je vous réponds.", text);
+  updateTranscript(text, "ARIA");
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "fr-FR";
+  utterance.rate = 1;
+  const voices = window.speechSynthesis.getVoices();
+  utterance.voice = voices.find(v => v.lang.toLowerCase().startsWith("fr") && /female|amélie|audrey|marie|hortense/i.test(v.name)) ||
+    voices.find(v => v.lang.toLowerCase().startsWith("fr")) || null;
+  utterance.onend = () => {
+    speaking = false;
+    if (typeof options.onEnd === "function") {
+      options.onEnd();
+      return;
+    }
+    if (shouldResumeListening) {
+      shouldResumeListening = false;
+      window.setTimeout(startListening, 300);
+    } else setState("presence");
+  };
+  utterance.onerror = () => {
+    speaking = false;
+    if (typeof options.onEnd === "function") {
+      options.onEnd();
+      return;
+    }
+    if (shouldResumeListening) { shouldResumeListening = false; startListening(); }
+    else setState("presence");
+  };
+  window.speechSynthesis.speak(utterance);
+}
+function startListening() {
+  if (!recognition) {
+    announceVisual("La reconnaissance vocale n'est pas prise en charge par ce navigateur. Essayez Safari ou un navigateur compatible, ou utilisez les commandes système.");
+    setState("unavailable");
+    return;
+  }
+  if (listening || speaking) return;
+  shouldResumeListening = false;
   try {
-    const data = await memoryRequest("PUT");
-    memories = normalizeMemories(data.memories);
-    memoryMode = "remote";
-    persist();
-    renderMemory();
-    $("memoryStatus").textContent = "Enregistrée sur le serveur ARIA.";
+    recognition.start();
+    listening = true;
+    $("voiceStart").hidden = true;
+    $("voiceStop").hidden = false;
+    setState("listening", "Je vous écoute.", "Parlez naturellement. Vous pouvez m'interrompre à tout moment.");
+    announceVisual("Écoute active au premier plan. Le navigateur peut interrompre l'écoute en arrière-plan.");
   } catch (error) {
-    memoryMode = "local";
-    renderMemory();
-    $("memoryStatus").textContent = "Non synchronisée : " + error.message + " Les notes restent sur cet appareil.";
+    announceVisual("Impossible de démarrer l'écoute. Vérifiez l'autorisation du microphone et réessayez.");
   }
 }
-async function sendToAria(text) {
-  const token = getSessionToken();
+function stopListening() {
+  // Invalidate the current turn before aborting so an old response can never
+  // start speaking again after the user has paused or interrupted ARIA.
+  turnGeneration += 1;
+  turnInProgress = false;
+  shouldResumeListening = false;
+  listening = false;
+  if (activeChatController) {
+    activeChatController.abort();
+    activeChatController = null;
+  }
+  if (recognition) { try { recognition.stop(); } catch {} }
+  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  speaking = false;
+  setState("presence", "Je suis là.", "L'écoute est en pause. Vous pouvez la reprendre quand vous le souhaitez.");
+  $("voiceStart").hidden = false;
+  $("voiceStop").hidden = true;
+  $("voiceStart").textContent = "Reprendre l'écoute";
+}
+function openPanel(id) {
+  $(id).hidden = false;
+  if (id === "memoryPanel") {
+    renderMemory();
+    syncRemoteMemory();
+  }
+}
+async function syncRemoteMemory() {
+  const token = getApiToken();
   if (!token) {
-    setStatus("Jeton d’accès requis");
-    addMessage("assistant", "Pour protéger votre backend, aucun jeton n’est intégré au code public. Ouvrez les paramètres et saisissez votre jeton d’accès ARIA. Il restera uniquement dans la session de cet onglet.");
+    $("memoryStatus").textContent = "Mémoire locale affichée. Configurez le jeton alpha pour synchroniser la mémoire distante.";
     return;
   }
-  isSending = true;
-  const sendButton = $("chatForm").querySelector('button[type="submit"]');
-  sendButton.disabled = true;
-  setStatus("ARIA réfléchit…");
   try {
-    await syncMemories();
-    const response = await fetch(API_BASE + "/chat", {
-      method: "POST",
-      headers: {"Content-Type":"application/json", "Authorization":"Bearer " + token},
+    const response = await fetch(API_BASE + "/memory?clientId=" + encodeURIComponent(getClientId()), {
+      headers: { "Authorization": "Bearer " + token }
+    });
+    if (!response.ok) {
+      $("memoryStatus").textContent = response.status === 401
+        ? "Jeton refusé : la mémoire distante n'a pas été synchronisée."
+        : "Mémoire distante indisponible; les données affichées restent locales.";
+      return;
+    }
+    const data = await response.json();
+    if (!Array.isArray(data.memories)) throw new Error("invalid memory response");
+    memories = data.memories;
+    localStorage.setItem(KEYS.memory, JSON.stringify(memories));
+    renderMemory();
+    $("memoryStatus").textContent = "Mémoire synchronisée avec le serveur.";
+  } catch {
+    $("memoryStatus").textContent = "Synchronisation impossible. Les données affichées restent locales.";
+  }
+}
+async function saveRemoteMemory() {
+  const token = getApiToken();
+  if (!token) {
+    $("memoryStatus").textContent = "Modification locale enregistrée. La suppression distante n’est pas confirmée : configurez un jeton alpha pour synchroniser.";
+    return false;
+  }
+  try {
+    const response = await fetch(API_BASE + "/memory", {
+      method: "PUT",
+      headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
       body: JSON.stringify({
         clientId: getClientId(),
-        messages: messages.slice(-20).map(({role,text}) => ({role,content:text}))
+        memories: memories.map(item => typeof item === "string" ? {text:item} : item)
       })
     });
-    let data;
-    try { data = await response.json(); } catch { throw new Error("Réponse illisible du backend."); }
-    if (response.status === 401) {
-      setSessionToken("");
-      throw new Error("Jeton refusé. Il a été effacé de cette session ; vérifiez-le dans les paramètres.");
-    }
     if (!response.ok) {
-      const errors = {403:"Origine refusée par le backend.", 429:"Limite de requêtes atteinte.", 502:"Le fournisseur IA est temporairement indisponible.", 503:"Le backend ou le stockage mémoire n’est pas configuré."};
-      throw new Error(errors[response.status] || data.error || "Erreur backend (" + response.status + ").");
+      $("memoryStatus").textContent = response.status === 401
+        ? "Modification locale enregistrée. Jeton refusé : la modification distante n’est pas confirmée."
+        : "Modification locale enregistrée. Le serveur n’a pas confirmé la modification distante.";
+      return false;
     }
-    if (typeof data.reply !== "string" || !data.reply.trim()) throw new Error("Le backend n’a pas renvoyé de réponse.");
-    try {
-      const savedMemory = await memoryRequest("GET");
-      memories = normalizeMemories(savedMemory.memories);
-      memoryMode = "remote";
-      persist();
-      renderMemory();
-    } catch { /* A memory refresh failure must not discard a successful chat reply. */ }
-    addMessage("assistant", data.reply.trim());
-    setStatus("Connectée · " + (data.model || "IA distante") + (memoryMode === "remote" ? " · mémoire persistante" : ""));
-  } catch (error) {
-    addMessage("assistant", "Je n’ai pas pu répondre : " + (error && error.message ? error.message : "erreur réseau") + " Vérifiez la connexion et l’état du backend.");
-    if (error instanceof TypeError) setStatus("Backend inaccessible ou CORS");
-    else setStatus("Erreur de connexion");
-  } finally {
-    isSending = false;
-    sendButton.disabled = false;
-    input.focus();
+    const data = await response.json();
+    if (data.persisted !== true || !Array.isArray(data.memories)) {
+      $("memoryStatus").textContent = "Modification locale enregistrée. Réponse serveur insuffisante : la modification distante n’est pas confirmée.";
+      return false;
+    }
+    memories = data.memories;
+    localStorage.setItem(KEYS.memory, JSON.stringify(memories));
+    renderMemory();
+    $("memoryStatus").textContent = "Mémoire distante mise à jour et confirmée par le serveur.";
+    return true;
+  } catch {
+    $("memoryStatus").textContent = "Modification locale enregistrée. La synchronisation distante a échoué; l’état serveur reste incertain.";
+    return false;
   }
 }
-$("chatForm").addEventListener("submit", (event) => {
-  event.preventDefault();
-  const text = input.value.trim();
-  if (!text || isSending) return;
-  addMessage("user", text);
-  input.value = ""; resizeInput(); $("charCount").textContent = "0/2000";
-  void sendToAria(text);
-});
-input.addEventListener("input", () => {
-  resizeInput(); $("charCount").textContent = `${input.value.length}/2000`;
-});
-input.addEventListener("keydown", (event) => {
-  if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); $("chatForm").requestSubmit(); }
-});
-function resizeInput() { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 140) + "px"; }
-$("clearBtn").addEventListener("click", () => {
-  if (!confirm("Effacer l’historique local de conversation ?")) return;
-  messages = []; persist(); renderAllMessages();
-});
+function closePanel(id) { $(id).hidden = true; }
 function renderMemory() {
-  const list = $("memoryList"); list.replaceChildren();
-  memories.forEach((memory, index) => {
+  const list = $("memoryList");
+  list.replaceChildren();
+  memories.forEach((item) => {
     const li = document.createElement("li");
-    const span = document.createElement("span"); span.textContent = memory.text;
-    const remove = document.createElement("button"); remove.type = "button"; remove.textContent = "×"; remove.setAttribute("aria-label", "Supprimer cette note");
+    const span = document.createElement("span");
+    span.textContent = typeof item === "string" ? item : item.text;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.textContent = "×";
+    remove.setAttribute("aria-label", "Supprimer ce souvenir");
     remove.addEventListener("click", () => {
-      memories.splice(index, 1); persist(); renderMemory(); void saveMemoriesToServer();
+      memories = memories.filter(entry => entry !== item);
+      localStorage.setItem(KEYS.memory, JSON.stringify(memories));
+      renderMemory();
+      saveRemoteMemory();
     });
-    li.append(span, remove); list.appendChild(li);
+    li.append(span, remove);
+    list.appendChild(li);
   });
   if (!memories.length) {
-    const li = document.createElement("li"); li.textContent = "Aucune note enregistrée."; li.style.color = "#66778e"; list.appendChild(li);
+    const li = document.createElement("li");
+    li.textContent = "Mémoire personnelle vierge.";
+    list.appendChild(li);
   }
-  const status = $("memoryStatus");
-  if (status) status.textContent = memoryMode === "remote"
-    ? "Synchronisée avec le serveur ARIA."
-    : "Stockée sur cet appareil uniquement. Configurez le jeton pour synchroniser.";
 }
-$("memoryForm").addEventListener("submit", (event) => {
-  event.preventDefault();
-  const value = $("memoryInput").value.trim();
-  if (!value) return;
-  memories.push({id: crypto.randomUUID(), text: value.slice(0, 300), createdAt: Date.now()});
-  memories = memories.slice(-100);
-  persist(); $("memoryInput").value = ""; renderMemory(); void saveMemoriesToServer();
+function openVisualization(title, note, requestedScene = "other") {
+  if (transitionTimer) window.clearTimeout(transitionTimer);
+  visualizationOpen = true;
+  $("visualizationTitle").textContent = title;
+  $("coreStage").hidden = true;
+  $("visualizationStage").hidden = false;
+  const supportedScenes = ["globe", "map", "finance", "scientific_model"];
+  const sceneType = supportedScenes.includes(requestedScene) ? requestedScene : "placeholder";
+  const sceneStarted = window.AriaVisualization?.open({type:sceneType}) === true;
+  const sceneLabels = {
+    globe: {status:"GLOBE 3D ACTIF", source:"GÉNÉRÉ LOCALEMENT", description:"Globe WebGL manipulable, généré localement sans données géographiques réelles."},
+    map: {status:"CARTE EN CHARGEMENT", source:"OPENSTREETMAP / OSRM", description:"Carte interactive avec recherche de lieux et calcul d’itinéraires routiers. Les services externes peuvent être indisponibles."},
+    finance: {status:"GRAPHIQUE EN CHARGEMENT", source:"TRADINGVIEW", description:"Graphique de marché externe avec sélection du symbole et de la période ; ce n’est pas un conseil financier."},
+    scientific_model: {status:"EXPLORATION SCIENTIFIQUE", source:"CATALOGUE NASA", description:"Recherche de médias scientifiques NASA. Les simulations physiques interactives restent à développer."}
+  };
+  if (sceneType === "globe" && !sceneStarted) {
+    note = "WebGL n’est pas disponible dans ce navigateur. Le globe interactif ne peut pas être affiché ici.";
+  } else if (sceneType === "map") {
+    note = "Carte OpenStreetMap avec recherche géographique et itinéraires routiers OSRM. Les requêtes sont transmises à ces services externes ; aucune géolocalisation automatique n’est activée.";
+  } else if (sceneType === "finance") {
+    note = "Graphique de marché TradingView. Les données, délais et instruments dépendent du fournisseur et de la place ; ce module ne donne pas de conseil financier.";
+  } else if (sceneType === "scientific_model") {
+    note = "Exploration du catalogue public NASA. Les médias sont authentiques, mais ce module ne constitue pas encore un laboratoire de simulation scientifique.";
+  }
+  $("visualizationNote").textContent = note;
+  $("logoTransition").hidden = false;
+  $("logoTransition").dataset.phase = "enter";
+  showContextWidgets(title, note);
+  if (sceneLabels[sceneType] && sceneStarted) {
+    $("contextStatus").textContent = sceneLabels[sceneType].status;
+    $("sceneToolsDescription").textContent = sceneLabels[sceneType].description;
+    $("sceneSourceStatus").textContent = sceneLabels[sceneType].source;
+  } else if (sceneType === "globe") {
+    $("contextStatus").textContent = "WEBGL INDISPONIBLE";
+    $("sceneToolsDescription").textContent = "Le navigateur ne permet pas d’initialiser la scène WebGL.";
+    $("sceneSourceStatus").textContent = "NON DISPONIBLE";
+  }
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  transitionTimer = window.setTimeout(() => {
+    $("logoTransition").hidden = true;
+    $("logoTransition").removeAttribute("data-phase");
+    transitionTimer = null;
+  }, reducedMotion ? 40 : 850);
+}
+function closeVisualization() {
+  if (!visualizationOpen) {
+    hideContextWidgets();
+    return;
+  }
+  if (transitionTimer) window.clearTimeout(transitionTimer);
+  window.AriaVisualization?.close();
+  $("logoTransition").hidden = false;
+  $("logoTransition").dataset.phase = "return";
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  transitionTimer = window.setTimeout(() => {
+    visualizationOpen = false;
+    $("visualizationStage").hidden = true;
+    $("coreStage").hidden = false;
+    $("logoTransition").hidden = true;
+    $("logoTransition").removeAttribute("data-phase");
+    hideContextWidgets();
+    setState("presence", "Je suis là.", "De retour dans notre espace principal.");
+    transitionTimer = null;
+  }, reducedMotion ? 40 : 850);
+}
+function showContextWidgets(title, description) {
+  $("contextTitle").textContent = title;
+  $("contextDescription").textContent = description;
+  $("contextStatus").textContent = "APERÇU DE L’INTERFACE";
+  $("sceneToolsDescription").textContent = "Le HUD contextuel est actif. La scène 3D connectée reste à intégrer.";
+  $("sceneSourceStatus").textContent = "AUCUNE DONNÉE EXTERNE";
+  $("contextWidget").hidden = false;
+  $("sceneToolsWidget").hidden = false;
+}
+function hideContextWidgets() {
+  $("contextWidget").hidden = true;
+  $("sceneToolsWidget").hidden = true;
+}
+function localDemoReply(text) {
+  const lower = text.toLocaleLowerCase("fr").trim();
+  // Offline shortcuts are limited to explicit interface controls. General
+  // requests and memory instructions go through the model's intent analysis.
+  if (/^(ouvre|affiche|montre|consulte)\s+(ma\s+)?(mémoire|souvenirs)$/i.test(lower) ||
+      /^(ouvre|affiche|montre)\s+(le\s+)?panneau mémoire$/i.test(lower)) {
+    openPanel("memoryPanel");
+    return {text: memories.length ? "Votre panneau mémoire est ouvert. Les souvenirs affichés sont ceux de votre espace personnel." : "Votre panneau mémoire est ouvert et votre mémoire personnelle est vierge.", action:"none", scene:"none"};
+  }
+  if (/^(ferme|masque|cache)\s+(les\s+)?widgets( contextuels)?$/i.test(lower)) {
+    hideContextWidgets();
+    return {text:"Les widgets contextuels sont fermés.", action:"none", scene:"none"};
+  }
+  if (/^(retour à aria|retourne à aria|reviens à aria|ferme la visualisation|retour à l'accueil)$/i.test(lower)) {
+    closeVisualization();
+    return {text:"Je vous ramène à notre espace principal.", action:"none", scene:"none"};
+  }
+  return null;
+}
+function applyIntentAction(result) {
+  if (!result || typeof result !== "object") return;
+  switch (result.action) {
+    case "open_visualization": {
+      const scene = ["globe", "map", "finance", "engine", "scientific_model", "other"].includes(result.scene) ? result.scene : "other";
+      const scenes = {
+        globe: {title:"Globe 3D", note:"Globe filaire généré localement. Il ne contient pas de données géographiques réelles."},
+        map: {title:"Carte et itinéraires", note:"Chargement de la carte OpenStreetMap et des services de recherche et de routage."},
+        engine: {title:"Mécanisme / moteur", note:"Le modèle 3D de mécanisme n’est pas encore connecté dans cette version."},
+        finance: {title:"Finance et marchés", note:"Chargement du graphique de marché externe."},
+        scientific_model: {title:"Exploration scientifique", note:"Chargement du catalogue public de médias scientifiques NASA."},
+        other: {title:"Espace de visualisation", note:"La scène demandée n’est pas encore disponible. Je ne présente pas de données fictives comme réelles."}
+      };
+      const target = scenes[scene];
+      openVisualization(target.title, target.note, scene);
+      break;
+    }
+    case "close_visualization":
+      closeVisualization();
+      break;
+    case "open_memory":
+      openPanel("memoryPanel");
+      break;
+    case "close_widgets":
+      hideContextWidgets();
+      break;
+  }
+}
+async function requestAriaReply(text) {
+  const token = getApiToken();
+  if (!token) {
+    $("settingsDialog").showModal();
+    announceVisual("Le moteur distant n'est pas encore connecté. Saisissez votre jeton d'accès alpha dans les paramètres.");
+    return "Je suis prête, mais il me manque le jeton d'accès alpha pour joindre mon moteur conversationnel. Ouvrons les paramètres pour le configurer.";
+  }
+  if (requestInFlight) return "Je termine déjà votre demande précédente. Un instant, s'il vous plaît.";
+  requestInFlight = true;
+  try {
+    conversation.push({role:"user", content:text});
+    const payload = {
+      clientId: getClientId(),
+      memoryConsent: profile.memoryConsent === true,
+      preferences: {
+        proactivity: profile.proactivity,
+        verbosity: profile.verbosity,
+        humor: profile.humor
+      },
+      messages: conversation.slice(-20)
+    };
+    activeChatController = new AbortController();
+    const response = await fetch(API_BASE + "/chat", {
+      method:"POST",
+      headers: {
+        "Authorization":"Bearer " + token,
+        "Content-Type":"application/json"
+      },
+      body:JSON.stringify(payload),
+      signal:activeChatController.signal
+    });
+    let data = {};
+    try { data = await response.json(); } catch {}
+    if (response.status === 401) {
+      sessionStorage.removeItem(SESSION_TOKEN_KEY);
+      conversation.pop();
+      $("settingsDialog").showModal();
+      announceVisual("Le jeton d'accès a été refusé. Vérifiez-le ou demandez-en un nouveau à l'administrateur.");
+      return "Le serveur a refusé le jeton d'accès. Je l'ai retiré de cette session. Vérifiez-le dans les paramètres.";
+    }
+    if (!response.ok || typeof data.reply !== "string" || !data.reply.trim()) {
+      conversation.pop();
+      const reason = data.error === "provider_unavailable" ? "Le fournisseur IA ne répond pas pour le moment."
+        : data.error === "provider_error" ? "Le fournisseur IA a renvoyé une erreur."
+        : data.error === "service_not_configured" ? "Le moteur distant n'est pas entièrement configuré."
+        : "La connexion au moteur distant a échoué.";
+      announceVisual(reason + " Votre demande n'a pas été confirmée comme exécutée.");
+      return reason + " Je n'ai donc pas de réponse fiable à vous donner pour l'instant.";
+    }
+    conversation.push({role:"assistant",content:data.reply});
+    conversation = conversation.slice(-20);
+    const allowedActions = ["none", "open_visualization", "close_visualization", "open_memory", "close_widgets"];
+    const allowedScenes = ["none", "globe", "map", "engine", "scientific_model", "other"];
+    return {
+      text: data.reply,
+      action: allowedActions.includes(data.action) ? data.action : "none",
+      scene: allowedScenes.includes(data.scene) ? data.scene : "none"
+    };
+  } catch (error) {
+    conversation.pop();
+    if (error?.name === "AbortError") {
+      return "";
+    }
+    announceVisual("Impossible de joindre le moteur distant. Vérifiez votre connexion réseau.");
+    return "Je n'arrive pas à joindre mon moteur conversationnel. Vérifiez votre connexion, puis réessayez.";
+  } finally {
+    requestInFlight = false;
+    activeChatController = null;
+  }
+}
+async function handleUtterance(text) {
+  const utterance = text.trim();
+  if (!utterance) return;
+  // Ignore duplicate/interim finals while a turn is being processed.
+  if (!onboarding && (turnInProgress || requestInFlight || speaking)) return;
+  updateTranscript(utterance, "VOUS");
+  setState("thinking", "Je réfléchis.", "Je traite votre demande.");
+  if (onboarding) {
+    await handleOnboardingAnswer(utterance);
+    return;
+  }
+
+  turnInProgress = true;
+  const thisTurn = ++turnGeneration;
+  try {
+    const local = localDemoReply(utterance);
+    const result = local || await requestAriaReply(utterance);
+    const reply = typeof result === "string" ? result : (result?.text || result?.reply || "");
+    // The user may have paused or interrupted while the network request ran.
+    if (thisTurn !== turnGeneration || !reply) return;
+    if (typeof result === "object") applyIntentAction(result);
+    window.setTimeout(() => {
+      if (thisTurn !== turnGeneration) return;
+      speak(reply, {
+        resume: true,
+        onEnd: () => {
+          if (thisTurn !== turnGeneration) return;
+          turnInProgress = false;
+          shouldResumeListening = false;
+          if (!$("voiceStop").hidden) window.setTimeout(startListening, 300);
+          else setState("presence");
+        }
+      });
+    }, 100);
+  } catch (error) {
+    if (thisTurn === turnGeneration) {
+      turnInProgress = false;
+      announceVisual("Une erreur inattendue a interrompu cette réponse. Vous pouvez réessayer.");
+      setState("unavailable");
+    }
+  }
+}
+const onboardingQuestions = [
+  {key:"proactivity", prompt:"Pour commencer, préférez-vous que je sois discrète, que je vous signale parfois les choses utiles, ou que je prenne davantage l'initiative ?"},
+  {key:"verbosity", prompt:"Et pour mes réponses : plutôt courtes, équilibrées, ou détaillées quand le sujet le mérite ?"},
+  {key:"humor", prompt:"Concernant l'humour, préférez-vous quelque chose de discret, naturel, ou plus fréquent ?"},
+  {key:"memoryConsent", prompt:"Dernière question : souhaitez-vous que je puisse vous proposer de mémoriser certaines informations, en vous laissant toujours le contrôle ?"}
+];
+function normalizeChoice(text, choices) {
+  const value = text.toLocaleLowerCase("fr");
+  for (const [key, terms] of Object.entries(choices)) if (terms.some(term => value.includes(term))) return key;
+  return null;
+}
+async function handleOnboardingAnswer(text) {
+  const q = onboardingQuestions[onboardingStep];
+  if (!q) return finishOnboarding();
+
+  // A skipped question must not silently grant a permission or overwrite a preference.
+  if (/^(passer|je passe|skip|je ne sais pas|je préfère ne pas répondre)$/i.test(text.trim())) {
+    if (q.key === "memoryConsent") profile.memoryConsent = false;
+    saveProfile();
+    onboardingStep += 1;
+    if (onboardingStep < onboardingQuestions.length) {
+      speak(onboardingQuestions[onboardingStep].prompt, {resume:true});
+    } else finishOnboarding();
+    return;
+  }
+
+  if (q.key === "proactivity") {
+    const choice = normalizeChoice(text, {
+      discrete:["discrète","discret","seulement si","uniquement si"],
+      balanced:["équilibrée","équilibré","parfois","de temps en temps"],
+      proactive:["proactive","initiative","spontanément","souvent"]
+    });
+    if (!choice) return speak("Je n'ai pas bien compris. Vous pouvez choisir discrète, équilibrée, proactive, ou dire « passer ».", {resume:true});
+    profile.proactivity = choice;
+  }
+  if (q.key === "verbosity") {
+    const choice = normalizeChoice(text, {
+      short:["courte","court","bref","brève"],
+      balanced:["équilibrée","équilibré","normal"],
+      detailed:["détaillée","détaillé","longue","long"]
+    });
+    if (!choice) return speak("Vous préférez des réponses courtes, équilibrées ou détaillées ? Vous pouvez aussi dire « passer ».", {resume:true});
+    profile.verbosity = choice;
+  }
+  if (q.key === "humor") {
+    const choice = normalizeChoice(text, {
+      low:["discret","discrète","peu"],
+      balanced:["naturel","naturelle","équilibré"],
+      high:["fréquent","souvent","beaucoup"]
+    });
+    if (!choice) return speak("Vous préférez un humour discret, naturel ou fréquent ? Vous pouvez aussi dire « passer ».", {resume:true});
+    profile.humor = choice;
+  }
+  if (q.key === "memoryConsent") {
+    const answer = text.toLocaleLowerCase("fr").trim();
+    const affirmative = /^(oui|oui bien sûr|d'accord|je veux bien|tu peux|vous pouvez|autorise|j'accepte|accepte|volontiers)([.! ]|$)/i.test(answer);
+    const negative = /^(non|non merci|pas maintenant|je refuse|je préfère pas|je ne veux pas|n'enregistre rien)([.! ]|$)/i.test(answer);
+    if (!affirmative && !negative) {
+      return speak("Je veux être certaine de respecter votre choix. Souhaitez-vous autoriser la mémoire : oui ou non ? Vous pouvez aussi dire « passer »; dans ce cas, elle restera désactivée.", {resume:true});
+    }
+    profile.memoryConsent = affirmative;
+  }
+  saveProfile();
+  onboardingStep += 1;
+  if (onboardingStep < onboardingQuestions.length) {
+    speak(onboardingQuestions[onboardingStep].prompt, {resume:true});
+  } else {
+    finishOnboarding();
+  }
+}
+function beginOnboarding() {
+  onboarding = true;
+  onboardingStep = 0;
+  $("onboardingDialog").close();
+  speak("Bonjour. Je suis Aria. Je suis conçue pour vous aider à réfléchir, découvrir, organiser et accomplir des tâches. Nous allons régler ensemble la manière dont je vous parle, le degré d'initiative que vous souhaitez me laisser et la façon dont je peux utiliser la mémoire. Vous pourrez modifier ces choix plus tard. Commençons.", {
+    resume: true,
+    onEnd: () => speak(onboardingQuestions[0].prompt, {resume:true})
+  });
+}
+function finishOnboarding() {
+  onboarding = false;
+  saveProfile();
+  localStorage.setItem(KEYS.onboarded, "done");
+  speak("Parfait. Vous pourrez modifier ces préférences à tout moment. Je vais maintenant vous expliquer les états de mon orbe.", {
+    resume: false,
+    onEnd: () => {
+      const states = [
+        ["presence","Quand je suis calme, je suis présente et disponible."],
+        ["listening","Quand l'orbe s'anime doucement, je vous écoute."],
+        ["thinking","Quand sa lumière se concentre, je réfléchis à votre demande."],
+        ["speaking","Quand elle pulse avec ma voix, je vous réponds."],
+        ["initiative","Quand l'animation change avant que vous me sollicitiez, c'est que je prends la parole pour signaler un point pertinent."]
+      ];
+      let i = 0;
+      const next = () => {
+        if (i >= states.length) {
+          speak("Voilà pour mes états essentiels. Je vous laisse découvrir la suite. Vous pouvez me parler naturellement.", {resume:true});
+          return;
+        }
+        const [state, text] = states[i++];
+        setState(state);
+        speak(text, {resume:false, onEnd: next});
+      };
+      next();
+    }
+  });
+}
+function finishSetupIfReturning() {
+  if (!localStorage.getItem(KEYS.onboarded)) {
+    $("onboardingDialog").showModal();
+  } else {
+    setState("presence");
+    $("voiceStart").textContent = "Commencer à parler";
+  }
+}
+function saveSettingsFromDialog() {
+  setApiToken($("apiTokenSetting").value);
+  profile.proactivity = $("proactivitySetting").value;
+  profile.verbosity = $("verbositySetting").value;
+  profile.humor = $("humorSetting").value;
+  profile.memoryConsent = $("memoryConsentSetting").checked;
+  saveProfile();
+  $("settingsDialog").close();
+  speak(getApiToken() ? "Vos préférences sont enregistrées. Le jeton alpha est disponible pour cette session." : "Vos préférences sont enregistrées. Le moteur distant restera indisponible tant que le jeton alpha n'est pas configuré.", {resume:true});
+}
+function updateClock() {
+  $("clockLabel").textContent = new Date().toLocaleTimeString("fr-FR", {hour:"2-digit",minute:"2-digit"});
+}
+if (SpeechRecognition) {
+  recognition = new SpeechRecognition();
+  recognition.lang = "fr-FR";
+  recognition.continuous = true;
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+  recognition.onresult = (event) => {
+    if (speaking || requestInFlight || turnInProgress) return;
+    const result = event.results[event.results.length - 1];
+    if (result.isFinal && result[0]?.transcript) handleUtterance(result[0].transcript);
+  };
+  recognition.onerror = (event) => {
+    listening = false;
+    const messages = {
+      "not-allowed": "L'accès au microphone a été refusé. Autorisez-le dans les réglages du navigateur.",
+      "service-not-allowed": "Le navigateur n'autorise pas le service de reconnaissance vocale.",
+      "audio-capture": "Aucun microphone utilisable n'a été détecté.",
+      "network": "La reconnaissance vocale a rencontré une erreur réseau.",
+      "language-not-supported": "La reconnaissance vocale française n'est pas prise en charge ici."
+    };
+    if (event.error === "no-speech" || event.error === "aborted") return;
+    announceVisual(messages[event.error] || "La reconnaissance vocale s'est interrompue (" + event.error + "). Vous pouvez réessayer.");
+    setState("unavailable");
+    $("voiceStart").hidden = false;
+    $("voiceStop").hidden = true;
+  };
+  recognition.onend = () => {
+    listening = false;
+    if (shouldResumeListening && !speaking) {
+      shouldResumeListening = false;
+      window.setTimeout(startListening, 350);
+    } else if (!speaking && $("voiceStop").hidden === false) {
+      // Best-effort continuous listening while foregrounded; browsers may stop it.
+      window.setTimeout(startListening, 500);
+    }
+  };
+}
+$("voiceStart").addEventListener("click", () => {
+  if (!localStorage.getItem(KEYS.onboarded)) beginOnboarding();
+  else startListening();
 });
-$("closeSettingsBtn").addEventListener("click", () => $("settingsDialog").close());
-$("closeSettingsTopBtn").addEventListener("click", () => $("settingsDialog").close());
+$("voiceStop").addEventListener("click", stopListening);
+$("pauseToggle").addEventListener("click", () => listening || speaking ? stopListening() : startListening());
+$("transcriptToggle").addEventListener("click", () => {
+  transcriptVisible = !transcriptVisible;
+  $("transcriptWidget").hidden = !transcriptVisible;
+});
+$("transcriptClose").addEventListener("click", () => {
+  transcriptVisible = false;
+  $("transcriptWidget").hidden = true;
+});
+$("contextClose").addEventListener("click", hideContextWidgets);
+$("visualizationBack").addEventListener("click", closeVisualization);
+$("memoryToggle").addEventListener("click", () => openPanel("memoryPanel"));
+$("memoryClose").addEventListener("click", () => closePanel("memoryPanel"));
 $("settingsBtn").addEventListener("click", () => {
-  const tokenInput = $("apiTokenInput");
-  if (tokenInput) tokenInput.value = getSessionToken();
+  $("apiTokenSetting").value = getApiToken();
+  $("proactivitySetting").value = profile.proactivity;
+  $("verbositySetting").value = profile.verbosity;
+  $("humorSetting").value = profile.humor;
+  $("memoryConsentSetting").checked = profile.memoryConsent === true;
   $("settingsDialog").showModal();
 });
-$("apiTokenForm").addEventListener("submit", (event) => {
+$("saveSettings").addEventListener("click", saveSettingsFromDialog);
+$("restartOnboarding").addEventListener("click", () => {
+  $("settingsDialog").close();
+  localStorage.removeItem(KEYS.onboarded);
+  $("onboardingDialog").showModal();
+});
+$("settingsMemory").addEventListener("click", () => {
+  $("settingsDialog").close();
+  openPanel("memoryPanel");
+});
+$("onboardingBegin").addEventListener("click", (event) => {
   event.preventDefault();
-  const token = $("apiTokenInput").value.trim();
-  if (!token) {
-    setSessionToken("");
-    memoryMode = "local";
-    setStatus("Jeton supprimé de la session");
-    $("tokenStatus").textContent = "Jeton supprimé de cet onglet.";
-    renderMemory();
-    return;
+  beginOnboarding();
+});
+$("onboardingSkip").addEventListener("click", () => {
+  onboarding = false;
+  localStorage.setItem(KEYS.onboarded, "skipped");
+});
+$("resetMemoryBtn").addEventListener("click", async () => {
+  if (!confirm("Effacer les données personnelles conservées localement par cette version d'ARIA ? Cette opération est irréversible sur cet appareil.")) return;
+  const oldClientId = localStorage.getItem("aria.v07.memoryClientId");
+  const currentClientId = localStorage.getItem(KEYS.clientId);
+  const clientIdsToDelete = [...new Set([currentClientId, oldClientId].filter(Boolean))];
+  const oldToken = sessionStorage.getItem("aria.session.accessToken") || sessionStorage.getItem(SESSION_TOKEN_KEY);
+  let remoteDeleted = clientIdsToDelete.length > 0 && Boolean(oldToken);
+  if (remoteDeleted) {
+    for (const clientId of clientIdsToDelete) {
+      try {
+        const response = await fetch(API_BASE + "/memory?clientId=" + encodeURIComponent(clientId), {
+          method: "DELETE",
+          headers: { "Authorization": "Bearer " + oldToken }
+        });
+        if (!response.ok) {
+          remoteDeleted = false;
+          continue;
+        }
+        let result;
+        try { result = await response.json(); } catch { result = null; }
+        if (result?.deleted !== true || result?.persisted !== true) remoteDeleted = false;
+      } catch { remoteDeleted = false; }
+    }
   }
-  if (!setSessionToken(token)) {
-    $("tokenStatus").textContent = "Stockage de session indisponible dans ce navigateur.";
-    return;
+  memories = [];
+  profile = {proactivity:"balanced",verbosity:"balanced",humor:"balanced",memoryConsent:false};
+  for (const key of Object.keys(localStorage)) {
+    if (key.startsWith("aria.") && key !== "aria.v07.memoryClientId") localStorage.removeItem(key);
   }
-  $("tokenStatus").textContent = "Jeton conservé uniquement dans la session de cet onglet.";
-  setStatus("Jeton configuré · synchronisation de la mémoire…");
-  void syncMemories();
+  for (const key of Object.keys(sessionStorage)) {
+    if (key.startsWith("aria.") && key !== "aria.session.accessToken" && key !== SESSION_TOKEN_KEY) sessionStorage.removeItem(key);
+  }
+  localStorage.setItem(KEYS.reset, "done");
+  localStorage.setItem(KEYS.memory, "[]");
+  localStorage.setItem(KEYS.profile, JSON.stringify(profile));
+  renderMemory();
+  if (remoteDeleted) {
+    localStorage.removeItem("aria.v07.memoryClientId");
+    localStorage.removeItem(KEYS.clientId);
+    sessionStorage.removeItem("aria.session.accessToken");
+    sessionStorage.removeItem(SESSION_TOKEN_KEY);
+  }
+  conversation = [];
+  $("memoryStatus").textContent = remoteDeleted
+    ? "Mémoire locale effacée et suppression serveur confirmée."
+    : "Mémoire locale effacée. Suppression serveur non confirmée : l'identifiant et la session sont conservés temporairement pour permettre une nouvelle tentative.";
+  speak(remoteDeleted
+    ? "La mémoire personnelle de cet appareil a été effacée et le serveur a confirmé la suppression."
+    : "La mémoire personnelle locale a été effacée. Je ne peux pas confirmer la suppression serveur, qui nécessite une session autorisée et un Worker compatible.", {resume:true});
+});
+$("settingsDialog").addEventListener("close", () => {});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") { closePanel("memoryPanel"); }
 });
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
 }
-renderAllMessages();
+updateClock();
+window.setInterval(updateClock, 1000);
 renderMemory();
-setStatus(getSessionToken() ? "Jeton présent · synchronisation mémoire…" : "IA distante · jeton à configurer");
-if (getSessionToken()) void syncMemories();
+remoteResetPromise.then(deleted => {
+  if (deleted) {
+    localStorage.removeItem("aria.v07.memoryClientId");
+    sessionStorage.removeItem("aria.session.accessToken");
+  }
+  if (localStorage.getItem(KEYS.reset) === "done" && !localStorage.getItem(KEYS.onboarded)) {
+    $("memoryStatus").textContent = deleted
+      ? "Les anciennes données locales et la mémoire serveur ont été effacées."
+      : "Les anciennes données locales ont été effacées. La suppression distante n'a pas pu être confirmée; l'identifiant et la session sont conservés temporairement pour permettre une nouvelle tentative.";
+  }
+});
+finishSetupIfReturning();

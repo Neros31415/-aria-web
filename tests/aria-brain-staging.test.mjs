@@ -233,7 +233,7 @@ test("returns a provider reply without enabling provider-side storage", async (t
       model: "test-model",
       output: [{
         type: "message",
-        content: [{ type: "output_text", text: "Bonjour." }]
+        content: [{ type: "output_text", text: JSON.stringify({ reply: "Bonjour.", action: "none", scene: "none" }) }]
       }]
     }), { status: 200, headers: { "Content-Type": "application/json" } });
   });
@@ -243,7 +243,7 @@ test("returns a provider reply without enabling provider-side storage", async (t
   }), env);
 
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { reply: "Bonjour.", model: "test-model" });
+  assert.deepEqual(await response.json(), { reply: "Bonjour.", action: "none", scene: "none", model: "test-model" });
   assert.equal(providerRequest.store, false);
   assert.equal(providerRequest.input.at(-1).role, "user");
 });
