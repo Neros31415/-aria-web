@@ -116,3 +116,38 @@ test("rejects a non-object memory PUT payload", async () => {
   assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), { error: "invalid_memory_payload" });
 });
+
+
+test("rejects malformed JSON bodies", async () => {
+  const response = await worker.fetch(request("{not-json"), env);
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: "invalid_json" });
+});
+
+test("rejects a conversation with more than 22 messages", async () => {
+  const response = await worker.fetch(request({
+    messages: Array.from({ length: 23 }, (_, index) => ({
+      role: index === 22 ? "user" : "assistant",
+      content: "message"
+    }))
+  }), env);
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: "invalid_messages" });
+});
+
+test("rejects conversations that do not end with a user message", async () => {
+  const response = await worker.fetch(request({
+    messages: [{ role: "user", content: "Bonjour" }, { role: "assistant", content: "Bonjour !" }]
+  }), env);
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: "invalid_messages" });
+});
+
+test("rejects memory reads without a valid profile identifier", async () => {
+  const response = await worker.fetch(new Request("https://aria-staging.test/memory?clientId=not-a-uuid", {
+    method: "GET",
+    headers: { "Authorization": "Bearer test-token" }
+  }), env);
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: "invalid_client_id" });
+});
