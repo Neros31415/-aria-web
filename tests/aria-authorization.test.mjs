@@ -96,3 +96,65 @@ test("invalid identity and permission fail closed", () => {
   assert.equal(authorize({ identity: "alice", roleRecord: userRole, permission: "memory:own:read" }).reason, "invalid_principal");
   assert.equal(authorize({ identity: alice, roleRecord: userRole, permission: "" }).reason, "invalid_principal");
 });
+
+
+import { authorizeFromStore, AUTHORIZATION_STORAGE_KEYS } from "../cloudflare/aria-authorization.mjs";
+
+function memoryKv(initial = {}) {
+  return {
+    async get(key, type) {
+      if (!Object.hasOwn(initial, key)) return null;
+      const value = initial[key];
+      return type === "json" && typeof value === "string" ? JSON.parse(value) : value;
+    }
+  };
+}
+
+test("server-side store lookup authorizes using only the record for the authenticated identity", async () => {
+  const store = memoryKv({
+    [AUTHORIZATION_STORAGE_KEYS.role(alice)]: { userId: alice, role: "user", active: true },
+    [AUTHORIZATION_STORAGE_KEYS.role(bob)]: { userId: bob, role: "super_admin", active: true }
+  });
+  const result = await authorizeFromStore({
+    identity: alice, permission: "admin:roles:manage", env: { ARIA_AUTHZ: store }, context: freshMfa
+  });
+  assert.deepEqual(result, { allowed: false, reason: "permission_denied" });
+});
+
+test("missing authorization store fails closed", async () => {
+  assert.deepEqual(await authorizeFromStore({
+    identity: alice, permission: "admin:roles:manage", env: {}, context: freshMfa
+  }), { allowed: false, reason: "authorization_store_unavailable" });
+});
+
+test("malformed or cross-account role records fail closed", async () => {
+  const malformed = memoryKv({
+    [AUTHORIZATION_STORAGE_KEYS.role(alice)]: { userId: bob, role: "super_admin", active: true }
+  });
+  assert.deepEqual(await authorizeFromStore({
+    identity: alice, permission: "admin:security:manage", env: { ARIA_AUTHZ: malformed }, context: freshMfa
+  }), { allowed: false, reason: "role_unavailable" });
+});
+
+test("Premium access requires a matching active entitlement stored server-side", async () => {
+  const role = { userId: alice, role: "user", active: true };
+  const noEntitlement = memoryKv({ [AUTHORIZATION_STORAGE_KEYS.role(alice)]: role });
+  assert.deepEqual(await authorizeFromStore({
+    identity: alice, permission: "feature:premium:use", env: { ARIA_AUTHZ: noEntitlement }, context: { now }
+  }), { allowed: false, reason: "entitlement_required" });
+
+  const withEntitlement = memoryKv({
+    [AUTHORIZATION_STORAGE_KEYS.role(alice)]: role,
+    [AUTHORIZATION_STORAGE_KEYS.entitlement(alice)]: premium
+  });
+  assert.equal((await authorizeFromStore({
+    identity: alice, permission: "feature:premium:use", env: { ARIA_AUTHZ: withEntitlement }, context: { now }
+  })).allowed, true);
+});
+
+test("authorization storage failures fail closed without granting privileges", async () => {
+  const broken = { async get() { throw new Error("storage unavailable"); } };
+  assert.deepEqual(await authorizeFromStore({
+    identity: alice, permission: "admin:roles:manage", env: { ARIA_AUTHZ: broken }, context: freshMfa
+  }), { allowed: false, reason: "authorization_store_unavailable" });
+});
