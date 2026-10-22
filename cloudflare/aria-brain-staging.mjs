@@ -32,7 +32,7 @@ async function authenticateRequest(req, env) {
   const authMode = env.ARIA_AUTH_MODE || "individual";
 
   // Unknown values must never silently fall back to the shared-token alpha mode.
-  if (!["individual", "legacy"].includes(authMode)) {
+  if (!["individual", "session_kv", "legacy"].includes(authMode)) {
     return { ok: false, status: 503, error: "invalid_auth_mode" };
   }
 
@@ -92,8 +92,33 @@ async function authenticateRequest(req, env) {
     return { ok: true, mode: "individual", ownerId: user.id };
   }
 
-  // Legacy alpha mode is retained only for existing staging tests/clients.
-  // Public multi-user distribution must use ARIA_AUTH_MODE=individual.
+  // Explicit compatibility mode for the existing staging session registry.
+  // The opaque bearer token is never treated as an identity: only its SHA-256
+  // digest is used to look up a server-created session record in ARIA_USERS.
+  if (authMode === "session_kv") {
+    if (!env.ARIA_USERS || typeof env.ARIA_USERS.get !== "function") {
+      return { ok: false, status: 503, error: "auth_not_configured" };
+    }
+    const match = authorization.match(/^Bearer\s+(.+)$/i);
+    if (!match || match[1].length < 43 || match[1].length > 256) {
+      return { ok: false, status: 401, error: "unauthorized" };
+    }
+    try {
+      const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(match[1]));
+      const tokenHash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+      const ownerId = await env.ARIA_USERS.get("session:v1:" + tokenHash);
+      const isUuid = (value) =>
+        typeof value === "string" &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+      if (!isUuid(ownerId)) return { ok: false, status: 401, error: "unauthorized" };
+      return { ok: true, mode: "individual", ownerId };
+    } catch {
+      return { ok: false, status: 503, error: "auth_storage_unavailable" };
+    }
+  }
+
+  // Legacy alpha mode is retained only for explicitly configured test/staging clients.
+  // Public multi-user distribution must use an individual identity mode.
   if (!env.ARIA_ACCESS_TOKEN) {
     return { ok: false, status: 503, error: "service_not_configured" };
   }
@@ -131,7 +156,13 @@ export default {
       return json({
         status: "ok",
         service: "aria-api",
-        configured: Boolean(env.OPENAI_API_KEY && ((env.ARIA_AUTH_MODE || "individual") === "individual" ? env.SUPABASE_URL && env.SUPABASE_ANON_KEY : (env.ARIA_AUTH_MODE || "individual") === "legacy" && env.ARIA_ACCESS_TOKEN)),
+        configured: Boolean(env.OPENAI_API_KEY && (
+          (env.ARIA_AUTH_MODE || "individual") === "individual"
+            ? env.SUPABASE_URL && env.SUPABASE_ANON_KEY
+            : (env.ARIA_AUTH_MODE === "session_kv"
+              ? env.ARIA_USERS
+              : env.ARIA_AUTH_MODE === "legacy" && env.ARIA_ACCESS_TOKEN)
+        )),
         provider: "openai",
         model: "gpt-6-astra",
         persistentMemory: Boolean(env.ARIA_MEMORY)

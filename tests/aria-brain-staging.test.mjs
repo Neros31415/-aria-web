@@ -504,3 +504,65 @@ test("individual-auth DELETE removes only the authenticated account memory", asy
   assert.equal(store.has("memory:v2:" + ownerA), false);
   assert.equal(store.has("memory:v2:" + ownerB), true);
 });
+
+
+test("session_kv mode derives identity only from a server-side hashed session record", async () => {
+  const token = "session-token-for-staging-test-12345678901234567890";
+  const ownerId = "123e4567-e89b-42d3-a456-426614174000";
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
+  const tokenHash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  const keys = [];
+  const sessionEnv = {
+    ARIA_AUTH_MODE: "session_kv",
+    OPENAI_API_KEY: "test-provider-key",
+    ARIA_USERS: {
+      async get(key) {
+        keys.push(key);
+        return key === "session:v1:" + tokenHash ? ownerId : null;
+      }
+    },
+    ARIA_MEMORY: {
+      async get(key, type) {
+        assert.equal(key, "memory:v2:" + ownerId);
+        return type === "json" ? [{ id: "m1", text: "Compte A" }] : JSON.stringify([{ id: "m1", text: "Compte A" }]);
+      },
+      async put() {},
+      async delete() {}
+    }
+  };
+  const response = await worker.fetch(new Request("https://aria-staging.test/memory?clientId=223e4567-e89b-42d3-a456-426614174001", {
+    headers: { Authorization: "Bearer " + token }
+  }), sessionEnv);
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { memories: [{ id: "m1", text: "Compte A" }], persisted: true });
+  assert.deepEqual(keys, ["session:v1:" + tokenHash]);
+});
+
+test("session_kv mode rejects missing, malformed, and cross-format identities closed", async () => {
+  const token = "session-token-for-staging-test-12345678901234567890";
+  const cases = [
+    { env: { ARIA_AUTH_MODE: "session_kv", OPENAI_API_KEY: "test-provider-key", ARIA_USERS: { async get() { return null; } } }, status: 401 },
+    { env: { ARIA_AUTH_MODE: "session_kv", OPENAI_API_KEY: "test-provider-key", ARIA_USERS: { async get() { return "not-a-uuid"; } } }, status: 401 },
+    { env: { ARIA_AUTH_MODE: "session_kv", OPENAI_API_KEY: "test-provider-key" }, status: 503 }
+  ];
+  for (const item of cases) {
+    const response = await worker.fetch(new Request("https://aria-staging.test/memory", {
+      headers: { Authorization: "Bearer " + token }
+    }), item.env);
+    assert.equal(response.status, item.status);
+  }
+});
+
+test("session_kv mode returns unavailable when the session registry throws", async () => {
+  const token = "session-token-for-staging-test-12345678901234567890";
+  const response = await worker.fetch(new Request("https://aria-staging.test/memory", {
+    headers: { Authorization: "Bearer " + token }
+  }), {
+    ARIA_AUTH_MODE: "session_kv",
+    OPENAI_API_KEY: "test-provider-key",
+    ARIA_USERS: { async get() { throw new Error("simulated KV outage"); } }
+  });
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: "auth_storage_unavailable" });
+});
