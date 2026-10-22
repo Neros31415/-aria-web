@@ -81,7 +81,7 @@ test("rejects an oversized actual body even without Content-Length", async () =>
   const response = await worker.fetch(request({
     padding: "x".repeat(100_000),
     messages: [{ role: "user", content: "Bonjour" }]
-  }, { "Content-Length": "" }), env);
+  }), env);
   assert.equal(response.status, 413);
   assert.deepEqual(await response.json(), { error: "request_too_large" });
 });
