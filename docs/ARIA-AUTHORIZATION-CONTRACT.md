@@ -18,7 +18,7 @@ Les valeurs suivantes reçues du navigateur ne sont jamais une preuve d’autori
 - **Clé cadeau :** secret aléatoire à usage unique ; seule son empreinte est conservée. La consommation doit être atomique et attribuer uniquement l’offre autorisée, jamais un rôle.
 - **Super Admin :** attribution explicite et auditée hors du parcours public. Une clé cadeau, un abonnement, un champ de profil ou une invitation ne peuvent jamais créer ce rôle.
 
-Aucun registre de rôles ou d’offres réel n’est encore configuré. Ne pas présenter une valeur d’environnement temporaire ou une donnée du client comme le système définitif de gestion des rôles.
+Aucun binding KV réel ni registre de rôles/offres n’est encore configuré. Le module de lecture `authorizeFromStore` et les préfixes de stockage sont implémentés dans `cloudflare/aria-authorization.mjs`, mais ils ne sont pas branchés aux routes du Worker et aucun endpoint de provisionnement n’existe. Ne pas présenter cette couche comme un système d’autorisation complet ou déployé.
 
 ## 3. Matrice minimale des droits
 
@@ -85,4 +85,6 @@ Si l’identité, le registre de rôles, l’offre ou la politique ne peut pas �
 - Authentification individuelle et mémoire par compte : implémentation initiale dans la PR #21, ouverte et non fusionnée.
 - Projet Auth réel : non configuré.
 - Registre serveur de rôles/offres, MFA, endpoints administratifs, clés cadeau et audit : non implémentés.
+- Le module `cloudflare/aria-authorization.mjs` implémente une décision d’accès et une lecture en mode fermé via le binding serveur `ARIA_AUTHZ`, sans méthode publique de mutation.
+- Tests CI couvrent désormais les permissions et la lecture du registre simulé ; cela ne valide ni un binding KV réel ni l’intégration aux routes.
 - Ce document formalise le contrat ; il ne prétend pas que les fonctionnalités décrites existent déjà.
