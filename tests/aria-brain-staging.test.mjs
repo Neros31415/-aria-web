@@ -289,8 +289,10 @@ test("individual-auth mode fails closed when Supabase configuration is missing",
 
 test("individual-auth mode rejects a token that Supabase does not validate", async (t) => {
   let providerCalled = false;
-  t.mock.method(globalThis, "fetch", async (url) => {
+  t.mock.method(globalThis, "fetch", async (url, options) => {
     if (String(url).endsWith("/auth/v1/user")) {
+      assert.ok(options.signal instanceof AbortSignal, "Supabase Auth request must have an abort signal");
+      assert.equal(options.signal.aborted, false);
       return new Response(JSON.stringify({ message: "Invalid JWT" }), { status: 401 });
     }
     providerCalled = true;
