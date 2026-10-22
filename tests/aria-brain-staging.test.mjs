@@ -441,3 +441,49 @@ test("individual-auth mode rejects a successful auth response without a valid us
   assert.deepEqual(await response.json(), { error: "unauthorized" });
   assert.equal(providerCalled, false);
 });
+
+
+test("individual-auth DELETE removes only the authenticated account memory", async (t) => {
+  const ownerA = "123e4567-e89b-42d3-a456-426614174000";
+  const ownerB = "223e4567-e89b-42d3-a456-426614174001";
+  const store = new Map([
+    ["memory:v2:" + ownerA, JSON.stringify([{ id: "a", text: "Mémoire A" }])],
+    ["memory:v2:" + ownerB, JSON.stringify([{ id: "b", text: "Mémoire B" }])]
+  ]);
+  const memoryEnv = {
+    ARIA_AUTH_MODE: "individual",
+    SUPABASE_URL: "https://project.supabase.co",
+    SUPABASE_ANON_KEY: "test-anon-key",
+    OPENAI_API_KEY: "test-provider-key",
+    ARIA_MEMORY: {
+      async get(key, type) {
+        const value = store.get(key);
+        if (value === undefined) return null;
+        return type === "json" ? JSON.parse(value) : value;
+      },
+      async put(key, value) { store.set(key, value); },
+      async delete(key) { store.delete(key); }
+    }
+  };
+
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    if (String(url).endsWith("/auth/v1/user")) {
+      const token = options.headers.Authorization.replace(/^Bearer /, "");
+      const id = token === "token-a" ? ownerA : token === "token-b" ? ownerB : null;
+      return id
+        ? new Response(JSON.stringify({ id }), { status: 200, headers: { "Content-Type": "application/json" } })
+        : new Response(JSON.stringify({ message: "Invalid JWT" }), { status: 401 });
+    }
+    return new Response("unexpected provider call", { status: 500 });
+  });
+
+  const response = await worker.fetch(new Request(
+    "https://aria-staging.test/memory?clientId=" + ownerB,
+    { method: "DELETE", headers: { "Authorization": "Bearer token-a" } }
+  ), memoryEnv);
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { deleted: true, persisted: true });
+  assert.equal(store.has("memory:v2:" + ownerA), false);
+  assert.equal(store.has("memory:v2:" + ownerB), true);
+});
