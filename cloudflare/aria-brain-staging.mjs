@@ -99,7 +99,7 @@ async function authenticateRequest(req, env) {
     if (!env.ARIA_USERS || typeof env.ARIA_USERS.get !== "function") {
       return { ok: false, status: 503, error: "auth_not_configured" };
     }
-    const match = authorization.match(/^Bearer\\s+(.+)$/i);
+    const match = authorization.match(/^Bearer\s+(.+)$/i);
     if (!match || match[1].length < 43 || match[1].length > 256) {
       return { ok: false, status: 401, error: "unauthorized" };
     }
