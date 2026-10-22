@@ -113,3 +113,84 @@ export function authorize({
 
   return { allowed: true, reason: "allowed", identity, role, permission };
 }
+
+
+const ROLE_KEY_PREFIX = "authz:role:v1:";
+const ENTITLEMENT_KEY_PREFIX = "authz:entitlement:v1:";
+
+function validRoleRecord(record, identity) {
+  return Boolean(record &&
+    record.userId === identity &&
+    typeof record.role === "string" &&
+    Object.hasOwn(ROLE_PERMISSIONS, record.role) &&
+    typeof record.active === "boolean");
+}
+
+function validEntitlementRecord(record, identity) {
+  return Boolean(record &&
+    record.userId === identity &&
+    typeof record.plan === "string" &&
+    typeof record.active === "boolean" &&
+    (record.expiresAt === undefined || Number.isFinite(record.expiresAt)));
+}
+
+/**
+ * Resolve authorization from the server-only ARIA_AUTHZ KV binding.
+ * This function is read-only: it deliberately exposes no public role mutation.
+ * The KV namespace must be bound only to the Worker and never to browser code.
+ */
+export async function authorizeFromStore({
+  identity,
+  permission,
+  env,
+  context = {}
+} = {}) {
+  if (!isValidIdentity(identity) || typeof permission !== "string" || !permission) {
+    return { allowed: false, reason: "invalid_principal" };
+  }
+  if (!env || !env.ARIA_AUTHZ || typeof env.ARIA_AUTHZ.get !== "function") {
+    return { allowed: false, reason: "authorization_store_unavailable" };
+  }
+
+  try {
+    const rawRole = await env.ARIA_AUTHZ.get(ROLE_KEY_PREFIX + identity, "json");
+    if (!validRoleRecord(rawRole, identity) || rawRole.active !== true) {
+      return { allowed: false, reason: "role_unavailable" };
+    }
+
+    let entitlementRecord = null;
+    if (permission === "feature:premium:use") {
+      const rawEntitlement = await env.ARIA_AUTHZ.get(ENTITLEMENT_KEY_PREFIX + identity, "json");
+      if (!validEntitlementRecord(rawEntitlement, identity)) {
+        return { allowed: false, reason: "entitlement_required" };
+      }
+      entitlementRecord = rawEntitlement;
+    }
+
+    return authorize({
+      identity,
+      roleRecord: rawRole,
+      entitlementRecord,
+      permission,
+      context
+    });
+  } catch {
+    return { allowed: false, reason: "authorization_store_unavailable" };
+  }
+}
+
+/**
+ * Internal key helpers for provisioning/migration scripts and tests only.
+ * No HTTP endpoint should expose these prefixes or allow callers to choose a
+ * role. Provisioning must be a separate audited, privileged server workflow.
+ */
+export const AUTHORIZATION_STORAGE_KEYS = Object.freeze({
+  role(identity) {
+    if (!isValidIdentity(identity)) throw new TypeError("invalid_identity");
+    return ROLE_KEY_PREFIX + identity;
+  },
+  entitlement(identity) {
+    if (!isValidIdentity(identity)) throw new TypeError("invalid_identity");
+    return ENTITLEMENT_KEY_PREFIX + identity;
+  }
+});
