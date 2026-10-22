@@ -19,8 +19,8 @@ Une branche de correction séparée, `fix/staging-worker-input-security`, a ét�
 - lecture du corps HTTP en flux, interrompue dès que la limite de 96 000 octets est dépassée ;
 - tests Node.js pour les rejets de rôles et les limites de taille, y compris `PUT /memory`.
 
-**Validation actuelle :** les 16 tests de `tests/aria-brain-staging.test.mjs` ont réussi dans GitHub Actions avec Node.js 22 (run #4, job `test`, commit `26c7ab9ef1116843a845982e0c14c113ca85054c`). Le journal confirme `# tests 16`, `# pass 16`, `# fail 0`. Cela valide les tests automatisés sur le Worker de la branche de correction. L'intégration dans le runtime Cloudflare et les tests d'authentification/isolation multi-utilisateur restent à effectuer.
-Un workflow GitHub Actions dédié exécute `node --test tests/aria-brain-staging.test.mjs` avec Node 22. Le dernier run observé est vert (16/16). La validation du runtime Cloudflare reste ouverte.
+**Validation actuelle :** les 18 tests de `tests/aria-brain-staging.test.mjs` ont réussi dans GitHub Actions avec Node.js 22 (run #8, job `test`, commit `94c174d20ee7a05e07f56c372701171b3d30ed4b`). Le journal confirme `# tests 18`, `# pass 18`, `# fail 0`, y compris les chemins nominaux de réponse fournisseur (`store: false`) et de persistance/lecture mémoire. Cela valide la suite automatisée sur le Worker de la branche de correction. L'intégration dans le runtime Cloudflare et les tests d'authentification/isolation multi-utilisateur restent à effectuer.
+Un workflow GitHub Actions dédié exécute `node --test tests/aria-brain-staging.test.mjs` avec Node 22. Le dernier run observé est vert (18/18). La validation du runtime Cloudflare reste ouverte.
 
 Le blocage S0 d'authentification reste entier : le jeton partagé et le `clientId` contrôlé par le client ne fournissent ni identité vérifiée ni isolation mémoire entre utilisateurs. Aucun test ni déploiement de production n'a été effectué.
 
