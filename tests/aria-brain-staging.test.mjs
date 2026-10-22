@@ -1,4 +1,4 @@
-import test from "node:test";
+import test, { mock } from "node:test";
 import assert from "node:assert/strict";
 import worker from "../cloudflare/aria-brain-staging.mjs";
 
@@ -196,4 +196,71 @@ test("rejects memory writes containing more than 100 notes", async () => {
   }), env);
   assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), { error: "invalid_memories" });
+});
+
+
+test("returns a provider reply without enabling provider-side storage", async (t) => {
+  let providerRequest;
+  t.mock.method(globalThis, "fetch", async (_url, options) => {
+    providerRequest = JSON.parse(options.body);
+    return new Response(JSON.stringify({
+      model: "test-model",
+      output: [{
+        type: "message",
+        content: [{ type: "output_text", text: "Bonjour." }]
+      }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  });
+
+  const response = await worker.fetch(request({
+    messages: [{ role: "user", content: "Bonjour" }]
+  }), env);
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { reply: "Bonjour.", model: "test-model" });
+  assert.equal(providerRequest.store, false);
+  assert.equal(providerRequest.input.at(-1).role, "user");
+});
+
+test("persists and retrieves memory notes through the memory routes", async () => {
+  const store = new Map();
+  const memoryEnv = {
+    ...env,
+    ARIA_MEMORY: {
+      async get(key, type) {
+        const value = store.get(key);
+        if (value === undefined) return null;
+        return type === "json" ? JSON.parse(value) : value;
+      },
+      async put(key, value) {
+        store.set(key, value);
+      }
+    }
+  };
+  const clientId = "123e4567-e89b-42d3-a456-426614174000";
+  const putResponse = await worker.fetch(new Request("https://aria-staging.test/memory", {
+    method: "PUT",
+    headers: {
+      "Authorization": "Bearer test-token",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      clientId,
+      memories: [{ id: "note-1", text: "Préférence de test", createdAt: 1 }]
+    })
+  }), memoryEnv);
+
+  assert.equal(putResponse.status, 200);
+  assert.equal((await putResponse.json()).persisted, true);
+
+  const getResponse = await worker.fetch(new Request(
+    "https://aria-staging.test/memory?clientId=" + clientId,
+    { method: "GET", headers: { "Authorization": "Bearer test-token" } }
+  ), memoryEnv);
+
+  assert.equal(getResponse.status, 200);
+  assert.deepEqual(await getResponse.json(), {
+    memories: [{ id: "note-1", text: "Préférence de test", createdAt: 1, updatedAt: (await getResponse.clone?.()) ?? undefined }],
+    persisted: true
+  });
 });
