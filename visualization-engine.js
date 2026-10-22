@@ -180,6 +180,7 @@
   let activeMap = null;
   let activeMapLayer = null;
   let lastGeocodeAt = 0;
+  let sceneEpoch = 0;
 
   function updateContextStatus(status, source) {
     const statusNode = document.getElementById("contextStatus");
@@ -231,6 +232,7 @@
   }
 
   async function openMap() {
+    const sceneId = ++sceneEpoch;
     resetSceneContent();
     const toolbar = element("form", "aria-scene-toolbar");
     const from = element("input");
@@ -258,7 +260,7 @@
     try {
       loadStylesheet("https://unpkg.com/leaflet@1.9.4/dist/leaflet.css", "aria-leaflet-css");
       await loadScript("https://unpkg.com/leaflet@1.9.4/dist/leaflet.js", "aria-leaflet-js");
-      if (!active || viewport.dataset.scene !== "map") return;
+      if (sceneId !== sceneEpoch || !active || viewport.dataset.scene !== "map") return;
       if (!window.L) throw new Error("La bibliothèque cartographique est indisponible.");
       activeMap?.remove();
       activeMap = window.L.map(mapBox, { zoomControl: true }).setView([46.6, 2.4], 5);
@@ -300,7 +302,7 @@
         if (destinationQuery) {
           destination = await geocode(destinationQuery);
         }
-        if (!activeMap || viewport.dataset.scene !== "map") return;
+        if (sceneId !== sceneEpoch || !activeMap || viewport.dataset.scene !== "map") return;
         activeMapLayer?.remove();
         activeMapLayer = window.L.featureGroup().addTo(activeMap);
         window.L.marker([origin.lat, origin.lon]).bindPopup("Départ : " + origin.label).addTo(activeMapLayer);
@@ -313,6 +315,7 @@
           const routeResponse = await fetch(routeUrl, { headers: { Accept: "application/json" } });
           if (!routeResponse.ok) throw new Error("Le calcul d’itinéraire est indisponible pour le moment.");
           const routeData = await routeResponse.json();
+          if (sceneId !== sceneEpoch || !activeMap || viewport.dataset.scene !== "map") return;
           const route = routeData.routes?.[0];
           if (!route) throw new Error("Aucun itinéraire routier n’a été trouvé.");
           window.L.geoJSON(route.geometry, { style: { color: "#79e4ff", weight: 5, opacity: .9 } }).addTo(activeMapLayer);
@@ -325,14 +328,15 @@
         }
         activeMap.fitBounds(activeMapLayer.getBounds().pad(.18), { maxZoom: 13 });
       } catch (error) {
-        status.textContent = error.message || "Une erreur est survenue lors de la recherche.";
+        if (sceneId === sceneEpoch && viewport.dataset.scene === "map") status.textContent = error.message || "Une erreur est survenue lors de la recherche.";
       } finally {
-        search.disabled = false;
+        if (sceneId === sceneEpoch) search.disabled = false;
       }
     });
   }
 
   function openFinance() {
+    const sceneId = ++sceneEpoch;
     resetSceneContent();
     const toolbar = element("form", "aria-scene-toolbar");
     const symbol = element("input");
@@ -377,12 +381,13 @@
       status.textContent = "Chargement du graphique pour " + ticker + "…";
     };
     toolbar.addEventListener("submit", event => { event.preventDefault(); loadChart(); });
-    frame.addEventListener("load", () => { status.textContent = "Graphique chargé depuis TradingView. Vérifiez la place et l’éventuel délai des cotations."; });
+    frame.addEventListener("load", () => { if (sceneId === sceneEpoch && viewport.dataset.scene === "finance") status.textContent = "Graphique chargé depuis TradingView. Vérifiez la place et l’éventuel délai des cotations."; });
     sceneRoot.append(toolbar, status, frame, disclosure);
     loadChart();
   }
 
   function openScience() {
+    const sceneId = ++sceneEpoch;
     resetSceneContent();
     const toolbar = element("form", "aria-scene-toolbar");
     const query = element("input");
@@ -409,6 +414,7 @@
         const response = await fetch(url, { headers: { Accept: "application/json" } });
         if (!response.ok) throw new Error("Le catalogue NASA est temporairement indisponible.");
         const data = await response.json();
+        if (sceneId !== sceneEpoch || viewport.dataset.scene !== "scientific_model") return;
         const items = (data.collection?.items || []).slice(0, 12);
         if (!items.length) { status.textContent = "Aucun média trouvé pour cette recherche."; updateContextStatus("AUCUN RÉSULTAT", "CATALOGUE NASA"); return; }
         for (const item of items) {
@@ -435,10 +441,12 @@
         status.textContent = items.length + " média(s) trouvé(s) dans le catalogue NASA.";
         updateContextStatus("CATALOGUE DISPONIBLE", "NASA IMAGES API");
       } catch (error) {
-        status.textContent = error.message || "Impossible de joindre le catalogue NASA.";
-        updateContextStatus("NASA INDISPONIBLE", "SERVICE EXTERNE HORS LIGNE");
+        if (sceneId === sceneEpoch && viewport.dataset.scene === "scientific_model") {
+          status.textContent = error.message || "Impossible de joindre le catalogue NASA.";
+          updateContextStatus("NASA INDISPONIBLE", "SERVICE EXTERNE HORS LIGNE");
+        }
       } finally {
-        search.disabled = false;
+        if (sceneId === sceneEpoch) search.disabled = false;
       }
     };
     toolbar.addEventListener("submit", event => { event.preventDefault(); runSearch(); });
@@ -447,6 +455,7 @@
 
   function open(options = {}) {
     const type = options.type || "placeholder";
+    sceneEpoch++;
     active = true;
     if (frame) window.cancelAnimationFrame(frame);
     frame = 0;
@@ -476,6 +485,7 @@
   }
 
   function close() {
+    sceneEpoch++;
     active = false;
     if (frame) window.cancelAnimationFrame(frame);
     frame = 0;
