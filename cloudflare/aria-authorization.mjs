@@ -39,9 +39,13 @@ const SENSITIVE_PERMISSIONS = new Set([
   "admin:security:manage"
 ]);
 
-function isValidIdentity(identity) {
+export function isValidAuthorizationIdentity(identity) {
+  // Supabase identities are UUIDs; the existing server-side session registry
+  // also issues opaque stable IDs. Both are accepted only after trusted
+  // server-side authentication, never from request-supplied identity fields.
   return typeof identity === "string" &&
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(identity);
+    (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(identity) ||
+     /^[a-zA-Z0-9_-]{1,80}$/.test(identity));
 }
 
 /**
@@ -61,7 +65,7 @@ export function authorize({
   permission,
   context = {}
 } = {}) {
-  if (!isValidIdentity(identity) || typeof permission !== "string" || !permission) {
+  if (!isValidAuthorizationIdentity(identity) || typeof permission !== "string" || !permission) {
     return { allowed: false, reason: "invalid_principal" };
   }
 
@@ -146,7 +150,7 @@ export async function authorizeFromStore({
   env,
   context = {}
 } = {}) {
-  if (!isValidIdentity(identity) || typeof permission !== "string" || !permission) {
+  if (!isValidAuthorizationIdentity(identity) || typeof permission !== "string" || !permission) {
     return { allowed: false, reason: "invalid_principal" };
   }
   if (!env || !env.ARIA_AUTHZ || typeof env.ARIA_AUTHZ.get !== "function") {
@@ -187,11 +191,11 @@ export async function authorizeFromStore({
  */
 export const AUTHORIZATION_STORAGE_KEYS = Object.freeze({
   role(identity) {
-    if (!isValidIdentity(identity)) throw new TypeError("invalid_identity");
+    if (!isValidAuthorizationIdentity(identity)) throw new TypeError("invalid_identity");
     return ROLE_KEY_PREFIX + identity;
   },
   entitlement(identity) {
-    if (!isValidIdentity(identity)) throw new TypeError("invalid_identity");
+    if (!isValidAuthorizationIdentity(identity)) throw new TypeError("invalid_identity");
     return ENTITLEMENT_KEY_PREFIX + identity;
   }
 });
