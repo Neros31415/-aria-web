@@ -430,9 +430,18 @@
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
           portfolio = parsed.filter(item => item && typeof item.name === "string" &&
-            Number.isFinite(item.quantity) && item.quantity > 0 &&
-            Number.isFinite(item.purchasePrice) && item.purchasePrice >= 0 &&
-            Number.isFinite(item.currentPrice) && item.currentPrice >= 0).slice(0, 100);
+            Number.isFinite(item.quantity) && item.quantity > 0 && item.quantity <= 1e12 &&
+            Number.isFinite(item.purchasePrice) && item.purchasePrice >= 0 && item.purchasePrice <= 1e12 &&
+            Number.isFinite(item.currentPrice) && item.currentPrice >= 0 && item.currentPrice <= 1e12)
+            .slice(0, 100)
+            .map(item => ({
+              id: typeof item.id === "string" && item.id ? item.id : (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2)),
+              name: item.name.slice(0, 80),
+              symbol: typeof item.symbol === "string" ? item.symbol.slice(0, 40) : "",
+              quantity: item.quantity,
+              purchasePrice: item.purchasePrice,
+              currentPrice: item.currentPrice
+            }));
         } else loadWarning = true;
       }
     } catch { loadWarning = true; }
@@ -494,7 +503,7 @@
         priceForm.addEventListener("submit", event => {
           event.preventDefault();
           const nextPrice = Number(price.value);
-          if (!Number.isFinite(nextPrice) || nextPrice < 0) {
+          if (!Number.isFinite(nextPrice) || nextPrice < 0 || nextPrice > 1e12) {
             portfolioStatus.textContent = "Saisissez un prix actuel valide, positif ou nul.";
             return;
           }
@@ -557,10 +566,10 @@
       const quantity = Number(quantityField.input.value);
       const purchasePrice = Number(purchaseField.input.value);
       const currentPrice = Number(currentField.input.value);
-      if (!name || !Number.isFinite(quantity) || quantity <= 0 ||
-          !Number.isFinite(purchasePrice) || purchasePrice < 0 ||
-          !Number.isFinite(currentPrice) || currentPrice < 0) {
-        portfolioStatus.textContent = "Vérifiez le nom, la quantité et les prix : la quantité doit être positive et les prix positifs ou nuls.";
+      if (!name || !Number.isFinite(quantity) || quantity <= 0 || quantity > 1e12 ||
+          !Number.isFinite(purchasePrice) || purchasePrice < 0 || purchasePrice > 1e12 ||
+          !Number.isFinite(currentPrice) || currentPrice < 0 || currentPrice > 1e12) {
+        portfolioStatus.textContent = "Vérifiez le nom, la quantité et les prix : la quantité doit être positive et les prix positifs ou nuls et les montants inférieurs à 1 000 milliards.";
         return;
       }
       if (portfolio.length >= 100) {
