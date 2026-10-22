@@ -403,3 +403,28 @@ test("backend encodes the chosen initiative level and bounded-autonomy principle
   }
 });
 
+
+
+test("map scene connects real OpenStreetMap tiles, geocoding, and OSRM routing with an explicit data disclosure", () => {
+  assert.match(visualEngine, /tile\.openstreetmap\.org/);
+  assert.match(visualEngine, /nominatim\.openstreetmap\.org\/search/);
+  assert.match(visualEngine, /router\.project-osrm\.org\/route/);
+  assert.match(visualEngine, /OpenStreetMap/);
+  assert.match(visualEngine, /aucune géolocalisation automatique/i);
+  assert.match(app, /Carte et itinéraires/);
+});
+
+test("finance scene uses a validated market symbol and discloses third-party market data", () => {
+  assert.match(visualEngine, /s\.tradingview\.com\/widgetembed/);
+  assert.match(visualEngine, /Symbole invalide/);
+  assert.match(visualEngine, /pas un conseil financier/);
+  assert.match(app, /finance: \{title:"Finance et marchés"/);
+  assert.match(workerSource, /"finance"/);
+});
+
+test("science scene searches the NASA public media catalogue without claiming to simulate science", () => {
+  assert.match(visualEngine, /images-api\.nasa\.gov\/search/);
+  assert.match(visualEngine, /Ouvrir la source NASA/);
+  assert.match(visualEngine, /ne constitue pas un laboratoire de simulation scientifique/i);
+  assert.match(app, /Exploration scientifique/);
+});
