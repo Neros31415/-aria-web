@@ -7,14 +7,14 @@
 
 ## 1. Résumé exécutif
 
-La base V0.7 est un prototype front-end statique/PWA. Elle fournit une interface responsive, une conversation simulée localement, un historique et des notes de mémoire dans `localStorage`, ainsi qu'un cache hors ligne de base. Le code indique explicitement que le modèle IA distant, la recherche Web, la synchronisation iPhone-PC, le contrôle Windows, l'authentification, le backend et les paiements ne sont pas connectés.
+La branche `main` contient une PWA statique V0.7 avec conversation et mémoire locales. L'inventaire Cloudflare réalisé le 22 octobre 2026 confirme toutefois que des services existent hors de cette branche : Workers `aria-brain` (production), `aria-brain-staging` (staging) et `aria-companion-preview`, ainsi que Pages `aria-official-site`. Une branche non fusionnée `feat/aria-brain-staging-integration` contient un client qui appelle `/chat` et `/memory` sur le Worker de staging. Il existe donc déjà un backend alpha et un début d'intégration ; ils ne sont pas intégrés à `main` et ne constituent pas encore une authentification multi-utilisateur commerciale.
 
 L'écart majeur n'est donc pas une liste de petits correctifs visuels : c'est l'absence du socle serveur nécessaire à l'authentification, à la mémoire persistante contrôlée, aux autorisations, aux clés premium et à l'utilisation d'un modèle réel. Le site public peut avancer en parallèle sur les éléments statiques et juridiques, mais ne doit pas présenter comme opérationnelles les fonctions qui ne le sont pas.
 
 ### État de maturité constaté
 - **Présent dans le code :** interface responsive de base, titre HTML et meta description, historique local, mémoire locale, formulaire de chat côté client, limite de longueur du message, textes de statut honnêtes sur le mode prototype, manifeste PWA, service worker/cache hors ligne de base.
 - **Présent dans les documents, non implémenté par ces documents :** cahier des charges commercial/juridique V1.2, brouillons des CGU et de la politique de confidentialité, checklist pré-lancement. La PR #16 est documentaire et ne prouve pas l'existence des fonctions serveur.
-- **Absent ou non trouvé dans les fichiers examinés :** API backend, authentification, rôles/permissions serveur, gestion Super Admin, clés privées premium, paiements, newsletter, consentement cookies, analytics, pages légales accessibles dans le site, sitemap, robots.txt, page 404 dédiée, balises Open Graph, déclaration explicite de favicon.
+- **Absent ou non trouvé dans `main` :** intégration de l'API de staging, authentification par compte individuel, rôles/permissions commerciales, gestion Super Admin, clés premium, paiements, newsletter, consentement cookies, analytics, pages légales accessibles dans le site, sitemap, robots.txt, page 404 dédiée, balises Open Graph et déclaration explicite de favicon. Le Worker de staging dispose déjà de routes `/health`, `/chat` et `/memory`, d'un secret partagé `ARIA_ACCESS_TOKEN`, d'un secret fournisseur IA et d'un binding KV de mémoire ; voir la revue de sécurité dédiée.
 - **À vérifier par exécution/déploiement :** HTTPS et redirections, certificat TLS, statut HTTP 404, liens cassés, contraste WCAG, performance mesurée, compression des médias, compatibilité réelle avec les navigateurs/appareils et paramètres de l'hébergeur.
 
 ## 2. Matrice cahier des charges ↔ code
@@ -25,7 +25,7 @@ Légende : **Implémenté**, **Partiel**, **Absent/non trouvé**, **À vérifier
 |---|---|---|---|
 | Politique RGPD / confidentialité | Absent du front-end ; brouillon documentaire | Aucun lien vers une page de confidentialité dans `index.html`. Brouillon juridique séparé à compléter. | Compléter à partir des flux réels, publier une page et la relier au site/app. |
 | CGU | Brouillon documentaire | Les CGU sont dans `legal/CGU-ARIA-DRAFT.md` sur la branche documentaire ; pas de page/lien visible dans le front-end examiné. | Compléter les champs manquants, vérifier juridiquement, publier et enregistrer la version acceptée lorsque nécessaire. |
-| API séparée du front-end | Absent | `app.js` ne fait que gérer l'interface et le stockage local ; aucun appel backend. | Définir et développer une API sécurisée, versionnée et documentée. |
+| API séparée du front-end | Partiel / alpha déployée hors de `main` | Le Worker Cloudflare `aria-brain-staging` expose `/health`, `/chat` et `/memory`; la branche `feat/aria-brain-staging-integration` contient un client d'intégration. `main` n'utilise pas cette API. Le staging emploie un jeton partagé et un UUID client, pas une identité utilisateur vérifiée. | Auditer/corriger les contrôles du Worker, tester le staging, documenter le contrat API et intégrer ensuite via une PR distincte. Ne pas reconstruire une API parallèle. |
 | HTTPS forcé | À vérifier | La PWA indique que le service worker exige HTTPS ou localhost, mais le dépôt ne prouve pas la configuration de l'hébergeur. | Vérifier TLS, redirections HTTP, ressources mixtes et configuration HSTS appropriée. |
 | Bannière cookies | Absent | Aucun mécanisme de consentement dans `index.html` ou `app.js`. | Inventorier les traceurs ; implémenter refus/acceptation/personnalisation et retrait si consentement requis. |
 | Meta title | Implémenté | `<title>ARIA — Assistant personnel</title>`. | Garder un titre unique et pertinent par page. |
@@ -63,28 +63,30 @@ Les 20 exigences web ne couvrent pas à elles seules le cahier des charges comme
 
 Les phases sont ordonnées par dépendance et risque, et non par facilité visuelle. La durée dépend de la stack retenue, du backend existant hors de ce dépôt et des tests disponibles ; aucune estimation calendaire n'est présentée comme garantie.
 
-### Phase 0 — Verrouiller l'état initial et le périmètre
-**Priorité : P0 — avant toute nouvelle fonctionnalité**
+### Phase 0 — Inventaire confirmé et périmètre
+**Priorité : P0 — inventaire initial effectué ; contrôles restants ouverts**
 
-- [ ] Confirmer la branche de référence et les changements non fusionnés.
-- [ ] Préserver `main` ; travailler par branches et pull requests.
-- [ ] Vérifier si un backend existe dans un autre dépôt/projet et identifier l'URL d'API réellement déployée.
-- [ ] Inventorier les fournisseurs prévus : hébergement, IA, voix, e-mail, analytics, paiement et stockage.
-- [ ] Définir l'app cible immédiate : iOS en priorité ; le site public est son compagnon d'information/inscription, l'architecture restant extensible.
-- [ ] Ajouter une checklist d'acceptation par exigence et un état explicite : à faire, en cours, implémenté, testé, déployé.
+- [x] Confirmer que `main` est une PWA statique V0.7 et qu'elle n'intègre pas le backend.
+- [x] Inventorier les ressources Cloudflare visibles : `aria-brain` (production), `aria-brain-staging` (staging), `aria-companion-preview` et Pages `aria-official-site`.
+- [x] Identifier la branche `feat/aria-brain-staging-integration` et son client d'API `/chat` + `/memory`.
+- [ ] Examiner les différences de cette branche, les tests existants et les résultats CI avant toute intégration.
+- [ ] Tester les endpoints de staging avec des requêtes non destructives depuis un environnement autorisé ; les requêtes directes depuis l'outil de contrôle ont renvoyé un refus de passerelle (403), donc la disponibilité publique n'est pas confirmée par ce test.
+- [ ] Confirmer les fournisseurs, les paramètres de rétention et les usages réels des données ; ne jamais afficher ou copier la valeur de secrets.
+- [ ] Préserver `main` et surtout ne pas modifier ni redéployer `aria-brain` en production sans décision explicite et procédure de rollback.
 
-**Sortie attendue :** périmètre confirmé, dépendances identifiées, aucun faux statut de fonctionnalité.
+**Sortie attendue :** état réel de l'alpha documenté, tests reproductibles et prochain correctif isolé sur staging.
 
-### Phase 1 — Contrat d'API et socle serveur
-**Priorité : P0 — bloque l'authentification, la mémoire et l'IA réelle**
+### Phase 1 — Sécuriser le backend alpha existant et définir le contrat cible
+**Priorité : P0 — aucun nouveau backend ne doit être construit avant la revue de l'alpha**
 
-- [ ] Définir le contrat API : routes, schémas, erreurs, versionnement et limites.
-- [ ] Mettre en place configuration par environnement et gestion des secrets côté serveur.
-- [ ] Implémenter authentification, sessions, vérification d'e-mail et récupération.
-- [ ] Implémenter autorisations serveur et isolation des données par compte.
-- [ ] Ajouter validation serveur, rate limiting, journalisation de sécurité sans contenu sensible excessif.
-- [ ] Connecter le modèle IA via backend ; ne jamais exposer de clé fournisseur dans le client.
-- [ ] Documenter et tester les erreurs, timeouts, quotas et indisponibilités.
+- [ ] Corriger les risques identifiés dans `docs/ARIA-STAGING-SECURITY-REVIEW.md` avant d'élargir l'accès au staging.
+- [ ] Définir le contrat API à partir des routes déjà existantes (`/health`, `/chat`, `/memory`) ; versionner et documenter schémas, erreurs, quotas et limites.
+- [ ] Remplacer le jeton partagé par une authentification utilisateur individuelle avant toute alpha multi-utilisateur ; ne pas distribuer un secret serveur commun à des proches ou clients.
+- [ ] Lier la mémoire à une identité authentifiée vérifiée côté serveur, et non au seul `clientId` fourni par le navigateur.
+- [ ] Refuser les rôles `system` fournis par le client et ne jamais faire confiance à un contexte système arbitraire provenant du front-end.
+- [ ] Ajouter une limite de taille du corps et des messages, des quotas/rate limits et une journalisation minimale des événements de sécurité.
+- [ ] Conserver les secrets fournisseur côté Worker ; confirmer que `store: false` et les conditions de traitement du fournisseur correspondent aux paramètres réels.
+- [ ] Une fois les contrôles testés, intégrer l'appel API à la branche de l'interface via une PR dédiée, sans redéployer la production.
 - [ ] Choisir une référence de vérification de sécurité ; utiliser OWASP ASVS 5.0.0 comme checklist de conception et de tests adaptée au niveau de risque.
 
 **Critères de sortie :** aucune clé privée dans les ressources publiques ; chaque route privée exige une authentification et une autorisation ; tests d'accès non autorisé et d'isolation inter-comptes réussis.
@@ -175,10 +177,11 @@ Les phases sont ordonnées par dépendance et risque, et non par facilité visue
 
 ## 5. Ordre recommandé pour le prochain cycle d'ingénierie
 
-1. **Confirmer l'architecture backend réelle** : c'est le plus grand point d'incertitude et le prérequis des fonctionnalités sensibles.
-2. **Écrire le contrat d'API et les critères de sécurité** avant de brancher l'interface.
-3. **Construire l'authentification et l'isolation des comptes**, puis connecter le modèle IA.
-4. **Construire la mémoire persistante contrôlée par l'utilisateur.**
+1. **Auditer et durcir le Worker `aria-brain-staging` existant** : il existe déjà et ne doit pas être remplacé par un backend parallèle.
+2. **Corriger l'autorisation de mémoire, le contexte système fourni par le client, les limites de requête et l'absence de limitation d'abus** avant d'inviter d'autres utilisateurs.
+3. **Valider l'API de staging par des tests reproductibles** ; le test HTTP via l'outil de contrôle a été bloqué par une passerelle et ne prouve pas l'indisponibilité du Worker.
+4. **Intégrer l'interface à l'API sécurisée dans une PR isolée**, après vérification du code de la branche d'intégration.
+5. **Évoluer vers une authentification individuelle et des données de mémoire isolées par compte**, puis mettre en place le Super Admin et les clés premium.
 5. **Implémenter les rôles Super Admin et les clés premium** avant d'inviter les proches.
 6. **Finaliser les documents et les parcours RGPD** en fonction des flux effectivement implémentés.
 7. **Fermer les écarts du site public** et mesurer qualité/performance.
@@ -194,7 +197,17 @@ Les phases sont ordonnées par dépendance et risque, et non par facilité visue
 - Les pages légales doivent refléter les traitements réels et être relues avant publication.
 - L'interface doit rester discrète, vocale en priorité et non surchargée ; les réglages, la mémoire, l'aide et les informations légales restent accessibles sans ajouter des onglets inutiles.
 
-## 7. Référence sécurité
+## 7. Ressources et état Cloudflare confirmés le 22 octobre 2026
+
+- `aria-brain` : Worker de production existant ; ne pas modifier ou redéployer dans le cadre de cette feuille de route sans validation explicite.
+- `aria-brain-staging` : Worker de staging actif, avec bindings de secret fournisseur IA, jeton d'accès partagé, KV de mémoire et KV d'utilisateurs. La présence d'un binding `ARIA_USERS` ne prouve pas que le code applique une authentification utilisateur individuelle.
+- `aria-companion-preview` : Worker de prévisualisation distinct.
+- `aria-official-site` : projet Cloudflare Pages existant, configuré avec le répertoire de sortie `site/` dans le déploiement observé.
+- `feat/aria-brain-staging-integration` : branche existante contenant l'intégration client de staging et une documentation de mémoire persistante alpha.
+
+Les paramètres ont été lus en mode inspection. Aucun secret n'a été lu en clair, aucune ressource Cloudflare n'a été modifiée et aucun déploiement n'a été lancé.
+
+## 8. Référence sécurité
 
 La vérification du backend et de l'API peut s'appuyer sur l'**OWASP Application Security Verification Standard (ASVS) 5.0.0**, standard de vérification pour applications web et services API. Il doit servir de checklist adaptée au risque, pas de déclaration automatique de conformité.
 
@@ -202,4 +215,4 @@ La vérification du backend et de l'API peut s'appuyer sur l'**OWASP Application
 - Guide de périmètre : https://devguide.owasp.org/en/03-requirements/05-asvs/
 
 ---
-**Limite de l'audit :** cette feuille de route est fondée sur les fichiers source et documents accessibles dans le dépôt au moment de l'analyse. L'infrastructure de production, les autres dépôts éventuels, les secrets, les réglages de l'hébergeur et les performances réelles n'ont pas été inspectés ici.
+**Limite de l'audit :** les métadonnées des Workers et Pages Cloudflare ont été consultées en lecture seule, et le code source de la branche d'intégration a été examiné. Les valeurs des secrets, les données utilisateurs, les performances réelles et le comportement de production n'ont pas été inspectés. Les requêtes directes au Worker de staging ont reçu un 403 de la passerelle de contrôle ; elles ne constituent pas un test de disponibilité du service.
