@@ -1,0 +1,33 @@
+name: Staging Worker Tests
+
+on:
+  push:
+    branches:
+      - fix/staging-worker-input-security
+    paths:
+      - "cloudflare/aria-brain-staging.mjs"
+      - "tests/aria-brain-staging.test.mjs"
+      - ".github/workflows/staging-worker-tests.yml"
+  pull_request:
+    branches:
+      - feat/aria-brain-staging-integration
+    paths:
+      - "cloudflare/aria-brain-staging.mjs"
+      - "tests/aria-brain-staging.test.mjs"
+      - ".github/workflows/staging-worker-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run staging worker tests
+        run: node --test tests/aria-brain-staging.test.mjs
