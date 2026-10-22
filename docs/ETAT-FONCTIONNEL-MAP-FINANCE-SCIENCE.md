@@ -1,7 +1,7 @@
 # ARIA — État fonctionnel des scènes carte, finance et science
 
 Date de travail : 22 octobre 2026  
-Branche : `feat/aria-secure-ui-scene-integration`  
+Branche : `feat/aria-science-orbit-simulator`  
 Statut : intégration en cours, non fusionnée et non déployée. Cette branche part de `feat/aria-brain-staging-integration` pour conserver les contrôles D1 et l’authentification par session hachée.
 
 ## Objectif
@@ -10,7 +10,7 @@ Relier les scènes contextuelles du HUD à des sources réelles plutôt que de p
 ## Changements de cette branche
 - Carte : charge Leaflet et les tuiles OpenStreetMap ; permet une recherche de lieu via Nominatim ; permet de calculer un itinéraire en voiture, à pied ou à vélo via des profils publics OSRM, avec distance/durée annoncées par le service et limitation du rythme des requêtes de géocodage.
 - Finance : intègre un graphique TradingView, avec symbole modifiable et périodes ; affiche une mise en garde claire qu'il ne s'agit pas d'un conseil financier.
-- Science : recherche et affiche des médias du catalogue public NASA ; donne accès à la source NASA et ne prétend pas que cela constitue une simulation scientifique.
+- Science : recherche et affiche des médias du catalogue public NASA avec accès à la source ; ajoute un simulateur orbital local animé du Soleil et des huit planètes, avec pause, reprise, remise à zéro et réglage de vitesse. Les périodes sont illustratives ; tailles, distances et positions ne sont pas à l’échelle et ne constituent pas des éphémérides.
 - HUD : les scènes sont ouvertes dans l'espace visuel contextuel existant ; styles responsives et commandes accessibles au clavier.
 - Contrat d'intention : le Worker sécurisé renvoie un objet structuré validé (`reply`, `action`, `scene`) et autorise `finance` sans supprimer les contrôles d’authentification ni d’autorisation D1.
 - Mémoire : le Worker respecte le consentement explicite envoyé par l’interface ; quand la mémoire est désactivée, le chat n’effectue ni lecture ni écriture de souvenirs.
@@ -20,7 +20,7 @@ Relier les scènes contextuelles du HUD à des sources réelles plutôt que de p
 ## Limites explicites
 - Les services publics Nominatim/OSRM et les tuiles OpenStreetMap sont adaptés au prototype, pas garantis pour une exploitation commerciale à grande échelle. Il faudra sélectionner/configurer un fournisseur ou une infrastructure contractuelle, gérer les quotas, le cache et la disponibilité.
 - TradingView est une intégration externe ; disponibilité, symboles, délai des cotations et droits dépendent de TradingView et des places concernées.
-- Le catalogue NASA apporte une recherche de médias, pas de données instrumentales validées, d'analyse scientifique, de simulation physique ou de modèle 3D scientifique.
+- Le catalogue NASA apporte une recherche de médias, pas des données instrumentales validées. Le simulateur orbital est pédagogique et simplifié : il ne remplace pas une simulation physique précise, des éphémérides ou un laboratoire scientifique 3D.
 - La scène carte reste une carte 2D avec itinéraire routier ; relief 3D, itinéraires multimodaux, vues immersives et God’s Eye View restent à intégrer.
 - Le modèle de moteur/mécanisme 3D reste à développer.
 - La session alpha `session_kv` utilise actuellement des identifiants opaques ; les opérations de mémoire soumises à l’autorisation D1 restent bloquées tant qu’une migration vérifiée vers une identité de compte canonique n’est pas réalisée. Ne pas contourner ce contrôle.
