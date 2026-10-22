@@ -332,3 +332,365 @@ Commencer par **M0 puis M1** : inventorier et comparer les PR ouvertes, décider
 - Apple Developer Program : https://developer.apple.com/programs/
 
 Les exigences Apple peuvent évoluer. Les règles de paiement, de connexion, de confidentialité et de distribution doivent être vérifiées à nouveau au moment de la soumission.
+
+
+---
+
+# ANNEXE A — Spécifications d’implémentation fonctionnelle détaillées
+**Version :** 1.1 — complément d’implémentation à la feuille de route App Store.  
+**Règle :** cette annexe décrit le travail à réaliser et ses critères de validation. Elle ne signifie pas que les fonctionnalités sont déjà codées. Les fonctions hors V1.0 sont conservées dans les jalons post-lancement et ne doivent pas être activées prématurément.
+
+## A1. Architecture cible et frontières de confiance
+
+### A1.1 Composants
+1. **Client iOS SwiftUI** : interface, audio au premier plan, état de session, navigation, paramètres et affichage des résultats. Aucun secret de fournisseur IA n’y est inclus.
+2. **Client Web/PWA** : expérience web cohérente avec iOS ; appels à la même API publique et aux mêmes contrats, sans logique de sécurité faisant autorité dans le navigateur.
+3. **API backend** : authentification, autorisation, validation des entrées, orchestration des requêtes, limites d’usage, mémoire, journal d’audit et accès aux fournisseurs IA.
+4. **Stockage de données** : comptes/profils, préférences, conversations, souvenirs, tâches, décisions, clés d’accès et abonnements. Chaque donnée utilisateur doit être liée à une identité vérifiée.
+5. **Adaptateur fournisseur IA** : interface interne indépendante du fournisseur, avec gestion des délais, erreurs, quotas, sortie structurée et annulation si prise en charge.
+6. **Services de publication** : environnements de développement, staging et production isolés ; CI, tests, signature iOS et livraison App Store.
+
+### A1.2 Règles non négociables
+- Le client ne décide jamais de son propre rôle, de son identité propriétaire ou de ses droits premium.
+- Toute permission est vérifiée côté serveur à chaque action protégée.
+- Les secrets résident dans un gestionnaire de secrets ou une configuration serveur protégée, jamais dans Git, le bundle iOS ou les logs.
+- Toutes les connexions réseau de production utilisent HTTPS/TLS ; les accès non sécurisés sont refusés ou redirigés au niveau de l’hébergement.
+- Les réponses externes sont considérées comme non fiables : validation de schéma, échappement d’affichage et protection contre les injections dans les sorties d’outils.
+- Les données sensibles ne sont pas journalisées par défaut.
+- Chaque action possède un identifiant de corrélation et un état explicite ; un succès n’est déclaré qu’après preuve vérifiable.
+- Toute modification de schéma de données est versionnée et accompagnée d’une migration réversible lorsque c’est raisonnablement possible.
+
+### A1.3 Contrat d’API proposé
+Le préfixe exact et les noms peuvent évoluer, mais les responsabilités doivent rester distinctes :
+- `POST /v1/chat` : envoyer un message, recevoir une réponse structurée et son statut.
+- `POST /v1/voice/transcription` ou intégration native équivalente : utiliser uniquement si la transcription passe par le backend ; documenter explicitement le fournisseur et le traitement audio.
+- `GET /v1/me`, `PATCH /v1/me/preferences` : profil minimal et préférences.
+- `GET /v1/conversations`, `POST /v1/conversations`, `GET /v1/conversations/{id}`, `DELETE /v1/conversations/{id}` : historique et suppression.
+- `GET /v1/memories`, `POST /v1/memories`, `PATCH /v1/memories/{id}`, `DELETE /v1/memories/{id}` : mémoire contrôlée.
+- `GET /v1/tasks`, `POST /v1/tasks`, `GET /v1/tasks/{id}`, `POST /v1/tasks/{id}/resume`, `POST /v1/tasks/{id}/cancel` : état et reprise des tâches lorsque cette capacité sera activée.
+- `GET /v1/decisions`, `POST /v1/decisions`, `PATCH /v1/decisions/{id}` : registre des décisions, post-V1.
+- `POST /v1/account/delete` : demande de suppression du compte et de ses données, avec statut et confirmation.
+- `GET /v1/entitlements` : droits calculés côté serveur, jamais fournis comme vérité par le client.
+- `POST /v1/admin/access-keys`, `GET /v1/admin/access-keys`, `POST /v1/admin/access-keys/{id}/revoke` : gestion administrative des clés privées, réservée au rôle autorisé et postérieure à la mise en place de l’administration sécurisée.
+- `POST /v1/billing/webhook` : événements de paiement signés, uniquement si le produit de paiement retenu l’exige et après validation des règles Apple.
+
+Chaque route doit documenter : authentification, rôle/permission, schéma, limites, erreurs, données conservées, idempotence et tests. Ces chemins sont une proposition de contrat, pas l’affirmation que les routes existent déjà.
+
+## A2. Compte, authentification, rôles et clés privées
+
+### A2.1 Authentification individuelle
+1. Choisir le fournisseur d’identité après examen de ses capacités, coûts, résidence des données et intégration iOS.
+2. Implémenter création de compte, connexion, déconnexion, expiration/renouvellement de session et réinitialisation sécurisée du mot de passe si une connexion par mot de passe est retenue.
+3. Stocker les jetons côté iOS dans Keychain ; côté web, privilégier une stratégie de session sûre, cookies `HttpOnly`, `Secure`, `SameSite` lorsque l’architecture s’y prête, et protection CSRF si nécessaire.
+4. Vérifier la signature, l’émetteur, l’audience, l’expiration et la révocation côté serveur.
+5. Refuser l’accès aux ressources d’un autre compte même si un identifiant est deviné ou injecté.
+6. Prévoir suppression du compte depuis l’application si le compte peut être créé dans l’application, ainsi que suppression de ses données conformément aux obligations applicables.
+
+**Tests :** compte A ne peut ni lire, ni modifier, ni supprimer les données du compte B ; session expirée/invalide refusée ; déconnexion révoque ou invalide la session selon le modèle choisi ; suppression vérifiée sur tous les stockages.
+
+### A2.2 Rôles et privilèges
+Définir des rôles explicites, attribués côté serveur :
+- **Visiteur/invité** : accès aux fonctions explicitement ouvertes sans données partagées.
+- **Utilisateur** : conversation, préférences et mémoire personnelle selon consentement.
+- **Premium** : fonctionnalités supplémentaires selon droits d’abonnement vérifiés côté serveur.
+- **Super Admin** : administration restreinte, idéalement avec MFA, journalisation renforcée et protections contre les actions accidentelles.
+
+Ne jamais se fier à un champ `role` envoyé par l’application. Vérifier chaque permission sur chaque endpoint administratif. Les comptes Super Admin ne doivent pas être créés via une inscription publique normale.
+
+### A2.3 Clés d’accès réservées aux proches
+1. Permettre uniquement à un Super Admin autorisé de créer une clé via l’interface d’administration protégée.
+2. Générer des clés à forte entropie côté serveur ; ne conserver qu’une empreinte cryptographique lorsque cela est possible.
+3. Afficher la clé en clair une seule fois lors de sa création ; proposer révocation, date d’expiration, nombre d’utilisations et état.
+4. Associer la clé à une offre/durée et à un nombre d’utilisations défini ; empêcher la réutilisation non autorisée.
+5. Lors de l’utilisation, vérifier la clé côté serveur, créer ou associer un compte individuel et attribuer les droits à ce compte, sans créer de session partagée.
+6. Ne jamais coder une liste de clés dans le front-end ni placer les clés dans les logs.
+7. Ajouter un journal d’audit : créateur, date, offre, état, révocation et utilisation, sans enregistrer inutilement le secret complet.
+
+**Tests :** utilisateur ordinaire interdit de créer une clé ; clé invalide/expirée/révoquée refusée ; limite d’usage respectée ; révocation immédiate ; droits retirés ou recalculés selon la politique documentée.
+
+## A3. Onboarding et première interaction
+
+1. Présenter ARIA, ce qu’elle peut faire aujourd’hui, ce qu’elle ne peut pas faire et les traitements de données pertinents.
+2. Proposer la voix comme chemin principal, mais laisser l’utilisateur continuer par texte.
+3. Demander les permissions microphone/reconnaissance vocale au moment où l’utilisateur active la fonction, avec une explication contextuelle.
+4. Présenter séparément le consentement à la mémoire persistante ; ne pas le considérer comme accepté par défaut.
+5. Permettre de choisir les préférences essentielles : voix, langue, mode texte/voix, mémoire, notifications et profil d’usage.
+6. Ne pas imposer l’inscription avant de montrer une démonstration locale si une telle démonstration est sûre et utile.
+7. Enregistrer la version du texte de consentement et l’état du consentement quand cette traçabilité est nécessaire.
+8. Ajouter une procédure de reprise si l’utilisateur refuse une permission : expliquer comment utiliser le texte ou modifier le réglage système.
+
+**Critères :** onboarding complétable sans microphone ; consentement non ambigu ; aucune donnée persistante envoyée sans base légale/consentement approprié ; tests d’installation neuve et de reprise.
+
+## A4. Voix, conversation et HUD
+
+### A4.1 Cycle vocal
+Modéliser un état exclusif parmi : `idle`, `requesting_permission`, `listening`, `transcribing`, `thinking`, `speaking`, `interrupted`, `error`. Toute transition invalide est refusée et testée.
+
+1. L’utilisateur démarre l’écoute par une action claire.
+2. L’interface indique visuellement et, si pertinent, auditivement que le microphone est actif.
+3. La capture s’arrête sur action utilisateur, fin de phrase ou limite de durée ; aucun enregistrement permanent caché.
+4. La transcription est affichée lorsqu’elle est disponible et peut être corrigée avant envoi si la reconnaissance est incertaine.
+5. Le message est envoyé avec identifiant de requête pour prévenir les doublons.
+6. La réponse textuelle est rendue avant ou en parallèle de la synthèse vocale selon la latence.
+7. L’utilisateur peut interrompre immédiatement la lecture et la génération si le backend le permet.
+8. Une réponse interrompue n’est pas considérée comme une action achevée si elle devait déclencher une opération.
+9. En cas de réseau indisponible, conserver uniquement ce qui est nécessaire localement et indiquer clairement que le message n’a pas été envoyé.
+
+### A4.2 Interface HUD
+- Garder une zone principale centrée sur l’interaction et l’état courant, pas une grille de nombreuses pages.
+- Rendre paramètres, mémoire, compte, aide et confidentialité accessibles sans surcharger l’écran principal.
+- Prévoir Dynamic Type, VoiceOver, contrastes suffisants, zones tactiles confortables et réduction des animations.
+- Ne pas communiquer uniquement par couleur ; combiner texte, icône et état accessible.
+- Limiter les animations en arrière-plan et respecter le mode économie d’énergie.
+- Maintenir la cohérence visuelle entre site, PWA et iOS, tout en utilisant les conventions natives iOS.
+- Ne pas utiliser d’animation pour suggérer une capacité de calcul, une donnée en temps réel ou une action qui n’existe pas.
+
+**Tests :** interruption audio, appels entrants, verrouillage/déverrouillage, bascule d’application, permission refusée, bruit, latence, réponse vide/malformée et VoiceOver.
+
+## A5. Conversation, historique et rendu sécurisé
+
+1. Définir un modèle de message versionné : identifiant, conversation, rôle autorisé, contenu, date, statut d’envoi et métadonnées minimales.
+2. Accepter uniquement les rôles de message permis par le contrat serveur ; le client ne peut pas soumettre de message système.
+3. Afficher explicitement les statuts : envoi, reçu, échec, réponse partielle ou non vérifiée.
+4. Échapper le contenu affiché et autoriser les liens selon une politique de schémas sûrs ; ne pas injecter du HTML arbitraire.
+5. Paginer l’historique, gérer les erreurs de chargement et permettre la suppression.
+6. Distinguer messages locaux non synchronisés et données confirmées sur le serveur.
+7. Définir la rétention des conversations et ne pas utiliser automatiquement le contenu pour l’entraînement d’un fournisseur.
+8. Ajouter des limites de taille et de fréquence, des délais d’expiration et un comportement de reprise sans renvoi aveugle.
+
+**Tests :** contenu HTML hostile, liens dangereux, réponse tronquée, double clic/envoi, offline, pagination, suppression confirmée et erreurs serveur.
+
+## A6. Mémoire persistante contrôlée
+
+### A6.1 Modèle
+Chaque souvenir doit comporter au minimum : identifiant, propriétaire serveur, type, contenu minimal, origine (déclaré/inféré/importé), confiance ou incertitude si applicable, date de création/mise à jour, consentement/état, durée de conservation éventuelle et provenance de la modification.
+
+### A6.2 Flux
+1. Le système distingue le contexte temporaire d’une conversation de la mémoire persistante.
+2. Avant d’enregistrer un nouveau souvenir, il vérifie le consentement et la politique de mémorisation.
+3. Il informe l’utilisateur quand une information importante est proposée pour la mémoire, selon le niveau de sensibilité et les réglages.
+4. L’utilisateur peut consulter, corriger et supprimer un souvenir.
+5. Le backend vérifie l’identité et le propriétaire de la donnée à chaque opération.
+6. Lorsqu’un consentement est désactivé, aucun souvenir persistant ne doit être ajouté au contexte du modèle via ce chemin.
+7. Une suppression doit être propagée aux copies contrôlées par ARIA et aux index associés selon la politique de rétention ; les limites légales/techniques restantes sont expliquées.
+8. Les échecs de synchronisation sont visibles ; l’interface ne prétend pas qu’une modification a été sauvegardée tant que le serveur ne l’a pas confirmé.
+9. Les exports et demandes de droits doivent suivre un flux documenté et vérifiable.
+
+**Tests obligatoires :** consentement activé/désactivé, correction, suppression, panne du stockage, conflit de synchronisation, accès inter-comptes, export et suppression du compte.
+
+## A7. Compréhension de l’intention et planification
+
+Créer une représentation interne versionnée, par exemple :
+- `goal` : objectif compris ;
+- `constraints` : contraintes explicites ;
+- `assumptions` : hypothèses signalées ;
+- `steps` : étapes ordonnées ;
+- `required_capabilities` : capacités nécessaires ;
+- `permissions_required` : autorisations ;
+- `success_criteria` : conditions vérifiables ;
+- `risk_level` : risque évalué ;
+- `status` : proposé, en cours, bloqué, terminé ou annulé.
+
+**Boucle d’exécution :**
+1. Classer la demande : réponse directe, clarification, recherche, action autorisée ou refus/limite.
+2. Poser une question si une ambiguïté change sensiblement le résultat, le coût ou le risque.
+3. Vérifier que les capacités requises existent dans l’environnement courant.
+4. Construire un plan proportionné à la tâche ; ne pas planifier lourdement les questions simples.
+5. Présenter le plan ou demander confirmation selon le risque.
+6. Exécuter uniquement les étapes permises.
+7. Vérifier les résultats et mettre à jour l’état.
+8. Signaler ce qui est accompli, échoué, incertain ou encore à faire.
+
+**Tests :** requête simple, requête ambiguë, multi-étapes, outil indisponible, dépendance manquante, sortie modèle malformée, annulation et action sensible nécessitant confirmation.
+
+## A8. Exécution d’outils et vérification des résultats
+
+Pour chaque outil, définir une fiche avec nom/version, description, schéma d’entrée/sortie, permissions, niveau de risque, délai maximal, idempotence, stratégie d’annulation, preuves de réussite et cas de test.
+
+1. Le modèle peut proposer un appel ; le backend décide s’il est autorisé.
+2. Valider strictement les paramètres, l’utilisateur, les limites et les permissions.
+3. Demander une confirmation explicite pour les actions sensibles ou irréversibles.
+4. Exécuter dans un environnement isolé avec le minimum de privilèges.
+5. Vérifier le résultat à partir de l’état réel retourné, d’un artefact, d’un test ou d’une confirmation externe.
+6. Persister le résultat et la preuve minimale utile.
+7. Utiliser les états `planned`, `running`, `succeeded`, `failed`, `blocked`, `cancelled`, `unverified`.
+8. Ne pas réexécuter automatiquement une action non idempotente dont le résultat est incertain.
+9. Offrir une annulation ou un retour arrière lorsque la capacité le permet.
+
+**Version 1.0 :** limiter les outils aux capacités sûres nécessaires à la conversation et aux fonctions réellement implémentées. L’exécution générale d’actions système reste désactivée tant que sa surface de risque n’est pas auditée.
+
+## A9. Continuité et reprise de tâches — post-V1.0
+
+Stocker un objet tâche contenant : objectif, plan versionné, étape courante, résultats vérifiés, dépendances, permissions accordées, erreurs, prochaine action, horodatage et statut.
+
+- Sauvegarder les changements d’état importants.
+- À la reprise, revalider identité, permissions, dépendances et fraîcheur des données.
+- Ne pas répéter aveuglément une opération non idempotente.
+- Permettre pause, reprise, annulation et clôture.
+- Afficher le dernier état connu et les actions qui restent à effectuer.
+- Prévoir expiration et suppression des tâches anciennes.
+
+**Critères :** fermeture/réouverture, panne réseau, dépendance changée, tâche annulée et résultat d’action incertain.
+
+## A10. Compétences versionnées — post-V1.0
+
+Une compétence est un paquet contrôlé de procédure, pas un privilège supplémentaire :
+1. Décrire objectif, déclencheurs, entrées, sorties, outils nécessaires, permissions et limites.
+2. Définir tests déterministes et exemples d’échec.
+3. Versionner la définition et les dépendances.
+4. Exécuter dans un bac à sable ou une enveloppe de permissions stricte.
+5. Publier uniquement après revue et tests.
+6. Mesurer les échecs et permettre le retour à une version précédente.
+7. Interdire à une compétence de s’auto-autoriser, d’altérer les règles de sécurité ou de masquer ses résultats.
+
+**Critères :** version identifiable, tests reproductibles, comparaison des versions, rollback et refus des permissions non déclarées.
+
+## A11. Proactivité et notifications — post-V1.0
+
+1. N’activer une surveillance que si la source, l’autorisation et l’ordonnanceur sont réellement configurés.
+2. Recueillir des préférences explicites : types d’événements, fréquence, plages silencieuses, canal et désactivation.
+3. Enregistrer la provenance, l’heure de collecte, la fraîcheur et la confiance des informations utilisées.
+4. Évaluer pertinence, urgence, confiance et coût d’interruption avant notification.
+5. Dédupliquer, limiter la fréquence et éviter les notifications répétitives.
+6. Prévoir pause globale, révocation des autorisations et journal de ce qui a déclenché une notification.
+7. Respecter les permissions de notification iOS ; ne pas les demander avant que leur utilité soit expliquée.
+
+**Critères :** aucune notification sans déclencheur démontrable, préférence respectée, mode silencieux respecté et désactivation effective.
+
+## A12. Mémoire des décisions — post-V1.0
+
+Modèle proposé : décision, contexte, objectif, options considérées, choix retenu, raisons, hypothèses, conséquences attendues, propriétaire, date, statut (active, remplacée, à réexaminer) et provenance.
+
+- Distinguer fait, hypothèse et préférence.
+- Permettre correction, archivage et réévaluation.
+- Éviter d’enregistrer une déduction comme une décision explicitement prise par l’utilisateur.
+- Relier une décision à la tâche ou au projet pertinent.
+- Afficher le contexte nécessaire pour comprendre pourquoi une décision a été retenue.
+
+**Critères :** création, correction, recherche, archivage, réévaluation et respect de l’isolation par compte.
+
+## A13. Indépendance des fournisseurs IA
+
+1. Définir une interface interne minimale pour génération, sorties structurées, capacités multimodales disponibles, délais, erreurs et métadonnées d’usage.
+2. Garder l’orchestration, les permissions, la mémoire, les tâches et la journalisation indépendantes du format d’un fournisseur.
+3. Implémenter un adaptateur réel et un adaptateur simulé pour les tests.
+4. Définir une stratégie de timeout, retry limité, circuit breaker et fallback si un fournisseur secondaire est configuré.
+5. Ne jamais basculer vers un fournisseur qui ne respecte pas les exigences de confidentialité ou de capacités attendues.
+6. Mesurer latence, coût et taux d’échec sans journaliser les contenus privés par défaut.
+
+**Critères :** tests contractuels communs et possibilité de remplacer l’adaptateur sans modifier les modèles de données métier.
+
+## A14. Profil professionnel, offre premium et abonnements
+
+1. Définir les fonctionnalités réellement incluses dans Free, Plus et Pro ; ne pas utiliser le nom d’une offre pour laisser croire à des capacités absentes.
+2. Calculer quotas et droits côté serveur ; le client ne fait qu’afficher les droits retournés.
+3. Séparer profil professionnel (préférences/présentation) et rôle d’autorisation (permissions de sécurité).
+4. Si un abonnement numérique est vendu dans l’app iOS, vérifier les règles Apple applicables et implémenter le parcours de paiement autorisé, restauration, renouvellement, annulation et gestion des états.
+5. Valider les notifications de paiement côté serveur et traiter les événements en idempotence.
+6. Afficher prix, période, renouvellement et conditions avant confirmation.
+7. Ne jamais accorder un droit premium uniquement sur la base d’un succès de paiement déclaré par le client.
+8. Si le paiement iOS n’est pas prêt, retirer l’achat de l’app soumise ou suivre une voie explicitement validée par les règles applicables.
+
+**Tests :** achat réussi/échoué/annulé, restauration, remboursement, expiration, webhook dupliqué, droits périmés et perte réseau.
+
+## A15. Newsletter, consentement marketing et communication
+
+1. Proposer une case d’inscription à la newsletter facultative, décochée par défaut et distincte des CGU et de la politique de confidentialité.
+2. Enregistrer la preuve du choix, la date, la version du texte et le canal ; ne pas empêcher l’utilisation du produit si la personne refuse.
+3. Fournir un lien de désinscription fonctionnel dans chaque communication marketing pertinente.
+4. Synchroniser les changements de consentement avec le service de newsletter ; signaler les erreurs et prévoir une procédure manuelle.
+5. Ne pas réutiliser l’adresse pour du marketing au-delà de la finalité et du fondement juridique définis.
+6. Ne pas partager la liste de diffusion avec des tiers non déclarés.
+
+**Critères :** inscription facultative, refus sans blocage, désinscription vérifiée et preuve de consentement conservée selon la politique.
+
+## A16. Site web, SEO, HTTPS et cookies
+
+### A16.1 Transport et sécurité
+- Forcer HTTPS au niveau de l’hébergement/edge, activer HSTS après vérification des sous-domaines et éviter les ressources mixtes.
+- Vérifier certificats, redirections, en-têtes de sécurité, politique CORS et politique de contenu (CSP) adaptée à l’application.
+- Garder les API hors du front-end : aucun secret fournisseur ou privilège serveur dans le JavaScript livré.
+- Appliquer des limites de requêtes et une validation de schéma côté serveur.
+
+### A16.2 Cookies
+- Inventorier tous les cookies, SDK et traceurs réellement utilisés.
+- Bloquer les traceurs non essentiels avant consentement lorsque requis.
+- Présenter des choix compréhensibles : accepter, refuser et personnaliser, avec un accès ultérieur aux préférences.
+- Enregistrer la preuve du choix et permettre son retrait.
+- Ne pas afficher une bannière inutile si le site n’utilise aucun traceur nécessitant un consentement ; documenter la décision.
+
+### A16.3 SEO et métadonnées
+- Définir un `title` unique et descriptif par page, une description meta, une URL canonique et les métadonnées de partage appropriées.
+- Ajouter sitemap/robots adaptés, favicon, Open Graph et structure sémantique accessible.
+- Ne pas indexer les routes privées, l’administration ou les pages de compte.
+- Vérifier les titres, descriptions, liens et aperçus après déploiement.
+
+### A16.4 Pages publiques obligatoires
+- Politique de confidentialité/RGPD, CGU, contact/support et informations de l’éditeur.
+- Les pages doivent être accessibles depuis le site et l’app lorsque pertinent, versionnées et cohérentes avec les traitements réellement déployés.
+- Ne pas prétendre que la simple publication d’une politique suffit à rendre conforme un traitement qui ne l’est pas.
+
+## A17. Visualisations, 3D et God’s Eye View — post-V1.0
+
+1. Définir chaque visualisation comme un module séparé avec contrat d’entrée/sortie, version et permissions.
+2. Distinguer visuellement données réelles, données simulées et démonstrations.
+3. Définir l’origine, l’horodatage, l’incertitude et la licence des données externes.
+4. Valider les messages échangés entre ARIA et le moteur de visualisation par schéma et origine autorisée.
+5. Permettre d’annuler une transition immersive et de revenir à l’interface principale.
+6. La transition caméra à travers le logo doit être purement navigationnelle : elle ne doit pas suggérer qu’une simulation ou une donnée a été chargée avant confirmation.
+7. Pour les visualisations scientifiques, documenter les unités, hypothèses, limites du modèle et paramètres contrôlables.
+8. Tester performance, accessibilité, chauffe, consommation énergétique et compatibilité mobile.
+
+**Critères :** données clairement identifiées, aucun message inter-module non validé, état de chargement/erreur clair et sortie de visualisation toujours possible.
+
+## A18. Application compagnon PC — après la V1 iOS
+
+- Garder le backend, l’identité, la mémoire et les contrats métier partagés ; construire un client PC séparé plutôt qu’un tunnel de confiance implicite depuis l’iPhone.
+- Appairer les appareils avec une preuve d’identité, révocation et liste des appareils associés.
+- Chiffrer les communications, limiter les commandes à une liste autorisée et exiger confirmation pour les actions sensibles.
+- Présenter l’état de connexion et permettre la révocation de l’appareil depuis le compte.
+- Ne pas ouvrir de contrôle distant général du PC par défaut.
+- Tester le renouvellement de session, le rejeu, l’appareil perdu, la déconnexion et l’isolement des comptes.
+
+## A19. Observabilité, support et incidents
+
+1. Définir des métriques minimales : disponibilité API, latence, taux d’erreur, crashs, erreurs audio, coûts et limites d’usage.
+2. Exclure secrets, jetons et contenu conversationnel des logs par défaut.
+3. Définir des alertes pour les erreurs serveur, la hausse des coûts et les échecs d’authentification.
+4. Fournir une adresse de support ou un formulaire fonctionnel avec suivi des demandes.
+5. Établir un runbook : identifier incident, réduire l’impact, désactiver la fonction affectée, restaurer le service et communiquer aux utilisateurs si nécessaire.
+6. Prévoir sauvegarde/restauration et vérifier périodiquement la restauration, pas uniquement l’existence des sauvegardes.
+7. Définir la procédure de retrait d’une version problématique et la publication d’un correctif.
+
+## A20. Matrice d’acceptation transversale
+
+Chaque fonctionnalité livrée doit fournir :
+- identifiant d’exigence et description utilisateur ;
+- composants et fichiers touchés ;
+- migration éventuelle ;
+- permissions et données utilisées ;
+- tests unitaires, intégration et parcours utilisateur ;
+- test d’échec et de reprise ;
+- preuve de validation en staging ;
+- procédure de rollback ou de désactivation ;
+- documentation d’aide et mise à jour des pages légales si nécessaire ;
+- état explicite : non commencé, en cours, bloqué, implémenté, vérifié en staging, validé sur appareil ou publié.
+
+**Règle de release :** une fonctionnalité ne peut être qualifiée de « terminée » sur la seule base du code écrit. Elle doit passer ses critères, ses tests, une revue de sécurité proportionnée et la validation sur les environnements concernés.
+
+## A21. Ordre d’intégration concret
+
+1. Revue des PR existantes et matrice exigence/code/test.
+2. Authentification individuelle, contrôle d’accès, séparation des environnements et tests d’isolation.
+3. Contrats API, limites, gestion des secrets et observabilité.
+4. Stabilisation voix/HUD et contrat de réponse structuré.
+5. Client iOS natif et intégration du cycle audio.
+6. Historique, mémoire contrôlée et suppression.
+7. Onboarding, compte, paramètres, aide et pages légales.
+8. Tests de bout en bout et bêta TestFlight.
+9. Monétisation uniquement si le parcours complet et les règles Apple sont validés.
+10. Publication, surveillance et correctifs.
+11. Reprise des tâches, outils vérifiés et compétences versionnées en V1.1+.
+12. Proactivité, registre des décisions, visualisations 3D et compagnon PC en jalons distincts après validation de la base.
+
+Cette annexe doit être relue conjointement avec le cahier des charges V1.2, son complément fonctionnel V1.2.1 et l’audit de code. En cas de contradiction, ne pas choisir silencieusement : documenter la différence et la résoudre avant implémentation.
