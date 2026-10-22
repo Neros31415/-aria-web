@@ -85,3 +85,34 @@ test("rejects an oversized actual body even without Content-Length", async () =>
   assert.equal(response.status, 413);
   assert.deepEqual(await response.json(), { error: "request_too_large" });
 });
+
+
+test("rejects an oversized actual memory PUT body", async () => {
+  const response = await worker.fetch(new Request("https://aria-staging.test/memory", {
+    method: "PUT",
+    headers: {
+      "Authorization": "Bearer test-token",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      clientId: "123e4567-e89b-42d3-a456-426614174000",
+      memories: [],
+      padding: "x".repeat(100_000)
+    })
+  }), env);
+  assert.equal(response.status, 413);
+  assert.deepEqual(await response.json(), { error: "request_too_large" });
+});
+
+test("rejects a non-object memory PUT payload", async () => {
+  const response = await worker.fetch(new Request("https://aria-staging.test/memory", {
+    method: "PUT",
+    headers: {
+      "Authorization": "Bearer test-token",
+      "Content-Type": "application/json"
+    },
+    body: "null"
+  }), env);
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: "invalid_memory_payload" });
+});
