@@ -413,6 +413,8 @@ test("map scene connects real OpenStreetMap tiles, geocoding, and OSRM routing w
   assert.match(visualEngine, /routed-foot/);
   assert.match(visualEngine, /routed-bike/);
   assert.match(visualEngine, /lastGeocodeAt/);
+  assert.match(visualEngine, /updateContextStatus\("CARTE ACTIVE"/);
+  assert.match(visualEngine, /CARTE INDISPONIBLE/);
   assert.match(visualEngine, /aucune géolocalisation automatique/i);
   assert.match(app, /Carte et itinéraires/);
 });
