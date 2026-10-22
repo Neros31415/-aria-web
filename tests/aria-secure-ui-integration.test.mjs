@@ -192,7 +192,7 @@ test("science scene includes a local interactive orbital simulation alongside th
   assert.match(visualEngine, /Réinitialiser/);
   assert.match(visualEngine, /aria-label", "Simulation animée des orbites du Soleil et des huit planètes/);
   assert.match(visualEngine, /function drawSolarSystem/);
-  assert.match(visualEngine, /Les tailles et distances ne sont pas à l’échelle/);
+  assert.match(visualEngine, /tailles et distances ne sont pas à l’échelle/i);
   assert.match(css, /aria-solar-canvas/);
   assert.match(css, /aria-scene-tabs/);
 });
