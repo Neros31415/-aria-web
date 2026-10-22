@@ -142,7 +142,7 @@ export default {
     }
     if (url.pathname !== "/chat" && url.pathname !== "/memory") return json({ error: "not_found" }, 404);
     if (url.pathname === "/chat" && req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
-    if (url.pathname === "/memory" && !["GET", "PUT"].includes(req.method)) return json({ error: "method_not_allowed" }, 405);
+    if (url.pathname === "/memory" && !["GET", "PUT", "DELETE"].includes(req.method)) return json({ error: "method_not_allowed" }, 405);
     if (!env.OPENAI_API_KEY) return json({ error: "service_not_configured" }, 503);
     const auth = await authenticateRequest(req, env);
     if (!auth.ok) return json({ error: auth.error }, auth.status);
@@ -179,6 +179,10 @@ export default {
         if (req.method === "GET") {
           const saved = await env.ARIA_MEMORY.get(key, "json");
           return json({ memories: Array.isArray(saved) ? saved : [], persisted: true });
+        }
+        if (req.method === "DELETE") {
+          await env.ARIA_MEMORY.delete(key);
+          return json({ deleted: true, persisted: true });
         }
         if (!Array.isArray(body.memories) || body.memories.length > 100) {
           return json({ error: "invalid_memories" }, 400);
