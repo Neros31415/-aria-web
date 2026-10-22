@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import worker from "../cloudflare/aria-brain-staging.mjs";
 
 const env = {
+  ARIA_AUTH_MODE: "legacy",
   ARIA_ACCESS_TOKEN: "test-token",
   OPENAI_API_KEY: "test-provider-key",
   ARIA_MEMORY: {
@@ -174,7 +175,7 @@ test("rejects unsupported methods on the chat route", async () => {
 test("fails closed when required server secrets are missing", async () => {
   const response = await worker.fetch(request({
     messages: [{ role: "user", content: "Bonjour" }]
-  }), { ARIA_ACCESS_TOKEN: "test-token", ARIA_MEMORY: env.ARIA_MEMORY });
+  }), { ARIA_AUTH_MODE: "legacy", ARIA_ACCESS_TOKEN: "test-token", ARIA_MEMORY: env.ARIA_MEMORY });
   assert.equal(response.status, 503);
   assert.deepEqual(await response.json(), { error: "service_not_configured" });
 });
@@ -271,6 +272,18 @@ test("persists and retrieves memory notes through the memory routes", async () =
   assert.equal(typeof saved.memories[0].updatedAt, "number");
 });
 
+
+test("missing auth mode defaults to individual auth and fails closed without Supabase config", async () => {
+  const response = await worker.fetch(request({
+    messages: [{ role: "user", content: "Bonjour" }]
+  }), {
+    OPENAI_API_KEY: "test-provider-key",
+    ARIA_ACCESS_TOKEN: "test-token",
+    ARIA_MEMORY: env.ARIA_MEMORY
+  });
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: "auth_not_configured" });
+});
 
 test("individual-auth mode fails closed when Supabase configuration is missing", async () => {
   const response = await worker.fetch(new Request("https://aria-staging.test/chat", {
