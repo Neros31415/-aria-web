@@ -518,12 +518,12 @@ test("session_kv mode derives identity only from a server-side hashed session re
     ARIA_USERS: {
       async get(key) {
         keys.push(key);
-        return key === "session:v1:" + tokenHash ? ownerId : null;
+        return key === "session:v1:" + tokenHash ? "account_user_01" : null;
       }
     },
     ARIA_MEMORY: {
       async get(key, type) {
-        assert.equal(key, "memory:v2:" + ownerId);
+        assert.equal(key, "memory:v2:account_user_01");
         return type === "json" ? [{ id: "m1", text: "Compte A" }] : JSON.stringify([{ id: "m1", text: "Compte A" }]);
       },
       async put() {},
@@ -543,7 +543,7 @@ test("session_kv mode rejects missing, malformed, and cross-format identities cl
   const token = "session-token-for-staging-test-12345678901234567890";
   const cases = [
     { env: { ARIA_AUTH_MODE: "session_kv", OPENAI_API_KEY: "test-provider-key", ARIA_USERS: { async get() { return null; } } }, status: 401 },
-    { env: { ARIA_AUTH_MODE: "session_kv", OPENAI_API_KEY: "test-provider-key", ARIA_USERS: { async get() { return "not-a-uuid"; } } }, status: 401 },
+    { env: { ARIA_AUTH_MODE: "session_kv", OPENAI_API_KEY: "test-provider-key", ARIA_USERS: { async get() { return "invalid identity!"; } } }, status: 401 },
     { env: { ARIA_AUTH_MODE: "session_kv", OPENAI_API_KEY: "test-provider-key" }, status: 503 }
   ];
   for (const item of cases) {
