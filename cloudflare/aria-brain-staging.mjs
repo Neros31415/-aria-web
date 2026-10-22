@@ -1,3 +1,31 @@
+async function readLimitedBody(request, maxBytes) {
+  if (!request.body) return { text: "" };
+  const reader = request.body.getReader();
+  const chunks = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > maxBytes) {
+        await reader.cancel();
+        return { tooLarge: true };
+      }
+      chunks.push(value);
+    }
+  } catch {
+    return { readError: true };
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { text: new TextDecoder().decode(bytes) };
+}
+
 export default {
   async fetch(req, env) {
     const origin = req.headers.get("Origin") || "";
@@ -50,16 +78,13 @@ export default {
       if (req.method === "PUT") {
         const declaredLength = Number(req.headers.get("Content-Length") || 0);
         if (declaredLength > 96_000) return json({ error: "request_too_large" }, 413);
-        let rawBody;
+        const boundedBody = await readLimitedBody(req, 96_000);
+        if (boundedBody.tooLarge) return json({ error: "request_too_large" }, 413);
+        if (boundedBody.readError) return json({ error: "invalid_request_body" }, 400);
         try {
-          rawBody = await req.text();
-          if (new TextEncoder().encode(rawBody).byteLength > 96_000) {
-            return json({ error: "request_too_large" }, 413);
-          }
-          body = JSON.parse(rawBody);
-        } catch (error) {
-          if (error instanceof SyntaxError) return json({ error: "invalid_json" }, 400);
-          return json({ error: "invalid_request_body" }, 400);
+          body = JSON.parse(boundedBody.text);
+        } catch {
+          return json({ error: "invalid_json" }, 400);
         }
         if (!body || typeof body !== "object" || Array.isArray(body)) {
           return json({ error: "invalid_memory_payload" }, 400);
@@ -98,16 +123,14 @@ export default {
     const declaredLength = Number(req.headers.get("Content-Length") || 0);
     if (declaredLength > 96_000) return json({ error: "request_too_large" }, 413);
 
+    const boundedBody = await readLimitedBody(req, 96_000);
+    if (boundedBody.tooLarge) return json({ error: "request_too_large" }, 413);
+    if (boundedBody.readError) return json({ error: "invalid_request_body" }, 400);
     let body;
     try {
-      const rawBody = await req.text();
-      if (new TextEncoder().encode(rawBody).byteLength > 96_000) {
-        return json({ error: "request_too_large" }, 413);
-      }
-      body = JSON.parse(rawBody);
-    } catch (error) {
-      if (error instanceof SyntaxError) return json({ error: "invalid_json" }, 400);
-      return json({ error: "invalid_request_body" }, 400);
+      body = JSON.parse(boundedBody.text);
+    } catch {
+      return json({ error: "invalid_json" }, 400);
     }
     if (!body || !Array.isArray(body.messages) || !body.messages.length || body.messages.length > 22) {
       return json({ error: "invalid_messages" }, 400);
