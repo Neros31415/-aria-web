@@ -173,19 +173,24 @@ export default {
 
     const url = new URL(req.url);
     if (url.pathname === "/health" && req.method === "GET") {
+      const authMode = env.ARIA_AUTH_MODE || "individual";
+      const authConfigured = authMode === "individual"
+        ? Boolean(env.SUPABASE_URL && env.SUPABASE_ANON_KEY)
+        : authMode === "session_kv"
+          ? Boolean(env.ARIA_USERS)
+          : authMode === "legacy" && Boolean(env.ARIA_ACCESS_TOKEN);
+      const individualMode = authMode === "individual" || authMode === "session_kv";
+      const authorizationConfigured = !individualMode || Boolean(env.ARIA_AUTHZ_DB);
+      const memoryConfigured = Boolean(env.ARIA_MEMORY);
       return json({
         status: "ok",
         service: "aria-api",
-        configured: Boolean(env.OPENAI_API_KEY && (
-          (env.ARIA_AUTH_MODE || "individual") === "individual"
-            ? env.SUPABASE_URL && env.SUPABASE_ANON_KEY
-            : (env.ARIA_AUTH_MODE === "session_kv"
-              ? env.ARIA_USERS
-              : env.ARIA_AUTH_MODE === "legacy" && env.ARIA_ACCESS_TOKEN)
-        )),
+        configured: Boolean(env.OPENAI_API_KEY && authConfigured && authorizationConfigured && (!individualMode || memoryConfigured)),
+        authenticationMode: authMode,
+        authorizationStore: Boolean(env.ARIA_AUTHZ_DB),
         provider: "openai",
         model: "gpt-6-astra",
-        persistentMemory: Boolean(env.ARIA_MEMORY)
+        persistentMemory: memoryConfigured
       });
     }
     if (url.pathname !== "/chat" && url.pathname !== "/memory") return json({ error: "not_found" }, 404);
