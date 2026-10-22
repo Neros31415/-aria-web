@@ -45,7 +45,7 @@ async function authenticateRequest(req, env) {
       return { ok: false, status: 503, error: "auth_not_configured" };
     }
 
-    const match = authorization.match(/^Bearer\\s+(.+)$/i);
+    const match = authorization.match(/^Bearer\s+(.+)$/i);
     if (!match) return { ok: false, status: 401, error: "unauthorized" };
 
     let response;
