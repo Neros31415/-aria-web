@@ -8,8 +8,10 @@ on:
     paths:
       - "cloudflare/aria-brain-staging.mjs"
       - "cloudflare/aria-authorization.mjs"
+      - "cloudflare/aria-authorization-d1.mjs"
       - "tests/aria-brain-staging.test.mjs"
       - "tests/aria-authorization.test.mjs"
+      - "tests/aria-authorization-d1.test.mjs"
       - ".github/workflows/staging-worker-tests.yml"
   pull_request:
     branches:
@@ -36,4 +38,4 @@ jobs:
         with:
           node-version: 22
       - name: Run staging worker tests
-        run: node --test tests/aria-brain-staging.test.mjs tests/aria-authorization.test.mjs
+        run: node --test tests/aria-brain-staging.test.mjs tests/aria-authorization.test.mjs tests/aria-authorization-d1.test.mjs
