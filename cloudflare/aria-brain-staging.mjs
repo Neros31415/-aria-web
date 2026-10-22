@@ -214,7 +214,7 @@ export default {
                 properties: {
                   reply: { type: "string" },
                   action: { type: "string", enum: ["none", "open_visualization", "close_visualization", "open_memory", "close_widgets"] },
-                  scene: { type: "string", enum: ["none", "globe", "map", "engine", "scientific_model", "other"] }
+                  scene: { type: "string", enum: ["none", "globe", "map", "finance", "engine", "scientific_model", "other"] }
                 },
                 required: ["reply", "action", "scene"]
               }
@@ -235,7 +235,7 @@ export default {
       let turn;
       try { turn = JSON.parse(outputText); } catch { return json({ error: "invalid_provider_output" }, 502); }
       const allowedActions = new Set(["none", "open_visualization", "close_visualization", "open_memory", "close_widgets"]);
-      const allowedScenes = new Set(["none", "globe", "map", "engine", "scientific_model", "other"]);
+      const allowedScenes = new Set(["none", "globe", "map", "finance", "engine", "scientific_model", "other"]);
       if (!turn || typeof turn.reply !== "string" || !turn.reply.trim() ||
           !allowedActions.has(turn.action) || !allowedScenes.has(turn.scene)) {
         return json({ error: "invalid_provider_output" }, 502);
