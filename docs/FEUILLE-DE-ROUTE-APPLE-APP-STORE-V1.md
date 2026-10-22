@@ -1,5 +1,5 @@
 # ARIA — Feuille de route jusqu’à l’Apple App Store
-**Version :** 1.0  
+**Version du document :** 1.2  
 **Date de référence :** 22 octobre 2026  
 **Périmètre :** ARIA iOS, depuis l’état actuel du projet jusqu’à une première version publique approuvée sur l’App Store.  
 **Statut :** plan d’exécution proposé — les jalons ne sont pas réputés accomplis tant que leurs critères de sortie n’ont pas été vérifiés.
@@ -9,29 +9,31 @@
 Livrer une première application iPhone ARIA utile, stable, sécurisée et conforme, centrée sur une interaction vocale naturelle, un HUD discret, une mémoire contrôlée par l’utilisateur et un backend IA sécurisé. Cette version doit être un vrai produit iOS, pas seulement un site web emballé dans une coquille.
 
 **Cible initiale :** une version publique iOS limitée mais fiable (« ARIA iOS 1.0 »).  
-**Estimation de planification :** environ 12 à 20 semaines de travail à temps régulier, potentiellement davantage selon les blocages d’authentification, la disponibilité d’un environnement macOS/Xcode, la conformité et les retours Apple. Ce n’est pas une date garantie.
+**Estimation de planification révisée :** au minimum 6 à 12 mois de travail soutenu, potentiellement davantage selon la taille réelle de l’équipe, les intégrations tierces, la validation des capacités 3D/PC, la sécurité, la conformité et les retours Apple. Cette estimation est indicative et non une date garantie. Le périmètre complet demandé augmente fortement l’effort par rapport à une première version limitée.
 
-### Inclus dans la première version publique
-- Onboarding clair et présentation des capacités/limites d’ARIA.
-- Interaction vocale au premier plan : démarrer/arrêter l’écoute, transcription visible, réponse vocale et interruption contrôlée.
-- Chat texte de secours.
-- HUD iOS cohérent, responsive, accessible et non surchargé.
-- Comptes individuels si la synchronisation serveur est activée ; session invitée possible uniquement si elle est sécurisée et cohérente avec le produit.
-- Mémoire explicite : consentement, consultation, correction et suppression ; indication claire quand une opération échoue.
-- Backend isolé du client, secrets uniquement côté serveur, limites d’usage et gestion des erreurs.
-- Historique des conversations, suppression de conversation et fermeture/suppression du compte si un système de compte est proposé.
-- Page de paramètres, aide/contact, politique de confidentialité et CGU accessibles.
-- Gestion des offres gratuite/premium seulement si les droits, les paiements et les parcours sont complètement fonctionnels.
-- Télémétrie minimale et respectueuse de la vie privée, désactivable lorsque requis.
+### Inclus dans ARIA 1.0 — périmètre complet
+- Onboarding, interaction vocale prioritaire, chat texte de secours, HUD, accessibilité et paramètres.
+- Comptes individuels, rôles, Super Admin protégé, gestion des clés d’accès privées pour les proches, offres et droits vérifiés côté serveur.
+- Mémoire persistante contrôlée, historique, correction, export et suppression des données et du compte.
+- Compréhension d’intention, planification multi-étapes, continuité/reprise de tâches, exécution d’outils autorisés et vérification des résultats.
+- Registre de compétences versionnées, tests, permissions strictes et retour arrière.
+- Mémoire des décisions, hypothèses, options et raisons.
+- Proactivité configurable, ordonnanceur opérationnel, notifications, périodes silencieuses, déduplication et désactivation.
+- Abstraction fournisseur IA, gestion des indisponibilités, quotas et coûts.
+- Profil professionnel, offres gratuites/premium, paiements et gestion des abonnements si retenus, avec parcours complets et conformes.
+- Inscription newsletter facultative et désinscription.
+- Site web associé cohérent : HTTPS, API côté serveur, pages RGPD/CGU, cookies lorsque requis, SEO, métadonnées et support.
+- Modules de visualisation 3D et God’s Eye View prévus par le cahier des charges, avec données réelles/simulées clairement distinguées, provenance, limites, sécurité des échanges et transition immersive via le logo.
+- Application compagnon PC, appairage sécurisé, commandes explicitement autorisées, révocation d’appareil et échanges chiffrés.
+- Observabilité, tests de sécurité, tests d’acceptation, sauvegardes, support et procédure de gestion d’incident.
 
-### Hors périmètre du premier lancement
-- Autonomie générale sur le téléphone ou l’ordinateur.
-- Microphone permanent en arrière-plan ou écoute toujours active.
-- Contrôle distant du PC, automatisations sensibles et actions irréversibles.
-- Registre complet de compétences autonomes, proactivité planifiée étendue, simulations 3D avancées et « God’s Eye View » connecté à des sources réelles.
-- Promesses de capacités qui ne sont pas réellement implémentées et testées.
+### Hors périmètre permanent ou interdit par défaut
+- Écoute microphone cachée ou permanente sans activation et indication explicites.
+- Contrôle arbitraire et non autorisé d’un appareil, élévation automatique de privilèges ou exécution d’action sensible sans confirmation requise.
+- Présentation d’une simulation comme une donnée réelle, ou d’une action comme réussie sans preuve.
+- Toute fonction dont les garanties de sécurité, les droits, les données, les coûts ou la conformité ne sont pas établis. Elle ne peut être activée qu’après résolution du blocage et validation formelle.
 
-Ces éléments restent dans la feuille de route post-lancement. Leur absence ne doit pas empêcher le lancement d’un assistant vocal de base de qualité.
+**Principe de livraison :** toutes les familles fonctionnelles décrites dans le cahier des charges sont ciblées pour ARIA 1.0. Elles peuvent être livrées en plusieurs incréments internes, mais aucune n’est automatiquement repoussée à une version publique ultérieure. La version App Store ne sortira que lorsque les critères de chaque famille activée et annoncée seront satisfaits.
 
 ## 2. État de départ et risques connus
 
@@ -282,14 +284,9 @@ Privilégier une application iOS native SwiftUI pour une expérience robuste du 
 
 ## 5. Après le lancement — versions 1.1 et suivantes
 
-À ne démarrer qu’après stabilisation de la 1.0 :
-1. **V1.1 — Continuité :** tâches reprenables avec état durable et dépendances vérifiées.
-2. **V1.2 — Actions sûres :** premier petit ensemble d’outils avec permissions, confirmations et preuves de résultat.
-3. **V1.3 — Compétences :** procédures versionnées et testées, avec retour arrière.
-4. **V1.4 — Proactivité :** préférences, horaires silencieux et déclencheurs explicites, uniquement avec ordonnanceur opérationnel.
-5. **V1.5 — Décisions :** journal structuré des décisions et hypothèses.
-6. **V2.x — Intégration PC :** app compagnon, appairage sécurisé, relais chiffré et contrôle explicitement autorisé.
-7. **Plus tard :** visualisations scientifiques et 3D avancées connectées à des données réelles.
+Le périmètre fonctionnel du cahier des charges doit être livré dans la 1.0. Les versions suivantes sont réservées aux améliorations, à l’extension de capacité, aux optimisations et aux nouvelles fonctions qui ne sont pas déjà promises dans le cahier des charges. Elles ne servent pas à repousser les familles fonctionnelles listées dans la section 1 ou dans l’annexe A.
+
+Exemples d’améliorations post-lancement : optimisation de latence/coût, nouveaux adaptateurs IA, nouvelles compétences après validation, extensions de visualisations, nouvelles intégrations PC et améliorations ergonomiques. Toute nouvelle fonction doit être distinguée des exigences de la 1.0 dans le backlog.
 
 ## 6. Tableau de pilotage
 
@@ -337,8 +334,8 @@ Les exigences Apple peuvent évoluer. Les règles de paiement, de connexion, de 
 ---
 
 # ANNEXE A — Spécifications d’implémentation fonctionnelle détaillées
-**Version :** 1.1 — complément d’implémentation à la feuille de route App Store.  
-**Règle :** cette annexe décrit le travail à réaliser et ses critères de validation. Elle ne signifie pas que les fonctionnalités sont déjà codées. Les fonctions hors V1.0 sont conservées dans les jalons post-lancement et ne doivent pas être activées prématurément.
+**Version :** 1.2 — spécification d’implémentation de la feuille de route App Store.  
+**Règle :** cette annexe décrit le travail à réaliser et ses critères de validation. Elle ne signifie pas que les fonctionnalités sont déjà codées. Toutes les familles fonctionnelles du cahier des charges sont incluses dans la cible de livraison ARIA 1.0, avec un ordre d’intégration interne et des critères de blocage explicites.
 
 ## A1. Architecture cible et frontières de confiance
 
@@ -519,7 +516,7 @@ Pour chaque outil, définir une fiche avec nom/version, description, schéma d�
 
 **Version 1.0 :** limiter les outils aux capacités sûres nécessaires à la conversation et aux fonctions réellement implémentées. L’exécution générale d’actions système reste désactivée tant que sa surface de risque n’est pas auditée.
 
-## A9. Continuité et reprise de tâches — post-V1.0
+## A9. Continuité et reprise de tâches — obligatoire en V1.0
 
 Stocker un objet tâche contenant : objectif, plan versionné, étape courante, résultats vérifiés, dépendances, permissions accordées, erreurs, prochaine action, horodatage et statut.
 
@@ -532,7 +529,7 @@ Stocker un objet tâche contenant : objectif, plan versionné, étape courante, 
 
 **Critères :** fermeture/réouverture, panne réseau, dépendance changée, tâche annulée et résultat d’action incertain.
 
-## A10. Compétences versionnées — post-V1.0
+## A10. Compétences versionnées — obligatoire en V1.0
 
 Une compétence est un paquet contrôlé de procédure, pas un privilège supplémentaire :
 1. Décrire objectif, déclencheurs, entrées, sorties, outils nécessaires, permissions et limites.
@@ -545,7 +542,7 @@ Une compétence est un paquet contrôlé de procédure, pas un privilège suppl�
 
 **Critères :** version identifiable, tests reproductibles, comparaison des versions, rollback et refus des permissions non déclarées.
 
-## A11. Proactivité et notifications — post-V1.0
+## A11. Proactivité et notifications — obligatoire en V1.0
 
 1. N’activer une surveillance que si la source, l’autorisation et l’ordonnanceur sont réellement configurés.
 2. Recueillir des préférences explicites : types d’événements, fréquence, plages silencieuses, canal et désactivation.
@@ -557,7 +554,7 @@ Une compétence est un paquet contrôlé de procédure, pas un privilège suppl�
 
 **Critères :** aucune notification sans déclencheur démontrable, préférence respectée, mode silencieux respecté et désactivation effective.
 
-## A12. Mémoire des décisions — post-V1.0
+## A12. Mémoire des décisions — obligatoire en V1.0
 
 Modèle proposé : décision, contexte, objectif, options considérées, choix retenu, raisons, hypothèses, conséquences attendues, propriétaire, date, statut (active, remplacée, à réexaminer) et provenance.
 
@@ -630,7 +627,7 @@ Modèle proposé : décision, contexte, objectif, options considérées, choix r
 - Les pages doivent être accessibles depuis le site et l’app lorsque pertinent, versionnées et cohérentes avec les traitements réellement déployés.
 - Ne pas prétendre que la simple publication d’une politique suffit à rendre conforme un traitement qui ne l’est pas.
 
-## A17. Visualisations, 3D et God’s Eye View — post-V1.0
+## A17. Visualisations, 3D et God’s Eye View — obligatoire en V1.0
 
 1. Définir chaque visualisation comme un module séparé avec contrat d’entrée/sortie, version et permissions.
 2. Distinguer visuellement données réelles, données simulées et démonstrations.
@@ -643,7 +640,7 @@ Modèle proposé : décision, contexte, objectif, options considérées, choix r
 
 **Critères :** données clairement identifiées, aucun message inter-module non validé, état de chargement/erreur clair et sortie de visualisation toujours possible.
 
-## A18. Application compagnon PC — après la V1 iOS
+## A18. Application compagnon PC — obligatoire pour la livraison globale ARIA 1.0
 
 - Garder le backend, l’identité, la mémoire et les contrats métier partagés ; construire un client PC séparé plutôt qu’un tunnel de confiance implicite depuis l’iPhone.
 - Appairer les appareils avec une preuve d’identité, révocation et liste des appareils associés.
@@ -680,17 +677,23 @@ Chaque fonctionnalité livrée doit fournir :
 
 ## A21. Ordre d’intégration concret
 
+Toutes les familles fonctionnelles sont des exigences de la version publique 1.0. L’ordre ci-dessous est un ordre de développement interne destiné à réduire les risques, et non une liste de fonctionnalités à repousser après lancement.
+
 1. Revue des PR existantes et matrice exigence/code/test.
-2. Authentification individuelle, contrôle d’accès, séparation des environnements et tests d’isolation.
-3. Contrats API, limites, gestion des secrets et observabilité.
-4. Stabilisation voix/HUD et contrat de réponse structuré.
-5. Client iOS natif et intégration du cycle audio.
-6. Historique, mémoire contrôlée et suppression.
-7. Onboarding, compte, paramètres, aide et pages légales.
-8. Tests de bout en bout et bêta TestFlight.
-9. Monétisation uniquement si le parcours complet et les règles Apple sont validés.
-10. Publication, surveillance et correctifs.
-11. Reprise des tâches, outils vérifiés et compétences versionnées en V1.1+.
-12. Proactivité, registre des décisions, visualisations 3D et compagnon PC en jalons distincts après validation de la base.
+2. Authentification individuelle, contrôle d’accès, rôles et tests d’isolation.
+3. Contrats API, limites, gestion des secrets, environnements et observabilité.
+4. Contrat d’intention, permissions, boucle d’exécution et preuve de résultat.
+5. Mémoire, historique, tâches reprenables et registre des décisions.
+6. Compétences versionnées et testées, avec retour arrière.
+7. Proactivité, ordonnanceur, notifications et contrôles de fréquence.
+8. Stabilisation voix/HUD et client iOS natif.
+9. Modules 3D/God’s Eye View et transition immersive, en distinguant clairement simulation et données réelles.
+10. Compagnon PC, appairage sécurisé, autorisations et révocation.
+11. Offres, comptes, clés privées, newsletter et parcours de paiement selon les règles applicables.
+12. Site public, pages légales, HTTPS, cookies, SEO, support et suppression de compte.
+13. Tests unitaires, intégration, sécurité, end-to-end, validation sur appareils et bêta TestFlight.
+14. Préparation de la fiche App Store, soumission, corrections de revue et publication.
+
+Le développement peut être mené par incréments et sous-systèmes, mais aucune famille fonctionnelle du cahier des charges n’est automatiquement reportée à une version publique ultérieure. Si une capacité dépend d’un service externe, d’un matériel ou d’une règle de plateforme, cette dépendance doit être résolue ou une solution de remplacement approuvée doit être livrée avant la sortie.
 
 Cette annexe doit être relue conjointement avec le cahier des charges V1.2, son complément fonctionnel V1.2.1 et l’audit de code. En cas de contradiction, ne pas choisir silencieusement : documenter la différence et la résoudre avant implémentation.
