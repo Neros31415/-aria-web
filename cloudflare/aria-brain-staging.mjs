@@ -1,3 +1,5 @@
+import { authorizeFromD1, ensureDefaultUserRole } from "./aria-authorization-d1.mjs";
+
 async function readLimitedBody(request, maxBytes) {
   if (!request.body) return { text: "" };
   const reader = request.body.getReader();
@@ -206,6 +208,22 @@ export default {
       if (!individualAuth && !validClientId(clientId)) return json({ error: "invalid_client_id" }, 400);
       if (individualAuth && !ownerId) return json({ error: "unauthorized" }, 401);
       const key = individualAuth ? "memory:v2:" + ownerId : "memory:v1:" + clientId;
+      if (individualAuth) {
+        const permission = req.method === "GET"
+          ? "memory:own:read"
+          : req.method === "DELETE"
+            ? "memory:own:delete"
+            : "memory:own:write";
+        const provisioned = await ensureDefaultUserRole({ identity: ownerId, env });
+        if (!provisioned.ok) {
+          return json({ error: "authorization_store_unavailable" }, 503);
+        }
+        const decision = await authorizeFromD1({ identity: ownerId, permission, env });
+        if (!decision.allowed) {
+          const unavailable = decision.reason === "authorization_store_unavailable";
+          return json({ error: unavailable ? "authorization_store_unavailable" : "permission_denied" }, unavailable ? 503 : 403);
+        }
+      }
       try {
         if (req.method === "GET") {
           const saved = await env.ARIA_MEMORY.get(key, "json");
