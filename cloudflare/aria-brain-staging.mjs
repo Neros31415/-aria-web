@@ -48,7 +48,22 @@ export default {
       let clientId = url.searchParams.get("clientId");
       let body;
       if (req.method === "PUT") {
-        try { body = await req.json(); } catch { return json({ error: "invalid_json" }, 400); }
+        const declaredLength = Number(req.headers.get("Content-Length") || 0);
+        if (declaredLength > 96_000) return json({ error: "request_too_large" }, 413);
+        let rawBody;
+        try {
+          rawBody = await req.text();
+          if (new TextEncoder().encode(rawBody).byteLength > 96_000) {
+            return json({ error: "request_too_large" }, 413);
+          }
+          body = JSON.parse(rawBody);
+        } catch (error) {
+          if (error instanceof SyntaxError) return json({ error: "invalid_json" }, 400);
+          return json({ error: "invalid_request_body" }, 400);
+        }
+        if (!body || typeof body !== "object" || Array.isArray(body)) {
+          return json({ error: "invalid_memory_payload" }, 400);
+        }
         clientId = body.clientId;
       }
       if (!validClientId(clientId)) return json({ error: "invalid_client_id" }, 400);
