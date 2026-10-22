@@ -535,7 +535,7 @@
       context.fill();
       context.restore();
       dayCount.textContent = "Jour simulé : " + Math.floor(elapsedDays).toLocaleString("fr-FR") + " · " + (paused ? "en pause" : "simulation active");
-      frame = window.requestAnimationFrame(drawSolarSystem);
+      frame = paused ? 0 : window.requestAnimationFrame(drawSolarSystem);
     }
 
     function stopSolarSystem() {
@@ -545,7 +545,7 @@
     }
     function startSolarSystem() {
       stopSolarSystem();
-      if (activeScienceView === "solar" && !solarPanel.hidden) frame = window.requestAnimationFrame(drawSolarSystem);
+      if (activeScienceView === "solar" && !solarPanel.hidden && !paused) frame = window.requestAnimationFrame(drawSolarSystem);
     }
     function setScienceView(view) {
       activeScienceView = view;
@@ -563,12 +563,22 @@
     pauseButton.addEventListener("click", () => {
       paused = !paused;
       pauseButton.textContent = paused ? "Reprendre" : "Pause";
-      if (!paused && activeScienceView === "solar") startSolarSystem();
+      if (paused) {
+        if (frame) window.cancelAnimationFrame(frame);
+        frame = 0;
+        lastTimestamp = 0;
+        if (activeScienceView === "solar") drawSolarSystem(0);
+      } else if (activeScienceView === "solar") {
+        startSolarSystem();
+      }
     });
     resetButton.addEventListener("click", () => {
       elapsedDays = 0;
       lastTimestamp = 0;
-      if (activeScienceView === "solar") startSolarSystem();
+      if (activeScienceView === "solar") {
+        if (paused) drawSolarSystem(0);
+        else startSolarSystem();
+      }
     });
 
     const runSearch = async () => {
