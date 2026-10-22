@@ -1,13 +1,13 @@
 # ARIA — État fonctionnel des scènes carte, finance et science
 
-Date de travail : 22 octobre 2026  
-Branche : `feat/aria-map-route-guidance`  
-Statut : intégration en cours, non fusionnée et non déployée. Cette branche part de `feat/aria-brain-staging-integration` pour conserver les contrôles D1 et l’authentification par session hachée.
+Date de travail : 23 octobre 2026  
+Branche d’intégration : `feat/aria-brain-staging-integration`  
+Statut : les PR #31, #32, #33 et #34 sont fusionnées dans la branche d’intégration sécurisée. Aucun déploiement ni publication en production n’a été effectué.
 
 ## Objectif
 Relier les scènes contextuelles du HUD à des sources réelles plutôt que de présenter des écrans de démonstration comme des fonctionnalités opérationnelles. Cette livraison ne réduit pas le périmètre ARIA 1.0.
 
-## Changements de cette branche
+## Fonctionnalités intégrées dans la branche sécurisée
 - Carte : charge Leaflet et les tuiles OpenStreetMap ; permet une recherche de lieu via Nominatim ; calcule des itinéraires en voiture, à pied ou à vélo via les profils publics OSRM. Ajoute un résumé visuel distance/durée/mode, des étapes de navigation localisées, un effacement d’itinéraire et une mise en page responsive, avec limitation du rythme de géocodage.
 - Finance : conserve le graphique TradingView avec symbole/période configurables et ajoute un portefeuille manuel local : positions, quantité, prix d’achat, prix actuel saisi, valeur estimée, capital investi, gain/perte latent, mise à jour de prix et suppression. Les données restent dans le stockage local du navigateur et ne sont pas envoyées au serveur ARIA.
 - Science : recherche et affiche des médias du catalogue public NASA avec accès à la source ; ajoute un simulateur orbital local animé du Soleil et des huit planètes, avec pause, reprise, remise à zéro et réglage de vitesse. Les périodes sont illustratives ; tailles, distances et positions ne sont pas à l’échelle et ne constituent pas des éphémérides.
@@ -24,10 +24,10 @@ Relier les scènes contextuelles du HUD à des sources réelles plutôt que de p
 - La scène carte reste une carte 2D avec itinéraire routier ; relief 3D, itinéraires multimodaux, vues immersives et God’s Eye View restent à intégrer.
 - Le modèle de moteur/mécanisme 3D reste à développer.
 - La session alpha `session_kv` utilise actuellement des identifiants opaques ; les opérations de mémoire soumises à l’autorisation D1 restent bloquées tant qu’une migration vérifiée vers une identité de compte canonique n’est pas réalisée. Ne pas contourner ce contrôle.
-- Aucun test visuel iPhone, aucun test réseau réel et aucune validation de bout en bout n'ont encore été exécutés pour cette branche. Les tests automatisés de la nouvelle branche doivent passer avant fusion.
+- Aucun test visuel iPhone, aucun test réseau réel et aucune validation de bout en bout n'ont encore été exécutés pour cette branche. Les tests automatisés des PR d’intégration ont passé ; il reste à exécuter les validations réseau et appareils réels avant une fusion vers main ou un déploiement.
 - Aucune publication ni aucun déploiement n'est inclus.
 
-## Critères de validation avant fusion
+## Critères restants avant fusion vers main et publication
 1. CI verte pour tous les tests du dépôt.
 2. Revue du diff et des risques liés aux dépendances externes.
 3. Vérification des états d'erreur hors ligne et de la fermeture d'une scène pendant un chargement asynchrone.
