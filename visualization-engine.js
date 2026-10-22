@@ -341,6 +341,16 @@
   function openFinance() {
     const sceneId = ++sceneEpoch;
     resetSceneContent();
+    const tabs = element("div", "aria-scene-tabs");
+    const chartTab = element("button", "", "Graphique de marché");
+    chartTab.type = "button";
+    chartTab.setAttribute("aria-pressed", "true");
+    const portfolioTab = element("button", "", "Portefeuille");
+    portfolioTab.type = "button";
+    portfolioTab.setAttribute("aria-pressed", "false");
+    tabs.append(chartTab, portfolioTab);
+
+    const chartPanel = element("section", "aria-finance-panel");
     const toolbar = element("form", "aria-scene-toolbar");
     const symbol = element("input");
     symbol.value = "NASDAQ:AAPL";
@@ -354,38 +364,229 @@
     const open = element("button", "", "Afficher le graphique");
     open.type = "submit";
     toolbar.append(symbol, interval, open);
-    const status = element("p", "aria-scene-status", "Graphique de marché fourni par TradingView. Les cotations et délais dépendent de la place et du fournisseur.");
-    status.setAttribute("role", "status");
+    const chartStatus = element("p", "aria-scene-status", "Graphique de marché fourni par TradingView. Les cotations et délais dépendent du fournisseur.");
+    chartStatus.setAttribute("role", "status");
     const frame = element("iframe", "aria-finance-frame");
     frame.title = "Graphique financier TradingView";
     frame.loading = "lazy";
     frame.referrerPolicy = "strict-origin-when-cross-origin";
-    const disclosure = element("p", "aria-scene-disclosure", "Cette vue fournit des données et graphiques de marché, pas un conseil financier. Vérifiez les cotations, les délais, les frais et les risques avant toute décision.");
+    const chartDisclosure = element("p", "aria-scene-disclosure", "Graphique externe, pas un conseil financier. Les cotations, délais et droits dépendent du fournisseur et de la place. Aucune transaction n’est effectuée par ARIA.");
+    chartPanel.append(toolbar, chartStatus, frame, chartDisclosure);
+
+    const portfolioPanel = element("section", "aria-portfolio-panel");
+    portfolioPanel.hidden = true;
+    const portfolioIntro = element("p", "aria-scene-status", "Suivi manuel uniquement : aucune connexion à un courtier, aucun ordre et aucun cours automatiquement récupéré. Les données sont conservées dans le stockage local de ce navigateur, pas envoyées au serveur ARIA.");
+    const summary = element("div", "aria-portfolio-summary");
+    const investedSummary = element("article", "aria-portfolio-metric");
+    const investedLabel = element("span", "", "Capital investi");
+    const investedValue = element("strong", "", "0,00 €");
+    investedSummary.append(investedLabel, investedValue);
+    const valueSummary = element("article", "aria-portfolio-metric");
+    const valueLabel = element("span", "", "Valeur estimée");
+    const valueValue = element("strong", "", "0,00 €");
+    valueSummary.append(valueLabel, valueValue);
+    const pnlSummary = element("article", "aria-portfolio-metric");
+    const pnlLabel = element("span", "", "Gain / perte latent(e)");
+    const pnlValue = element("strong", "", "0,00 €");
+    pnlSummary.append(pnlLabel, pnlValue);
+    summary.append(investedSummary, valueSummary, pnlSummary);
+
+    const holdingForm = element("form", "aria-portfolio-form");
+    const field = (labelText, type, name, placeholder, min = null) => {
+      const label = element("label", "aria-portfolio-field", labelText);
+      const input = element("input");
+      input.type = type;
+      input.name = name;
+      input.placeholder = placeholder || "";
+      input.setAttribute("aria-label", labelText);
+      if (type === "number") { input.step = "any"; if (min !== null) input.min = String(min); }
+      if (name === "name" || name === "quantity" || name === "purchasePrice" || name === "currentPrice") input.required = true;
+      label.appendChild(input);
+      return {label, input};
+    };
+    const nameField = field("Actif", "text", "name", "Ex. Fonds indiciel");
+    const tickerField = field("Symbole (facultatif)", "text", "symbol", "Ex. CW8");
+    const quantityField = field("Quantité", "number", "quantity", "0", 0.00000001);
+    const purchaseField = field("Prix d’achat (€)", "number", "purchasePrice", "0,00", 0);
+    const currentField = field("Prix actuel manuel (€)", "number", "currentPrice", "0,00", 0);
+    const addHolding = element("button", "", "Ajouter l’actif");
+    addHolding.type = "submit";
+    holdingForm.append(nameField.label, tickerField.label, quantityField.label, purchaseField.label, currentField.label, addHolding);
+    const portfolioStatus = element("p", "aria-scene-status", "Aucune position enregistrée.");
+    portfolioStatus.setAttribute("role", "status");
+    const holdings = element("div", "aria-portfolio-holdings");
+    const clearPortfolio = element("button", "", "Effacer le portefeuille");
+    clearPortfolio.type = "button";
+    const portfolioDisclosure = element("p", "aria-scene-disclosure", "Tous les montants doivent être saisis en euros ; aucune conversion de devise n’est appliquée. Les gains/pertes sont calculés à partir des prix saisis et ne tiennent pas compte des frais, impôts, dividendes ou écarts de change. Ce suivi est informatif, non un conseil financier.");
+    portfolioPanel.append(portfolioIntro, summary, holdingForm, portfolioStatus, holdings, clearPortfolio, portfolioDisclosure);
+
+    sceneRoot.append(tabs, chartPanel, portfolioPanel);
+    const storageKey = "aria.finance.portfolio.v1";
+    let portfolio = [];
+    let loadWarning = false;
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved !== null) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          portfolio = parsed.filter(item => item && typeof item.name === "string" &&
+            Number.isFinite(item.quantity) && item.quantity > 0 &&
+            Number.isFinite(item.purchasePrice) && item.purchasePrice >= 0 &&
+            Number.isFinite(item.currentPrice) && item.currentPrice >= 0).slice(0, 100);
+        } else loadWarning = true;
+      }
+    } catch { loadWarning = true; }
+
+    const euro = value => value.toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
+    const number = value => value.toLocaleString("fr-FR", { maximumFractionDigits: 8 });
+    const persistPortfolio = () => {
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(portfolio));
+        return true;
+      } catch {
+        portfolioStatus.textContent = "Stockage local indisponible : les modifications ne seront pas conservées après fermeture.";
+        return false;
+      }
+    };
+    const renderPortfolio = () => {
+      holdings.replaceChildren();
+      let invested = 0;
+      let marketValue = 0;
+      portfolio.forEach(item => {
+        const cost = item.quantity * item.purchasePrice;
+        const value = item.quantity * item.currentPrice;
+        const pnl = value - cost;
+        invested += cost;
+        marketValue += value;
+        const card = element("article", "aria-portfolio-holding");
+        const heading = element("div", "aria-portfolio-holding-heading");
+        heading.appendChild(element("strong", "", item.name + (item.symbol ? " · " + item.symbol : "")));
+        const remove = element("button", "aria-portfolio-remove", "Supprimer");
+        remove.type = "button";
+        remove.setAttribute("aria-label", "Supprimer " + item.name + " du portefeuille");
+        remove.addEventListener("click", () => {
+          portfolio = portfolio.filter(entry => entry.id !== item.id);
+          persistPortfolio();
+          renderPortfolio();
+          portfolioStatus.textContent = "Position supprimée du stockage local.";
+        });
+        heading.appendChild(remove);
+        const metrics = element("div", "aria-portfolio-holding-metrics");
+        metrics.append(
+          element("span", "", "Quantité : " + number(item.quantity)),
+          element("span", "", "Investi : " + euro(cost)),
+          element("span", "", "Valeur : " + euro(value))
+        );
+        const result = element("p", "aria-portfolio-pnl " + (pnl > 0 ? "is-positive" : pnl < 0 ? "is-negative" : ""), "Gain / perte : " + euro(pnl) + (cost > 0 ? " (" + ((pnl / cost) * 100).toLocaleString("fr-FR", { maximumFractionDigits: 2 }) + " %)" : " (base de coût nulle)"));
+        const priceForm = element("form", "aria-portfolio-price-form");
+        const price = element("input");
+        price.type = "number";
+        price.min = "0";
+        price.step = "any";
+        price.required = true;
+        price.value = String(item.currentPrice);
+        price.setAttribute("aria-label", "Nouveau prix actuel manuel pour " + item.name + " en euros");
+        const update = element("button", "", "Mettre à jour le prix");
+        update.type = "submit";
+        priceForm.append(price, update);
+        priceForm.addEventListener("submit", event => {
+          event.preventDefault();
+          const nextPrice = Number(price.value);
+          if (!Number.isFinite(nextPrice) || nextPrice < 0) {
+            portfolioStatus.textContent = "Saisissez un prix actuel valide, positif ou nul.";
+            return;
+          }
+          item.currentPrice = nextPrice;
+          const saved = persistPortfolio();
+          renderPortfolio();
+          portfolioStatus.textContent = saved ? "Prix actualisé et enregistré localement." : "Prix actualisé pour cette session, mais non enregistré sur l’appareil.";
+        });
+        card.append(heading, metrics, result, priceForm);
+        holdings.appendChild(card);
+      });
+      const pnl = marketValue - invested;
+      investedValue.textContent = euro(invested);
+      valueValue.textContent = euro(marketValue);
+      pnlValue.textContent = euro(pnl);
+      pnlValue.className = pnl > 0 ? "is-positive" : pnl < 0 ? "is-negative" : "";
+      if (!portfolio.length) {
+        holdings.appendChild(element("p", "aria-scene-status", "Votre portefeuille est vide. Ajoutez une position pour commencer ; aucune donnée fictive n’est préremplie."));
+      }
+      if (loadWarning) portfolioStatus.textContent = "Les données locales sont illisibles ou ont un format inattendu ; vérifiez avant de les remplacer.";
+      else if (!portfolio.length && !portfolioStatus.textContent.startsWith("Stockage local indisponible")) portfolioStatus.textContent = "Portefeuille local vide.";
+    };
+
     const loadChart = () => {
       const ticker = symbol.value.trim();
-      if (!/^[A-Za-z0-9._:-]{1,40}$/.test(ticker)) { status.textContent = "Symbole invalide. Utilisez des lettres, chiffres, points, deux-points, tirets ou tirets bas."; return; }
+      if (!/^[A-Za-z0-9._:-]{1,40}$/.test(ticker)) {
+        chartStatus.textContent = "Symbole invalide. Utilisez des lettres, chiffres, points, deux-points, tirets ou tirets bas.";
+        return;
+      }
       const url = new URL("https://s.tradingview.com/widgetembed/");
       url.search = new URLSearchParams({
-        symbol: ticker,
-        interval: interval.value,
-        theme: "dark",
-        style: "1",
-        locale: "fr",
-        hide_top_toolbar: "0",
-        hide_side_toolbar: "0",
-        allow_symbol_change: "1",
-        save_image: "0",
-        withdateranges: "1",
-        details: "1",
-        calendar: "0",
-        hideideas: "1"
+        symbol: ticker, interval: interval.value, theme: "dark", style: "1", locale: "fr",
+        hide_top_toolbar: "0", hide_side_toolbar: "0", allow_symbol_change: "1",
+        save_image: "0", withdateranges: "1", details: "1", calendar: "0", hideideas: "1"
       });
       frame.src = url.toString();
-      status.textContent = "Chargement du graphique pour " + ticker + "…";
+      chartStatus.textContent = "Chargement du graphique pour " + ticker + "…";
+    };
+    const setFinanceView = view => {
+      const showChart = view === "chart";
+      chartPanel.hidden = !showChart;
+      portfolioPanel.hidden = showChart;
+      chartTab.setAttribute("aria-pressed", String(showChart));
+      portfolioTab.setAttribute("aria-pressed", String(!showChart));
+      updateContextStatus(showChart ? "GRAPHIQUE DE MARCHÉ" : "PORTEFEUILLE LOCAL", showChart ? "TRADINGVIEW" : "STOCKAGE LOCAL DU NAVIGATEUR");
     };
     toolbar.addEventListener("submit", event => { event.preventDefault(); loadChart(); });
-    frame.addEventListener("load", () => { if (sceneId === sceneEpoch && viewport.dataset.scene === "finance") status.textContent = "Graphique chargé depuis TradingView. Vérifiez la place et l’éventuel délai des cotations."; });
-    sceneRoot.append(toolbar, status, frame, disclosure);
+    frame.addEventListener("load", () => {
+      if (sceneId === sceneEpoch && viewport.dataset.scene === "finance" && !chartPanel.hidden) {
+        chartStatus.textContent = "Le contenu TradingView a été chargé. Vérifiez le symbole, la place et l’éventuel délai des cotations.";
+      }
+    });
+    chartTab.addEventListener("click", () => setFinanceView("chart"));
+    portfolioTab.addEventListener("click", () => setFinanceView("portfolio"));
+    holdingForm.addEventListener("submit", event => {
+      event.preventDefault();
+      const name = nameField.input.value.trim();
+      const symbolValue = tickerField.input.value.trim().slice(0, 40);
+      const quantity = Number(quantityField.input.value);
+      const purchasePrice = Number(purchaseField.input.value);
+      const currentPrice = Number(currentField.input.value);
+      if (!name || !Number.isFinite(quantity) || quantity <= 0 ||
+          !Number.isFinite(purchasePrice) || purchasePrice < 0 ||
+          !Number.isFinite(currentPrice) || currentPrice < 0) {
+        portfolioStatus.textContent = "Vérifiez le nom, la quantité et les prix : la quantité doit être positive et les prix positifs ou nuls.";
+        return;
+      }
+      if (portfolio.length >= 100) {
+        portfolioStatus.textContent = "Limite de 100 positions atteinte.";
+        return;
+      }
+      portfolio.push({
+        id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2),
+        name: name.slice(0, 80),
+        symbol: symbolValue,
+        quantity,
+        purchasePrice,
+        currentPrice
+      });
+      const saved = persistPortfolio();
+      holdingForm.reset();
+      renderPortfolio();
+      portfolioStatus.textContent = saved ? "Position ajoutée et enregistrée localement." : "Position ajoutée pour cette session, mais non enregistrée sur l’appareil.";
+    });
+    clearPortfolio.addEventListener("click", () => {
+      if (!portfolio.length) { portfolioStatus.textContent = "Le portefeuille est déjà vide."; return; }
+      if (!window.confirm("Effacer toutes les positions enregistrées localement dans ce navigateur ?")) return;
+      portfolio = [];
+      const saved = persistPortfolio();
+      renderPortfolio();
+      portfolioStatus.textContent = saved ? "Portefeuille effacé du stockage local." : "Portefeuille vidé pour cette session, mais l’effacement local n’a pas pu être confirmé.";
+    });
+
+    renderPortfolio();
     loadChart();
   }
 
