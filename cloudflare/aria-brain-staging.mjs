@@ -84,7 +84,16 @@ export default {
     if (declaredLength > 96_000) return json({ error: "request_too_large" }, 413);
 
     let body;
-    try { body = await req.json(); } catch { return json({ error: "invalid_json" }, 400); }
+    try {
+      const rawBody = await req.text();
+      if (new TextEncoder().encode(rawBody).byteLength > 96_000) {
+        return json({ error: "request_too_large" }, 413);
+      }
+      body = JSON.parse(rawBody);
+    } catch (error) {
+      if (error instanceof SyntaxError) return json({ error: "invalid_json" }, 400);
+      return json({ error: "invalid_request_body" }, 400);
+    }
     if (!body || !Array.isArray(body.messages) || !body.messages.length || body.messages.length > 22) {
       return json({ error: "invalid_messages" }, 400);
     }
