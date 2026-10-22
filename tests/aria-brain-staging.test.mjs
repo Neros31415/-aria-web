@@ -268,3 +268,106 @@ test("persists and retrieves memory notes through the memory routes", async () =
   );
   assert.equal(typeof saved.memories[0].updatedAt, "number");
 });
+
+
+test("individual-auth mode fails closed when Supabase configuration is missing", async () => {
+  const response = await worker.fetch(new Request("https://aria-staging.test/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer user-token" },
+    body: JSON.stringify({ messages: [{ role: "user", content: "Bonjour" }] })
+  }), {
+    ARIA_AUTH_MODE: "individual",
+    OPENAI_API_KEY: "test-provider-key",
+    ARIA_MEMORY: env.ARIA_MEMORY
+  });
+
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: "auth_not_configured" });
+});
+
+test("individual-auth mode rejects a token that Supabase does not validate", async (t) => {
+  let providerCalled = false;
+  t.mock.method(globalThis, "fetch", async (url) => {
+    if (String(url).endsWith("/auth/v1/user")) {
+      return new Response(JSON.stringify({ message: "Invalid JWT" }), { status: 401 });
+    }
+    providerCalled = true;
+    return new Response("unexpected", { status: 500 });
+  });
+
+  const response = await worker.fetch(new Request("https://aria-staging.test/chat", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer invalid-user-token"
+    },
+    body: JSON.stringify({ messages: [{ role: "user", content: "Bonjour" }] })
+  }), {
+    ARIA_AUTH_MODE: "individual",
+    SUPABASE_URL: "https://project.supabase.co",
+    SUPABASE_ANON_KEY: "test-anon-key",
+    OPENAI_API_KEY: "test-provider-key",
+    ARIA_MEMORY: env.ARIA_MEMORY
+  });
+
+  assert.equal(response.status, 401);
+  assert.deepEqual(await response.json(), { error: "unauthorized" });
+  assert.equal(providerCalled, false);
+});
+
+test("individual-auth memory is isolated by the validated account, not clientId", async (t) => {
+  const ownerA = "123e4567-e89b-42d3-a456-426614174000";
+  const ownerB = "223e4567-e89b-42d3-a456-426614174001";
+  const store = new Map();
+  const memoryEnv = {
+    ARIA_AUTH_MODE: "individual",
+    SUPABASE_URL: "https://project.supabase.co",
+    SUPABASE_ANON_KEY: "test-anon-key",
+    OPENAI_API_KEY: "test-provider-key",
+    ARIA_MEMORY: {
+      async get(key, type) {
+        const value = store.get(key);
+        if (value === undefined) return null;
+        return type === "json" ? JSON.parse(value) : value;
+      },
+      async put(key, value) {
+        store.set(key, value);
+      }
+    }
+  };
+
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    if (String(url).endsWith("/auth/v1/user")) {
+      const token = options.headers.Authorization.replace(/^Bearer /, "");
+      const id = token === "token-a" ? ownerA : token === "token-b" ? ownerB : null;
+      return id
+        ? new Response(JSON.stringify({ id }), { status: 200, headers: { "Content-Type": "application/json" } })
+        : new Response(JSON.stringify({ message: "Invalid JWT" }), { status: 401 });
+    }
+    return new Response("unexpected provider call", { status: 500 });
+  });
+
+  const putResponse = await worker.fetch(new Request("https://aria-staging.test/memory", {
+    method: "PUT",
+    headers: {
+      "Authorization": "Bearer token-a",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      clientId: ownerB,
+      memories: [{ id: "private-note", text: "Note privée du compte A" }]
+    })
+  }), memoryEnv);
+  assert.equal(putResponse.status, 200);
+  assert.equal(store.has("memory:v2:" + ownerA), true);
+  assert.equal(store.has("memory:v2:" + ownerB), false);
+
+  const getResponse = await worker.fetch(new Request(
+    "https://aria-staging.test/memory?clientId=" + ownerA,
+    { method: "GET", headers: { "Authorization": "Bearer token-b" } }
+  ), memoryEnv);
+  assert.equal(getResponse.status, 200);
+  const accountBMemory = await getResponse.json();
+  assert.deepEqual(accountBMemory.memories, []);
+  assert.equal(accountBMemory.persisted, true);
+});
