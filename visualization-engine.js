@@ -217,7 +217,7 @@
       script.src = src;
       script.async = true;
       script.onload = () => { script.dataset.loaded = "true"; resolve(); };
-      script.onerror = () => reject(new Error("Le service cartographique n’a pas pu être chargé."));
+      script.onerror = () => { script.remove(); reject(new Error("Le service cartographique n’a pas pu être chargé.")); };
       document.head.appendChild(script);
     });
   }
@@ -269,12 +269,15 @@
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors'
       }).addTo(activeMap);
       activeMapLayer = null;
-      setTimeout(() => activeMap?.invalidateSize(), 50);
+      const mapInstance = activeMap;
+      setTimeout(() => { if (sceneId === sceneEpoch && activeMap === mapInstance) mapInstance.invalidateSize(); }, 50);
       status.textContent = "Carte chargée. Entrez un départ et, si souhaité, une destination pour tracer un itinéraire.";
       updateContextStatus("CARTE ACTIVE", "OPENSTREETMAP / OSRM");
     } catch (error) {
-      status.textContent = error.message || "Impossible de charger la carte. Vérifiez votre connexion.";
-      updateContextStatus("CARTE INDISPONIBLE", "SERVICE EXTERNE HORS LIGNE");
+      if (sceneId === sceneEpoch && viewport.dataset.scene === "map") {
+        status.textContent = error.message || "Impossible de charger la carte. Vérifiez votre connexion.";
+        updateContextStatus("CARTE INDISPONIBLE", "SERVICE EXTERNE HORS LIGNE");
+      }
       return;
     }
 
