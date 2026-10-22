@@ -158,3 +158,41 @@ test("authorization storage failures fail closed without granting privileges", a
     identity: alice, permission: "admin:roles:manage", env: { ARIA_AUTHZ: broken }, context: freshMfa
   }), { allowed: false, reason: "authorization_store_unavailable" });
 });
+
+
+test("Premium entitlement never grants administrative permissions", () => {
+  const result = authorize({
+    identity: alice,
+    roleRecord: userRole,
+    entitlementRecord: premium,
+    permission: "admin:gift-keys:manage",
+    context: { now }
+  });
+  assert.deepEqual(result, { allowed: false, reason: "permission_denied" });
+});
+
+test("unknown permissions are denied even for a super administrator", () => {
+  const superAdmin = { userId: alice, role: "super_admin", active: true };
+  assert.deepEqual(authorize({
+    identity: alice, roleRecord: superAdmin, permission: "admin:everything:execute", context: freshMfa
+  }), { allowed: false, reason: "permission_denied" });
+});
+
+test("malformed JSON or invalid role shape in the server registry fails closed", async () => {
+  const malformedJson = {
+    async get(key) {
+      if (key === AUTHORIZATION_STORAGE_KEYS.role(alice)) throw new SyntaxError("invalid JSON");
+      return null;
+    }
+  };
+  assert.deepEqual(await authorizeFromStore({
+    identity: alice, permission: "admin:roles:manage", env: { ARIA_AUTHZ: malformedJson }, context: freshMfa
+  }), { allowed: false, reason: "authorization_store_unavailable" });
+
+  const invalidRole = memoryKv({
+    [AUTHORIZATION_STORAGE_KEYS.role(alice)]: { userId: alice, role: "root", active: true }
+  });
+  assert.deepEqual(await authorizeFromStore({
+    identity: alice, permission: "admin:roles:manage", env: { ARIA_AUTHZ: invalidRole }, context: freshMfa
+  }), { allowed: false, reason: "role_unavailable" });
+});
