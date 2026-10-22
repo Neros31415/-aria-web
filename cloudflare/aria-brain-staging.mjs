@@ -29,8 +29,14 @@ async function readLimitedBody(request, maxBytes) {
 
 async function authenticateRequest(req, env) {
   const authorization = req.headers.get("Authorization") || "";
+  const authMode = env.ARIA_AUTH_MODE || "legacy";
 
-  if (env.ARIA_AUTH_MODE === "individual") {
+  // Unknown values must never silently fall back to the shared-token alpha mode.
+  if (!["individual", "legacy"].includes(authMode)) {
+    return { ok: false, status: 503, error: "invalid_auth_mode" };
+  }
+
+  if (authMode === "individual") {
     if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) {
       return { ok: false, status: 503, error: "auth_not_configured" };
     }
@@ -128,7 +134,7 @@ export default {
       return json({
         status: "ok",
         service: "aria-api",
-        configured: Boolean(env.OPENAI_API_KEY && (env.ARIA_AUTH_MODE === "individual" ? env.SUPABASE_URL && env.SUPABASE_ANON_KEY : env.ARIA_ACCESS_TOKEN)),
+        configured: Boolean(env.OPENAI_API_KEY && ((env.ARIA_AUTH_MODE || "legacy") === "individual" ? env.SUPABASE_URL && env.SUPABASE_ANON_KEY : (env.ARIA_AUTH_MODE || "legacy") === "legacy" && env.ARIA_ACCESS_TOKEN)),
         provider: "openai",
         model: "gpt-6-astra",
         persistentMemory: Boolean(env.ARIA_MEMORY)
