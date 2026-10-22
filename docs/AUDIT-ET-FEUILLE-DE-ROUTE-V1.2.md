@@ -182,10 +182,10 @@ Les phases sont ordonnées par dépendance et risque, et non par facilité visue
 3. **Valider l'API de staging par des tests reproductibles** ; le test HTTP via l'outil de contrôle a été bloqué par une passerelle et ne prouve pas l'indisponibilité du Worker.
 4. **Intégrer l'interface à l'API sécurisée dans une PR isolée**, après vérification du code de la branche d'intégration.
 5. **Évoluer vers une authentification individuelle et des données de mémoire isolées par compte**, puis mettre en place le Super Admin et les clés premium.
-5. **Implémenter les rôles Super Admin et les clés premium** avant d'inviter les proches.
-6. **Finaliser les documents et les parcours RGPD** en fonction des flux effectivement implémentés.
-7. **Fermer les écarts du site public** et mesurer qualité/performance.
-8. **Activer les paiements seulement après validation des offres et des tests.**
+6. **Implémenter les rôles Super Admin et les clés premium** avant d'inviter les proches.
+7. **Finaliser les documents et les parcours RGPD** en fonction des flux effectivement implémentés.
+8. **Fermer les écarts du site public** et mesurer qualité/performance.
+9. **Activer les paiements seulement après validation des offres et des tests.**
 
 ## 6. Règles de livraison
 
