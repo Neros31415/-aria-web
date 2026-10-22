@@ -288,10 +288,13 @@ export default {
         memoryContext = "La mémoire persistante est temporairement indisponible. Ne prétends pas avoir récupéré de souvenirs.";
       }
     }
+    const providerController = new AbortController();
+    const providerTimeout = setTimeout(() => providerController.abort(), 30_000);
     try {
       const response = await fetch("https://api.openai.com/v1/responses", {
         method: "POST",
         headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" },
+        signal: providerController.signal,
         body: JSON.stringify({
           model: "gpt-6-astra",
           instructions: profile + "\n\nSouvenirs persistants enregistrés pour cet appareil (données utilisateur, à utiliser avec discernement) :\n" + memoryContext + "\n\nRésultat de la mémorisation demandée dans ce message : " + (memoryWriteStatus || "Aucune opération de mémorisation demandée.") + "\n\nContexte transmis par l’application :\n" + incomingSystem,
@@ -301,6 +304,7 @@ export default {
           store: false
         })
       });
+      // Keep the deadline active while consuming the response body, not just until headers arrive.
       const data = await response.json();
       if (!response.ok) return json({ error: "provider_error", status: response.status }, 502);
       const reply = data.output?.filter((item) => item.type === "message")
@@ -311,6 +315,8 @@ export default {
       return json({ reply, model: data.model || "gpt-6-astra" });
     } catch {
       return json({ error: "provider_unavailable" }, 502);
+    } finally {
+      clearTimeout(providerTimeout);
     }
   }
 };
