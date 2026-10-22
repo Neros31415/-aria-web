@@ -129,3 +129,30 @@ dialog .text-button{border:0;background:none;color:var(--muted);font-size:11px;p
 .aria-solar-speed-label select{min-width:125px}
 .aria-solar-canvas{display:block;width:100%;height:clamp(280px,48vh,480px);border:1px solid #24394b;border-radius:14px;background:#050b14}
 @media(max-width:600px){.aria-solar-canvas{height:340px}.aria-solar-controls{align-items:stretch}.aria-solar-controls>button{flex:1 1 120px}.aria-solar-speed-label{flex:1 1 100%}.aria-solar-speed-label select{flex:1}}
+
+
+.aria-finance-panel[hidden],.aria-portfolio-panel[hidden]{display:none}
+.aria-portfolio-panel{display:flex;flex-direction:column;gap:12px;min-width:0}
+.aria-portfolio-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.aria-portfolio-metric{display:flex;flex-direction:column;gap:6px;padding:13px;border:1px solid #2a4055;border-radius:12px;background:linear-gradient(145deg,rgba(16,31,47,.94),rgba(7,16,27,.94));min-width:0}
+.aria-portfolio-metric span{color:#91a8bd;font-size:.78rem}
+.aria-portfolio-metric strong{font-size:clamp(.95rem,2.3vw,1.25rem);overflow-wrap:anywhere}
+.aria-portfolio-form{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px;align-items:end;padding:12px;border:1px solid #273b50;border-radius:13px;background:rgba(9,19,30,.72)}
+.aria-portfolio-field{display:flex;flex-direction:column;gap:6px;color:#aebfd1;font-size:.78rem;min-width:0}
+.aria-portfolio-field input,.aria-portfolio-price-form input{width:100%;min-width:0;font:inherit;color:#edf4ff;background:#101d2b;border:1px solid #30465c;border-radius:9px;padding:9px}
+.aria-portfolio-form>button{min-height:38px}
+.aria-portfolio-holdings{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,290px),1fr));gap:10px}
+.aria-portfolio-holding{display:flex;flex-direction:column;gap:9px;padding:12px;border:1px solid #263b50;border-radius:13px;background:linear-gradient(145deg,rgba(12,25,39,.96),rgba(6,14,24,.96));min-width:0}
+.aria-portfolio-holding-heading{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.aria-portfolio-holding-heading strong{overflow-wrap:anywhere}
+.aria-portfolio-remove{padding:6px 9px!important;font-size:.78rem;flex:0 0 auto}
+.aria-portfolio-holding-metrics{display:grid;grid-template-columns:1fr;gap:4px;color:#a7bbce;font-size:.82rem}
+.aria-portfolio-pnl{margin:0;font-weight:650;font-size:.9rem;overflow-wrap:anywhere}
+.aria-portfolio-pnl.is-positive,.aria-portfolio-metric .is-positive{color:#87e3b6}
+.aria-portfolio-pnl.is-negative,.aria-portfolio-metric .is-negative{color:#ff9a9a}
+.aria-portfolio-price-form{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.aria-portfolio-price-form input{flex:1 1 120px}
+.aria-portfolio-price-form button{flex:0 0 auto}
+#visualizationViewport .aria-portfolio-panel>button{align-self:flex-start}
+@media(max-width:800px){.aria-portfolio-form{grid-template-columns:repeat(2,minmax(0,1fr))}.aria-portfolio-form>button{grid-column:1/-1}}
+@media(max-width:520px){.aria-portfolio-summary{grid-template-columns:1fr}.aria-portfolio-form{grid-template-columns:1fr}.aria-portfolio-form>button{grid-column:auto}.aria-portfolio-holdings{grid-template-columns:1fr}}
