@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - fix/staging-worker-input-security
+      - feat/aria-authenticated-memory
     paths:
       - "cloudflare/aria-brain-staging.mjs"
       - "tests/aria-brain-staging.test.mjs"
@@ -11,6 +12,7 @@ on:
   pull_request:
     branches:
       - feat/aria-brain-staging-integration
+      - fix/staging-worker-input-security
     paths:
       - "cloudflare/aria-brain-staging.mjs"
       - "tests/aria-brain-staging.test.mjs"
