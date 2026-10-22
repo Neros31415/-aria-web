@@ -20,16 +20,18 @@ function normalizeRole(row, identity) {
   return { userId: row.userId, role: row.role, active: row.active === 1 || row.active === true };
 }
 
-function normalizeEntitlement(row, identity) {
+function normalizeEntitlement(row, identity, now) {
   if (!row || row.userId !== identity ||
       typeof row.plan !== "string" ||
       ![0, 1, true, false].includes(row.active) ||
+      !Number.isSafeInteger(row.startsAt) || row.startsAt < 0 || row.startsAt > now ||
       (row.expiresAt !== null && row.expiresAt !== undefined &&
         (!Number.isSafeInteger(row.expiresAt) || row.expiresAt < 0))) return null;
   return {
     userId: row.userId,
     plan: row.plan,
     active: row.active === 1 || row.active === true,
+    startsAt: row.startsAt,
     ...(row.expiresAt === null || row.expiresAt === undefined ? {} : { expiresAt: row.expiresAt })
   };
 }
@@ -55,9 +57,10 @@ export async function authorizeFromD1({ identity, permission, env, context = {} 
     let entitlementRecord = null;
     if (permission === "feature:premium:use") {
       const entitlementRow = await db.prepare(
-        "SELECT user_id AS userId, plan, active, expires_at_ms AS expiresAt FROM aria_entitlements WHERE user_id = ? LIMIT 1"
+        "SELECT user_id AS userId, plan, active, starts_at_ms AS startsAt, expires_at_ms AS expiresAt FROM aria_entitlements WHERE user_id = ? LIMIT 1"
       ).bind(identity).first();
-      entitlementRecord = normalizeEntitlement(entitlementRow, identity);
+      const now = Number.isFinite(context.now) ? context.now : Date.now();
+      entitlementRecord = normalizeEntitlement(entitlementRow, identity, now);
       if (!entitlementRecord) {
         return { allowed: false, reason: "entitlement_required" };
       }
