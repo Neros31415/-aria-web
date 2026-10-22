@@ -392,6 +392,17 @@
   function openScience() {
     const sceneId = ++sceneEpoch;
     resetSceneContent();
+
+    const tabs = element("div", "aria-scene-tabs");
+    const nasaTab = element("button", "", "Catalogue NASA");
+    nasaTab.type = "button";
+    nasaTab.setAttribute("aria-pressed", "true");
+    const solarTab = element("button", "", "Système solaire");
+    solarTab.type = "button";
+    solarTab.setAttribute("aria-pressed", "false");
+    tabs.append(nasaTab, solarTab);
+
+    const nasaPanel = element("section", "aria-science-panel");
     const toolbar = element("form", "aria-scene-toolbar");
     const query = element("input");
     query.value = "Mars";
@@ -404,7 +415,162 @@
     status.setAttribute("role", "status");
     const results = element("div", "aria-scene-results");
     const disclosure = element("p", "aria-scene-disclosure", "Les résultats proviennent de NASA Image and Video Library. Les médias et descriptions sont fournis par leur source ; ils ne remplacent pas des données instrumentales ni une simulation validée.");
-    sceneRoot.append(toolbar, status, results, disclosure);
+    nasaPanel.append(toolbar, status, results, disclosure);
+
+    const solarPanel = element("section", "aria-solar-panel");
+    solarPanel.hidden = true;
+    const solarIntro = element("p", "aria-scene-status", "Simulation orbitale pédagogique exécutée localement dans votre navigateur. Les orbites sont stylisées ; les tailles et distances ne sont pas à l’échelle et les positions ne sont pas des éphémérides astronomiques.");
+    const solarControls = element("div", "aria-scene-toolbar aria-solar-controls");
+    const pauseButton = element("button", "", "Pause");
+    pauseButton.type = "button";
+    const resetButton = element("button", "", "Réinitialiser");
+    resetButton.type = "button";
+    const speedLabel = element("label", "aria-solar-speed-label", "Vitesse");
+    const speed = element("select");
+    speed.setAttribute("aria-label", "Vitesse de simulation");
+    [["1", "1 jour/s"], ["10", "10 jours/s"], ["100", "100 jours/s"], ["1000", "1 000 jours/s"]].forEach(([value, label]) => {
+      const option = element("option", "", label);
+      option.value = value;
+      speed.appendChild(option);
+    });
+    speedLabel.appendChild(speed);
+    const dayCount = element("p", "aria-scene-status", "Jour simulé : 0");
+    dayCount.setAttribute("aria-live", "polite");
+    const solarCanvas = element("canvas", "aria-solar-canvas");
+    solarCanvas.setAttribute("role", "img");
+    solarCanvas.setAttribute("aria-label", "Simulation animée des orbites du Soleil et des huit planètes");
+    solarPanel.append(solarIntro, solarControls, dayCount, solarCanvas,
+      element("p", "aria-scene-disclosure", "Les périodes orbitales sont utilisées à titre illustratif. Ce modèle n’est ni une représentation à l’échelle ni un outil de navigation ou de calcul astronomique."));
+    solarControls.append(pauseButton, resetButton, speedLabel);
+
+    sceneRoot.append(tabs, nasaPanel, solarPanel);
+    let activeScienceView = "nasa";
+    let elapsedDays = 0;
+    let lastTimestamp = 0;
+    let paused = false;
+    const context = solarCanvas.getContext("2d");
+    const planets = [
+      { name: "Mercure", period: 88, orbit: 0.14, radius: 3, label: "Mercure" },
+      { name: "Vénus", period: 225, orbit: 0.22, radius: 4, label: "Vénus" },
+      { name: "Terre", period: 365.256, orbit: 0.30, radius: 4.5, label: "Terre" },
+      { name: "Mars", period: 687, orbit: 0.38, radius: 3.8, label: "Mars" },
+      { name: "Jupiter", period: 4333, orbit: 0.53, radius: 8, label: "Jupiter" },
+      { name: "Saturne", period: 10759, orbit: 0.67, radius: 7, label: "Saturne" },
+      { name: "Uranus", period: 30687, orbit: 0.80, radius: 5.5, label: "Uranus" },
+      { name: "Neptune", period: 60190, orbit: 0.92, radius: 5.5, label: "Neptune" }
+    ];
+    const planetColors = ["#b9a18c", "#e6c58f", "#76c8ff", "#e47b62", "#e5bd8a", "#e8d5a8", "#8de4e6", "#779bff"];
+
+    function drawSolarSystem(timestamp = 0) {
+      if (sceneId !== sceneEpoch || viewport.dataset.scene !== "scientific_model" || activeScienceView !== "solar") {
+        frame = 0;
+        return;
+      }
+      if (!context) {
+        dayCount.textContent = "Le canvas 2D n’est pas disponible dans ce navigateur.";
+        frame = 0;
+        return;
+      }
+      if (lastTimestamp && !paused) elapsedDays += Math.min(64, timestamp - lastTimestamp) / 1000 * Number(speed.value);
+      lastTimestamp = timestamp;
+      const rect = solarCanvas.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const width = Math.max(1, Math.floor(rect.width * dpr));
+      const height = Math.max(1, Math.floor(rect.height * dpr));
+      if (solarCanvas.width !== width || solarCanvas.height !== height) {
+        solarCanvas.width = width;
+        solarCanvas.height = height;
+      }
+      context.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const w = rect.width;
+      const h = rect.height;
+      const cx = w / 2;
+      const cy = h / 2;
+      const maxOrbit = Math.max(80, Math.min(w * 0.47, h * 0.44));
+      context.clearRect(0, 0, w, h);
+      context.fillStyle = "#050b14";
+      context.fillRect(0, 0, w, h);
+      for (let i = 0; i < 90; i++) {
+        const x = ((i * 97 + 23) % 997) / 997 * w;
+        const y = ((i * 193 + 61) % 991) / 991 * h;
+        context.fillStyle = i % 5 === 0 ? "rgba(192,226,255,.8)" : "rgba(145,177,210,.38)";
+        context.fillRect(x, y, i % 7 === 0 ? 1.6 : 1, i % 7 === 0 ? 1.6 : 1);
+      }
+      context.save();
+      context.translate(cx, cy);
+      planets.forEach((planet, index) => {
+        const orbitRadius = maxOrbit * planet.orbit;
+        context.beginPath();
+        context.ellipse(0, 0, orbitRadius, orbitRadius * 0.72, -0.12, 0, Math.PI * 2);
+        context.strokeStyle = "rgba(130,177,212,.23)";
+        context.lineWidth = 1;
+        context.stroke();
+        const angle = elapsedDays / planet.period * Math.PI * 2 + index * 0.53;
+        const x = Math.cos(angle) * orbitRadius;
+        const y = Math.sin(angle) * orbitRadius * 0.72;
+        context.beginPath();
+        context.arc(x, y, planet.radius, 0, Math.PI * 2);
+        context.fillStyle = planetColors[index];
+        context.shadowColor = planetColors[index];
+        context.shadowBlur = 10;
+        context.fill();
+        context.shadowBlur = 0;
+        if (w > 420) {
+          context.font = "11px system-ui, sans-serif";
+          context.fillStyle = "rgba(220,235,249,.86)";
+          context.fillText(planet.label, x + planet.radius + 5, y + 4);
+        }
+      });
+      const sunGlow = context.createRadialGradient(0, 0, 2, 0, 0, 27);
+      sunGlow.addColorStop(0, "rgba(255,239,168,.95)");
+      sunGlow.addColorStop(.45, "rgba(255,172,72,.45)");
+      sunGlow.addColorStop(1, "rgba(255,153,61,0)");
+      context.fillStyle = sunGlow;
+      context.beginPath();
+      context.arc(0, 0, 27, 0, Math.PI * 2);
+      context.fill();
+      context.beginPath();
+      context.arc(0, 0, 8, 0, Math.PI * 2);
+      context.fillStyle = "#fff1b4";
+      context.fill();
+      context.restore();
+      dayCount.textContent = "Jour simulé : " + Math.floor(elapsedDays).toLocaleString("fr-FR") + " · " + (paused ? "en pause" : "simulation active");
+      frame = window.requestAnimationFrame(drawSolarSystem);
+    }
+
+    function stopSolarSystem() {
+      if (frame) window.cancelAnimationFrame(frame);
+      frame = 0;
+      lastTimestamp = 0;
+    }
+    function startSolarSystem() {
+      stopSolarSystem();
+      if (activeScienceView === "solar" && !solarPanel.hidden) frame = window.requestAnimationFrame(drawSolarSystem);
+    }
+    function setScienceView(view) {
+      activeScienceView = view;
+      const showSolar = view === "solar";
+      nasaPanel.hidden = showSolar;
+      solarPanel.hidden = !showSolar;
+      nasaTab.setAttribute("aria-pressed", String(!showSolar));
+      solarTab.setAttribute("aria-pressed", String(showSolar));
+      updateContextStatus(showSolar ? "SIMULATION ORBITALE ACTIVE" : "CATALOGUE NASA", showSolar ? "MODÈLE LOCAL APPROXIMATIF" : "NASA IMAGES API");
+      if (showSolar) startSolarSystem();
+      else stopSolarSystem();
+    }
+    nasaTab.addEventListener("click", () => setScienceView("nasa"));
+    solarTab.addEventListener("click", () => setScienceView("solar"));
+    pauseButton.addEventListener("click", () => {
+      paused = !paused;
+      pauseButton.textContent = paused ? "Reprendre" : "Pause";
+      if (!paused && activeScienceView === "solar") startSolarSystem();
+    });
+    resetButton.addEventListener("click", () => {
+      elapsedDays = 0;
+      lastTimestamp = 0;
+      if (activeScienceView === "solar") startSolarSystem();
+    });
+
     const runSearch = async () => {
       const term = query.value.trim();
       if (!term) { status.textContent = "Saisissez un sujet scientifique."; return; }
@@ -417,7 +583,7 @@
         const response = await fetch(url, { headers: { Accept: "application/json" } });
         if (!response.ok) throw new Error("Le catalogue NASA est temporairement indisponible.");
         const data = await response.json();
-        if (sceneId !== sceneEpoch || viewport.dataset.scene !== "scientific_model") return;
+        if (sceneId !== sceneEpoch || viewport.dataset.scene !== "scientific_model" || activeScienceView !== "nasa") return;
         const items = (data.collection?.items || []).slice(0, 12);
         if (!items.length) { status.textContent = "Aucun média trouvé pour cette recherche."; updateContextStatus("AUCUN RÉSULTAT", "CATALOGUE NASA"); return; }
         for (const item of items) {
@@ -444,7 +610,7 @@
         status.textContent = items.length + " média(s) trouvé(s) dans le catalogue NASA.";
         updateContextStatus("CATALOGUE DISPONIBLE", "NASA IMAGES API");
       } catch (error) {
-        if (sceneId === sceneEpoch && viewport.dataset.scene === "scientific_model") {
+        if (sceneId === sceneEpoch && viewport.dataset.scene === "scientific_model" && activeScienceView === "nasa") {
           status.textContent = error.message || "Impossible de joindre le catalogue NASA.";
           updateContextStatus("NASA INDISPONIBLE", "SERVICE EXTERNE HORS LIGNE");
         }
