@@ -1,8 +1,8 @@
 # ARIA — État fonctionnel des scènes carte, finance et science
 
 Date de travail : 22 octobre 2026  
-Branche : `feat/aria-map-finance-science-integration`  
-Statut : intégration en cours, non fusionnée et non déployée.
+Branche : `feat/aria-secure-ui-scene-integration`  
+Statut : intégration en cours, non fusionnée et non déployée. Cette branche part de `feat/aria-brain-staging-integration` pour conserver les contrôles D1 et l’authentification par session hachée.
 
 ## Objectif
 Relier les scènes contextuelles du HUD à des sources réelles plutôt que de présenter des écrans de démonstration comme des fonctionnalités opérationnelles. Cette livraison ne réduit pas le périmètre ARIA 1.0.
@@ -12,7 +12,9 @@ Relier les scènes contextuelles du HUD à des sources réelles plutôt que de p
 - Finance : intègre un graphique TradingView, avec symbole modifiable et périodes ; affiche une mise en garde claire qu'il ne s'agit pas d'un conseil financier.
 - Science : recherche et affiche des médias du catalogue public NASA ; donne accès à la source NASA et ne prétend pas que cela constitue une simulation scientifique.
 - HUD : les scènes sont ouvertes dans l'espace visuel contextuel existant ; styles responsives et commandes accessibles au clavier.
-- Contrat d'intention : ajoute `finance` aux scènes autorisées dans le schéma structuré côté Worker et précise au modèle les capacités disponibles et les limites restantes.
+- Contrat d'intention : le Worker sécurisé renvoie un objet structuré validé (`reply`, `action`, `scene`) et autorise `finance` sans supprimer les contrôles d’authentification ni d’autorisation D1.
+- Mémoire : le Worker respecte le consentement explicite envoyé par l’interface ; quand la mémoire est désactivée, le chat n’effectue ni lecture ni écriture de souvenirs.
+- PWA : le cache inclut les styles vocaux et le moteur de visualisation.
 - Tests : ajoute des assertions de contrat sur les endpoints utilisés, les divulgations et le câblage UI.
 
 ## Limites explicites
@@ -21,7 +23,8 @@ Relier les scènes contextuelles du HUD à des sources réelles plutôt que de p
 - Le catalogue NASA apporte une recherche de médias, pas de données instrumentales validées, d'analyse scientifique, de simulation physique ou de modèle 3D scientifique.
 - La scène carte reste une carte 2D avec itinéraire routier ; relief 3D, itinéraires multimodaux, vues immersives et God’s Eye View restent à intégrer.
 - Le modèle de moteur/mécanisme 3D reste à développer.
-- Aucun test visuel iPhone, aucun test réseau réel et aucune validation de bout en bout n'ont encore été exécutés pour cette branche. Les tests statiques/CI doivent passer avant fusion.
+- La session alpha `session_kv` utilise actuellement des identifiants opaques ; les opérations de mémoire soumises à l’autorisation D1 restent bloquées tant qu’une migration vérifiée vers une identité de compte canonique n’est pas réalisée. Ne pas contourner ce contrôle.
+- Aucun test visuel iPhone, aucun test réseau réel et aucune validation de bout en bout n'ont encore été exécutés pour cette branche. Les tests automatisés de la nouvelle branche doivent passer avant fusion.
 - Aucune publication ni aucun déploiement n'est inclus.
 
 ## Critères de validation avant fusion
