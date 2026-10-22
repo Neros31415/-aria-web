@@ -151,3 +151,49 @@ test("rejects memory reads without a valid profile identifier", async () => {
   assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), { error: "invalid_client_id" });
 });
+
+
+test("rejects requests from unapproved browser origins", async () => {
+  const response = await worker.fetch(new Request("https://aria-staging.test/health", {
+    method: "GET",
+    headers: { "Origin": "https://attacker.example" }
+  }), env);
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { error: "origin_not_allowed" });
+});
+
+test("rejects unsupported methods on the chat route", async () => {
+  const response = await worker.fetch(new Request("https://aria-staging.test/chat", {
+    method: "GET",
+    headers: { "Authorization": "Bearer test-token" }
+  }), env);
+  assert.equal(response.status, 405);
+  assert.deepEqual(await response.json(), { error: "method_not_allowed" });
+});
+
+test("fails closed when required server secrets are missing", async () => {
+  const response = await worker.fetch(request({
+    messages: [{ role: "user", content: "Bonjour" }]
+  }), { ARIA_ACCESS_TOKEN: "test-token", ARIA_MEMORY: env.ARIA_MEMORY });
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: "service_not_configured" });
+});
+
+test("rejects memory writes containing more than 100 notes", async () => {
+  const response = await worker.fetch(new Request("https://aria-staging.test/memory", {
+    method: "PUT",
+    headers: {
+      "Authorization": "Bearer test-token",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      clientId: "123e4567-e89b-42d3-a456-426614174000",
+      memories: Array.from({ length: 101 }, (_, index) => ({
+        id: String(index),
+        text: "note " + index
+      }))
+    })
+  }), env);
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: "invalid_memories" });
+});
