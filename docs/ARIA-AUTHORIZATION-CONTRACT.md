@@ -101,3 +101,14 @@ Le dépôt contient désormais :
 - `tests/aria-authorization-d1.test.mjs` : tests unitaires de l’adaptateur.
 
 **Statut réel :** aucun projet Supabase n’est connecté et aucun D1 n’est encore créé/configuré pour ARIA. La migration est un artefact versionné, pas une migration appliquée. L’adaptateur n’est pas branché au Worker ni aux routes HTTP. Le choix D1 est une option d’architecture à valider sur l’environnement Cloudflare existant ; aucune permission privilégiée n’est active par ce seul ajout.
+
+
+## 9. Environnement staging : D1 créé, déploiement bloqué par un écart de configuration
+Le 22 octobre 2026, la base Cloudflare D1 `aria-authz-staging` a été créée avec juridiction `eu`, réplication désactivée, puis la migration `0001_aria_authorization.sql` a été appliquée. Vérification API effectuée : les trois tables `aria_user_roles`, `aria_entitlements` et `aria_authorization_audit` existent. Identifiant de base conservé dans la configuration d’environnement Cloudflare, pas dans le code client.
+
+**Le binding D1 n’est pas encore attaché au Worker et aucun rôle réel n’a été créé.** Aucun endpoint ne consomme ce registre.
+
+### Écart bloquant relevé avant tout déploiement
+L’inspection des paramètres du Worker Cloudflare `aria-brain-staging` montre des bindings `ARIA_USERS`, `ARIA_MEMORY`, `ARIA_REQUIRE_INDIVIDUAL_AUTH`, `ARIA_ACCESS_TOKEN` et `OPENAI_API_KEY`, mais pas `SUPABASE_URL` ni `SUPABASE_ANON_KEY`. Le code versionné sur la branche de staging exige actuellement Supabase Auth en mode individuel par défaut. Le déployer tel quel ferait échouer l’authentification faute de configuration.
+
+Ne pas déployer ce code tant que le modèle d’identité n’est pas réconcilié : soit configurer et valider un projet Supabase Auth réel, soit adapter et tester explicitement l’intégration au mécanisme de session `ARIA_USERS` déjà présent dans le Worker déployé. Ne jamais basculer silencieusement entre ces modèles.
