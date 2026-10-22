@@ -181,6 +181,13 @@
   let activeMapLayer = null;
   let lastGeocodeAt = 0;
 
+  function updateContextStatus(status, source) {
+    const statusNode = document.getElementById("contextStatus");
+    const sourceNode = document.getElementById("sceneSourceStatus");
+    if (statusNode && status) statusNode.textContent = status;
+    if (sourceNode && source) sourceNode.textContent = source;
+  }
+
   function element(tag, className, text) {
     const node = document.createElement(tag);
     if (className) node.className = className;
@@ -262,8 +269,10 @@
       activeMapLayer = null;
       setTimeout(() => activeMap?.invalidateSize(), 50);
       status.textContent = "Carte chargée. Entrez un départ et, si souhaité, une destination pour tracer un itinéraire.";
+      updateContextStatus("CARTE ACTIVE", "OPENSTREETMAP / OSRM");
     } catch (error) {
       status.textContent = error.message || "Impossible de charger la carte. Vérifiez votre connexion.";
+      updateContextStatus("CARTE INDISPONIBLE", "SERVICE EXTERNE HORS LIGNE");
       return;
     }
 
@@ -401,7 +410,7 @@
         if (!response.ok) throw new Error("Le catalogue NASA est temporairement indisponible.");
         const data = await response.json();
         const items = (data.collection?.items || []).slice(0, 12);
-        if (!items.length) { status.textContent = "Aucun média trouvé pour cette recherche."; return; }
+        if (!items.length) { status.textContent = "Aucun média trouvé pour cette recherche."; updateContextStatus("AUCUN RÉSULTAT", "CATALOGUE NASA"); return; }
         for (const item of items) {
           const metadata = item.data?.[0] || {};
           const imageUrl = item.links?.find(link => link.render === "image" && link.href)?.href;
@@ -424,8 +433,10 @@
           results.appendChild(card);
         }
         status.textContent = items.length + " média(s) trouvé(s) dans le catalogue NASA.";
+        updateContextStatus("CATALOGUE DISPONIBLE", "NASA IMAGES API");
       } catch (error) {
         status.textContent = error.message || "Impossible de joindre le catalogue NASA.";
+        updateContextStatus("NASA INDISPONIBLE", "SERVICE EXTERNE HORS LIGNE");
       } finally {
         search.disabled = false;
       }
