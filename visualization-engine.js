@@ -187,39 +187,11 @@
     return node;
   }
 
-  function addSceneStyles() {
-    if (document.getElementById("aria-scene-styles")) return;
-    const style = element("style");
-    style.id = "aria-scene-styles";
-    style.textContent = `
-      .aria-scene-root{position:absolute;inset:0;z-index:4;display:flex;flex-direction:column;gap:12px;padding:clamp(12px,2.5vw,24px);overflow:auto;text-align:left;background:linear-gradient(145deg,rgba(5,12,20,.96),rgba(8,17,28,.92));color:#edf4ff}
-      .aria-scene-root[hidden]{display:none}
-      .aria-scene-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-      .aria-scene-root input,.aria-scene-root select,.aria-scene-root button{font:inherit;color:inherit;background:#101d2b;border:1px solid #30465c;border-radius:10px;padding:10px 12px;min-width:0}
-      .aria-scene-root input{flex:1 1 150px}
-      .aria-scene-root button{cursor:pointer;border-color:#5a9db6}
-      .aria-scene-root button:focus-visible,.aria-scene-root input:focus-visible,.aria-scene-root select:focus-visible{outline:2px solid #8fe8ff;outline-offset:2px}
-      .aria-scene-status{color:#a8bacd;font-size:.85rem;line-height:1.5}
-      .aria-map-canvas{min-height:260px;flex:1 1 320px;border:1px solid #24394b;border-radius:14px;overflow:hidden;background:#0a1520}
-      .aria-map-canvas .leaflet-container{height:100%;min-height:260px;background:#0a1520;font:inherit}
-      .aria-map-canvas .leaflet-control-attribution{font-size:10px}
-      .aria-scene-results{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px}
-      .aria-science-card{display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid #25384b;border-radius:12px;background:#0d1724}
-      .aria-science-card img{width:100%;height:145px;object-fit:cover;border-radius:8px;background:#14202d}
-      .aria-science-card a{color:#9be8ff;overflow-wrap:anywhere}
-      .aria-finance-frame{width:100%;min-height:420px;flex:1 1 420px;border:1px solid #263a4c;border-radius:12px;background:#0a1018}
-      .aria-scene-disclosure{font-size:.78rem;color:#879bb0;line-height:1.45}
-      @media(max-width:600px){.aria-scene-root{padding:10px}.aria-finance-frame{min-height:380px}.aria-map-canvas{min-height:300px}}
-    `;
-    document.head.appendChild(style);
-  }
-
   function resetSceneContent() {
     sceneRoot.replaceChildren();
     sceneRoot.hidden = false;
     canvas.hidden = true;
     viewport.querySelectorAll(".visualization-rings,.visualization-center,.visualization-grid").forEach(node => { node.hidden = true; });
-    addSceneStyles();
   }
 
   function loadScript(src, id) {
