@@ -179,6 +179,7 @@
   viewport.appendChild(sceneRoot);
   let activeMap = null;
   let activeMapLayer = null;
+  let lastGeocodeAt = 0;
 
   function element(tag, className, text) {
     const node = document.createElement(tag);
@@ -231,15 +232,20 @@
     const to = element("input");
     to.placeholder = "Destination (facultatif)";
     to.setAttribute("aria-label", "Destination");
+    const mode = element("select");
+    mode.setAttribute("aria-label", "Mode de déplacement");
+    [["car","Voiture"],["foot","À pied"],["bike","Vélo"]].forEach(([value,label]) => {
+      const option = element("option", "", label); option.value = value; mode.appendChild(option);
+    });
     const search = element("button", "", "Rechercher");
     search.type = "submit";
-    toolbar.append(from, to, search);
+    toolbar.append(from, to, mode, search);
     const status = element("p", "aria-scene-status", "Carte réelle OpenStreetMap. Saisissez un lieu ; aucune géolocalisation automatique n’est activée.");
     status.setAttribute("role", "status");
     const mapBox = element("div", "aria-map-canvas");
     mapBox.setAttribute("aria-label", "Carte interactive OpenStreetMap");
     sceneRoot.append(toolbar, status, mapBox);
-    const disclosure = element("p", "aria-scene-disclosure", "Les recherches de lieux sont transmises au service public de géocodage OpenStreetMap/Nominatim et les itinéraires à OSRM. Pour un usage commercial à grande échelle, ces services devront être remplacés ou configurés via un fournisseur contractuel.");
+    const disclosure = element("p", "aria-scene-disclosure", "Les recherches de lieux sont transmises à OpenStreetMap/Nominatim et les itinéraires à un service public OSRM (voiture, marche ou vélo). Ces services sont soumis à des quotas et à une disponibilité sans garantie ; un fournisseur contractuel sera nécessaire pour une exploitation commerciale robuste.");
     sceneRoot.append(disclosure);
 
     try {
@@ -269,6 +275,9 @@
       search.disabled = true;
       try {
         const geocode = async query => {
+          const wait = Math.max(0, 1100 - (Date.now() - lastGeocodeAt));
+          if (wait) await new Promise(resolve => setTimeout(resolve, wait));
+          lastGeocodeAt = Date.now();
           const url = new URL("https://nominatim.openstreetmap.org/search");
           url.search = new URLSearchParams({ q: query, format: "jsonv2", limit: "1" });
           const response = await fetch(url, { headers: { Accept: "application/json" } });
@@ -280,7 +289,6 @@
         const origin = await geocode(originQuery);
         let destination = null;
         if (destinationQuery) {
-          await new Promise(resolve => setTimeout(resolve, 1100));
           destination = await geocode(destinationQuery);
         }
         if (!activeMap || viewport.dataset.scene !== "map") return;
@@ -289,7 +297,8 @@
         window.L.marker([origin.lat, origin.lon]).bindPopup("Départ : " + origin.label).addTo(activeMapLayer);
         if (destination) {
           window.L.marker([destination.lat, destination.lon]).bindPopup("Destination : " + destination.label).addTo(activeMapLayer);
-          const routeUrl = "https://router.project-osrm.org/route/v1/driving/" +
+          const routeProfile = mode.value === "foot" ? "routed-foot" : mode.value === "bike" ? "routed-bike" : "routed-car";
+          const routeUrl = "https://routing.openstreetmap.de/" + routeProfile + "/route/v1/driving/" +
             origin.lon + "," + origin.lat + ";" + destination.lon + "," + destination.lat +
             "?overview=full&geometries=geojson&steps=false";
           const routeResponse = await fetch(routeUrl, { headers: { Accept: "application/json" } });
@@ -300,7 +309,8 @@
           window.L.geoJSON(route.geometry, { style: { color: "#79e4ff", weight: 5, opacity: .9 } }).addTo(activeMapLayer);
           const km = (route.distance / 1000).toFixed(1);
           const mins = Math.round(route.duration / 60);
-          status.textContent = origin.label + " → " + destination.label + " · " + km + " km · environ " + mins + " min en voiture (OSRM).";
+          const modeLabel = mode.value === "foot" ? "à pied" : mode.value === "bike" ? "à vélo" : "en voiture";
+          status.textContent = origin.label + " → " + destination.label + " · " + km + " km · environ " + mins + " min " + modeLabel + " (OSRM).";
         } else {
           status.textContent = "Lieu trouvé : " + origin.label;
         }
