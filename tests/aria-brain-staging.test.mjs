@@ -622,3 +622,39 @@ test("individual-auth memory routes fail closed when the D1 authorization bindin
   assert.equal(response.status, 503);
   assert.deepEqual(await response.json(), { error: "authorization_store_unavailable" });
 });
+
+
+test("health reports authorization readiness for session_kv mode", async () => {
+  const response = await worker.fetch(new Request("https://aria-staging.test/health"), {
+    ARIA_AUTH_MODE: "session_kv",
+    ARIA_USERS: { async get() { return null; } },
+    ARIA_AUTHZ_DB: authorizationDb(),
+    ARIA_MEMORY: env.ARIA_MEMORY,
+    OPENAI_API_KEY: "test-provider-key"
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    status: "ok",
+    service: "aria-api",
+    configured: true,
+    authenticationMode: "session_kv",
+    authorizationStore: true,
+    provider: "openai",
+    model: "gpt-6-astra",
+    persistentMemory: true
+  });
+});
+
+test("health reports an individual-auth service as not configured without D1 authorization", async () => {
+  const response = await worker.fetch(new Request("https://aria-staging.test/health"), {
+    ARIA_AUTH_MODE: "session_kv",
+    ARIA_USERS: { async get() { return null; } },
+    ARIA_MEMORY: env.ARIA_MEMORY,
+    OPENAI_API_KEY: "test-provider-key"
+  });
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.configured, false);
+  assert.equal(body.authenticationMode, "session_kv");
+  assert.equal(body.authorizationStore, false);
+});
