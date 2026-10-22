@@ -29,6 +29,21 @@ async function readLimitedBody(request, maxBytes) {
 }
 
 
+async function authorizeMemoryOperation(env, identity, permission) {
+  const provisioned = await ensureDefaultUserRole({ identity, env });
+  if (!provisioned.ok) {
+    return { ok: false, status: 503, error: "authorization_store_unavailable" };
+  }
+  const decision = await authorizeFromD1({ identity, permission, env });
+  if (decision.allowed) return { ok: true };
+  const unavailable = decision.reason === "authorization_store_unavailable";
+  return {
+    ok: false,
+    status: unavailable ? 503 : 403,
+    error: unavailable ? "authorization_store_unavailable" : "permission_denied"
+  };
+}
+
 async function authenticateRequest(req, env) {
   const authorization = req.headers.get("Authorization") || "";
   const authMode = env.ARIA_AUTH_MODE || "individual";
@@ -214,15 +229,8 @@ export default {
           : req.method === "DELETE"
             ? "memory:own:delete"
             : "memory:own:write";
-        const provisioned = await ensureDefaultUserRole({ identity: ownerId, env });
-        if (!provisioned.ok) {
-          return json({ error: "authorization_store_unavailable" }, 503);
-        }
-        const decision = await authorizeFromD1({ identity: ownerId, permission, env });
-        if (!decision.allowed) {
-          const unavailable = decision.reason === "authorization_store_unavailable";
-          return json({ error: unavailable ? "authorization_store_unavailable" : "permission_denied" }, unavailable ? 503 : 403);
-        }
+        const decision = await authorizeMemoryOperation(env, ownerId, permission);
+        if (!decision.ok) return json({ error: decision.error }, decision.status);
       }
       try {
         if (req.method === "GET") {
@@ -298,6 +306,14 @@ export default {
       : (validClientId(body.clientId) ? "memory:v1:" + body.clientId : null);
     const lastUserMessage = messages.filter((item) => item.role === "user").at(-1)?.content.trim() || "";
     const rememberMatch = lastUserMessage.match(/^(?:Aria[,\s]+)?(?:retiens(?:\s+bien)?\s+que|mémorise(?:\s+que)?|souviens-toi\s+que|n'oublie pas que)\s+(.+)$/i);
+    if (individualAuth) {
+      const readDecision = await authorizeMemoryOperation(env, ownerId, "memory:own:read");
+      if (!readDecision.ok) return json({ error: readDecision.error }, readDecision.status);
+      if (rememberMatch) {
+        const writeDecision = await authorizeMemoryOperation(env, ownerId, "memory:own:write");
+        if (!writeDecision.ok) return json({ error: writeDecision.error }, writeDecision.status);
+      }
+    }
     if (rememberMatch) {
       if (!env.ARIA_MEMORY || !memoryOwnerKey) {
         memoryWriteStatus = "Échec : le stockage persistant n’est pas disponible. Ne prétends pas que l’information a été mémorisée.";
