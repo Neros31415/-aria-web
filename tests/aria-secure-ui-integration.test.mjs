@@ -196,3 +196,18 @@ test("science scene includes a local interactive orbital simulation alongside th
   assert.match(css, /aria-solar-canvas/);
   assert.match(css, /aria-scene-tabs/);
 });
+
+
+test("finance scene provides a local manual portfolio tracker with explicit data and risk disclosures", () => {
+  assert.match(visualEngine, /aria\.finance\.portfolio\.v1/);
+  assert.match(visualEngine, /Capital investi/);
+  assert.match(visualEngine, /Valeur estimée/);
+  assert.match(visualEngine, /Gain \/ perte latent/);
+  assert.match(visualEngine, /Mettre à jour le prix/);
+  assert.match(visualEngine, /Aucune connexion à un courtier/);
+  assert.match(visualEngine, /pas envoyées au serveur ARIA/);
+  assert.match(visualEngine, /aucune conversion de devise/i);
+  assert.match(visualEngine, /Effacer le portefeuille/);
+  assert.match(css, /aria-portfolio-summary/);
+  assert.match(css, /aria-portfolio-form/);
+});
