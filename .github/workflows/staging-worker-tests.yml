@@ -1,0 +1,41 @@
+name: Staging Worker Tests
+
+on:
+  push:
+    branches:
+      - fix/staging-worker-input-security
+      - feat/aria-authenticated-memory
+    paths:
+      - "cloudflare/aria-brain-staging.mjs"
+      - "cloudflare/aria-authorization.mjs"
+      - "cloudflare/aria-authorization-d1.mjs"
+      - "tests/aria-brain-staging.test.mjs"
+      - "tests/aria-authorization.test.mjs"
+      - "tests/aria-authorization-d1.test.mjs"
+      - ".github/workflows/staging-worker-tests.yml"
+  pull_request:
+    branches:
+      - feat/aria-brain-staging-integration
+      - fix/staging-worker-input-security
+    paths:
+      - "cloudflare/aria-brain-staging.mjs"
+      - "cloudflare/aria-authorization.mjs"
+      - "tests/aria-brain-staging.test.mjs"
+      - "tests/aria-authorization.test.mjs"
+      - ".github/workflows/staging-worker-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Run staging worker tests
+        run: node --test tests/aria-brain-staging.test.mjs tests/aria-authorization.test.mjs tests/aria-authorization-d1.test.mjs
