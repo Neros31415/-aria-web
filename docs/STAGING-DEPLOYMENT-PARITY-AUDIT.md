@@ -7,10 +7,10 @@
 ## Résultat
 La version testée de l’authentification par sessions serveur et du contrôle d’accès D1 a été déployée sur le Worker de staging après réussite de la CI.
 
-- **Version Cloudflare :** `7d6be185-948f-4ed2-9ada-7484f28daabb` (version 25)
-- **Déploiement :** `781f55fc-4ca5-4ff2-b862-dbf17abd884f`
+- **Version Cloudflare :** `c1387164-ffdd-48ea-9dbe-7034b98bb781` (version 26)
+- **Déploiement :** `388f7084-5639-44ae-8a75-2c73de22c514`
 - **Répartition du trafic :** 100 % sur cette version du Worker de staging
-- **CI :** [run 39790616842](https://github.com/Neros31415/-aria-web/actions/runs/39790616842), 55 tests réussis, 0 échec
+- **CI :** [run 39790616842](https://github.com/Neros31415/-aria-web/actions/runs/39790616842), 57 tests réussis, 0 échec
 - **Source :** branche `feat/aria-brain-staging-integration`, PR #25 fusionnée dans cette branche après validation.
 
 ## Configuration vérifiée par l’API Cloudflare
@@ -31,7 +31,7 @@ Le mode `session_kv` hache le jeton Bearer en SHA-256 et cherche `session:v1:<ha
 
 Le Worker crée uniquement un rôle de base `user` au premier accès authentifié si aucun rôle n’existe. L’insertion et l’événement d’audit sont regroupés dans un batch D1. Les rôles existants/inactifs ne sont pas remplacés ou réactivés. L’interface publique ne peut pas attribuer un rôle administratif.
 
-Les routes `GET/PUT/DELETE /memory` et l’accès mémoire depuis `/chat` consultent désormais l’autorisation D1 et refusent l’accès si le binding ou le registre est indisponible.
+Les routes `GET/PUT/DELETE /memory` et l’accès mémoire depuis `/chat` consultent désormais l’autorisation D1 et refusent l’accès si le binding ou le registre est indisponible. Le health check expose `authenticationMode` et `authorizationStore`, et marque `configured=false` si le binding D1 requis manque en mode individuel.
 
 ## Validation post-déploiement et limite
 L’API Cloudflare confirme :
@@ -40,7 +40,7 @@ L’API Cloudflare confirme :
 3. le code servi contient le mode session KV, le contrôle d’accès D1 et le provisionnement du rôle de base ;
 4. les trois tables D1 sont présentes.
 
-Le test HTTP direct de `/health` n’a pas pu être exécuté depuis l’environnement d’outillage : les requêtes sortantes vers le domaine `workers.dev` y sont bloquées. Ce n’est **pas** présenté comme un test de santé réussi. Une vérification fonctionnelle depuis un navigateur autorisé ou un test d’intégration dédié reste nécessaire.
+Un test SQL réel sur la base staging a confirmé que l’insertion du rôle `user` et l’écriture de l’audit fonctionnent ensemble via le batch D1 ; les lignes temporaires de test ont été nettoyées. Le test HTTP direct de `/health` n’a pas pu être exécuté depuis l’environnement d’outillage : les requêtes sortantes vers le domaine `workers.dev` y sont bloquées. Ce n’est **pas** présenté comme un test de santé réussi. Une vérification fonctionnelle depuis un navigateur autorisé ou un test d’intégration dédié reste nécessaire.
 
 ## Bloqueurs avant production
 - Vérification HTTP réelle de `/health`, authentification, lecture/écriture/suppression mémoire et journalisation.
