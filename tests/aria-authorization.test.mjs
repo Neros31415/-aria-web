@@ -29,16 +29,11 @@ test("Premium entitlement grants Premium feature access but not administrative a
   assert.equal(authorize({
     identity: alice, roleRecord: userRole, entitlementRecord: premium,
     permission: "feature:premium:use", context: { now }
-  }).allowed, false, "a user role alone does not include Premium permission");
-  const premiumRole = { userId: alice, role: "premium", active: true };
+  }).allowed, true, "Premium entitlement is independent of the account role");
   assert.equal(authorize({
-    identity: alice, roleRecord: premiumRole, entitlementRecord: premium,
-    permission: "feature:premium:use", context: { now }
-  }).allowed, true);
-  assert.equal(authorize({
-    identity: alice, roleRecord: premiumRole, entitlementRecord: premium,
+    identity: alice, roleRecord: userRole, entitlementRecord: premium,
     permission: "admin:roles:manage", context: freshMfa
-  }).allowed, false);
+  }).allowed, false, "Premium entitlement must never grant admin permissions");
 });
 
 test("mismatched role record fails closed", () => {
@@ -81,7 +76,7 @@ test("sensitive super-admin operations require recent MFA", () => {
 test("expired Premium entitlement is rejected", () => {
   const premiumRole = { userId: alice, role: "premium", active: true };
   assert.equal(authorize({
-    identity: alice, roleRecord: premiumRole,
+    identity: alice, roleRecord: userRole,
     entitlementRecord: { userId: alice, plan: "premium", active: true, expiresAt: now },
     permission: "feature:premium:use", context: { now }
   }).reason, "entitlement_expired");
