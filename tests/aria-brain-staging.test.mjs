@@ -371,3 +371,73 @@ test("individual-auth memory is isolated by the validated account, not clientId"
   assert.deepEqual(accountBMemory.memories, []);
   assert.equal(accountBMemory.persisted, true);
 });
+
+
+test("unknown auth mode fails closed instead of falling back to the shared token", async () => {
+  const response = await worker.fetch(request({ messages: [{ role: "user", content: "Bonjour" }] }), {
+    ...env,
+    ARIA_AUTH_MODE: "individal",
+    SUPABASE_URL: "https://project.supabase.co",
+    SUPABASE_ANON_KEY: "test-anon-key"
+  });
+
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: "invalid_auth_mode" });
+});
+
+test("individual-auth mode fails closed when the auth service is unavailable", async (t) => {
+  t.mock.method(globalThis, "fetch", async () => {
+    throw new Error("simulated network outage");
+  });
+
+  const response = await worker.fetch(new Request("https://aria-staging.test/chat", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer user-token"
+    },
+    body: JSON.stringify({ messages: [{ role: "user", content: "Bonjour" }] })
+  }), {
+    ARIA_AUTH_MODE: "individual",
+    SUPABASE_URL: "https://project.supabase.co",
+    SUPABASE_ANON_KEY: "test-anon-key",
+    OPENAI_API_KEY: "test-provider-key",
+    ARIA_MEMORY: env.ARIA_MEMORY
+  });
+
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: "auth_service_unavailable" });
+});
+
+test("individual-auth mode rejects a successful auth response without a valid user id", async (t) => {
+  let providerCalled = false;
+  t.mock.method(globalThis, "fetch", async (url) => {
+    if (String(url).endsWith("/auth/v1/user")) {
+      return new Response(JSON.stringify({ id: "not-a-user-id" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+    providerCalled = true;
+    return new Response("unexpected", { status: 500 });
+  });
+
+  const response = await worker.fetch(new Request("https://aria-staging.test/chat", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer apparently-valid-token"
+    },
+    body: JSON.stringify({ messages: [{ role: "user", content: "Bonjour" }] })
+  }), {
+    ARIA_AUTH_MODE: "individual",
+    SUPABASE_URL: "https://project.supabase.co",
+    SUPABASE_ANON_KEY: "test-anon-key",
+    OPENAI_API_KEY: "test-provider-key",
+    ARIA_MEMORY: env.ARIA_MEMORY
+  });
+
+  assert.equal(response.status, 401);
+  assert.deepEqual(await response.json(), { error: "unauthorized" });
+  assert.equal(providerCalled, false);
+});
