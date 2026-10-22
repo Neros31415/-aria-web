@@ -1,0 +1,58 @@
+# ARIA — Plan d’exécution traçable vers le code
+
+**Référence :** feuille de route App Store ARIA 1.2  
+**Date :** 22 octobre 2026  
+**Statut :** plan de travail vivant ; une tâche n’est terminée qu’avec preuve de code et validation enregistrée.  
+**Règle :** ce document ordonne le travail sans retirer ni reporter de fonctionnalité du périmètre public ARIA 1.0.
+
+## 1. Ordre d’exécution
+
+| Ordre | ID | Priorité | Travail | Fichiers / PR liés | État vérifié |
+|---:|---|---|---|---|---|
+| 1 | BASE-01 | P0 | Revoir et consolider les PR ouvertes avant intégration ; vérifier les bases, les conflits, les tests et les différences fonctionnelles. | [PR #15](https://github.com/Neros31415/-aria-web/pull/15), [PR #18](https://github.com/Neros31415/-aria-web/pull/18), [PR #19](https://github.com/Neros31415/-aria-web/pull/19), [PR #20](https://github.com/Neros31415/-aria-web/pull/20) | En cours — PR séparées et non fusionnées au dernier contrôle. |
+| 2 | AUTH-01 | P0 | Implémenter une authentification individuelle vérifiée côté Worker ; supprimer la dépendance au jeton partagé pour les utilisateurs ; échouer fermé si la configuration Auth est absente. | [Worker de staging](https://github.com/Neros31415/-aria-web/blob/fix/staging-worker-input-security/cloudflare/aria-brain-staging.mjs), [architecture Auth](https://github.com/Neros31415/-aria-web/blob/design/aria-individual-auth/docs/ARIA-INDIVIDUAL-AUTH-ARCHITECTURE.md), [tests Worker](https://github.com/Neros31415/-aria-web/blob/fix/staging-worker-input-security/tests/aria-brain-staging.test.mjs) | Non implémenté. L’architecture propose Supabase Auth, mais aucun projet Auth n’est configuré. Ne pas créer de service ni engager de coût sans autorisation explicite. |
+| 3 | AUTH-02 | P0 | Dériver l’identité depuis le jeton validé côté serveur ; rejeter les identifiants, rôles ou propriétaires fournis par le client comme preuves d’identité. | Même Worker et architecture Auth | Non implémenté. |
+| 4 | MEM-01 | P0 | Isoler GET/PUT mémoire par identité authentifiée ; interdire la lecture, l’écrasement et la suppression croisés ; conserver les limites de taille. | [Worker staging](https://github.com/Neros31415/-aria-web/blob/fix/staging-worker-input-security/cloudflare/aria-brain-staging.mjs), [contrat mémoire](https://github.com/Neros31415/-aria-web/blob/design/aria-individual-auth/docs/ARIA_MEMORY_V1.md), [tests](https://github.com/Neros31415/-aria-web/tree/fix/staging-worker-input-security/tests) | Non implémenté ; la clé actuelle repose encore sur un UUID client (memory:v1:<clientId>). |
+| 5 | AUTH-03 | P0 | Séparer identité, rôle administrateur et droits d’offre ; définir l’attribution serveur des rôles et l’exigence MFA pour les opérations sensibles. | [Architecture Auth](https://github.com/Neros31415/-aria-web/blob/design/aria-individual-auth/docs/ARIA-INDIVIDUAL-AUTH-ARCHITECTURE.md) | Spécifié, pas implémenté. |
+| 6 | SEC-01 | P0 | Ajouter des tests automatisés : jeton absent/invalide/expiré, issuer/audience incorrects, falsification d’identité, isolation entre deux comptes, panne JWKS/stockage et suppression. | [Workflow de tests](https://github.com/Neros31415/-aria-web/blob/fix/staging-worker-input-security/.github/workflows/staging-worker-tests.yml), [tests Worker](https://github.com/Neros31415/-aria-web/tree/fix/staging-worker-input-security/tests) | Tests de validation d’entrée présents dans la PR #18 ; tests Auth et isolation à créer. Résultat CI à re-vérifier avant fusion. |
+| 7 | API-01 | P0 | Formaliser le contrat API, validation stricte des entrées, limites de débit, erreurs génériques, CORS explicite, secrets côté serveur et observabilité sans données privées. | [Worker staging](https://github.com/Neros31415/-aria-web/blob/fix/staging-worker-input-security/cloudflare/aria-brain-staging.mjs) | Validation de taille/roles partielle dans une PR non fusionnée ; limites de débit et observabilité à vérifier/implémenter. |
+| 8 | MEM-02 | P0/P1 | Ajouter consentement mémoire, consultation/correction/export/suppression, suppression de compte et cohérence local/serveur. | [PR #15](https://github.com/Neros31415/-aria-web/pull/15), [contrat mémoire](https://github.com/Neros31415/-aria-web/blob/design/aria-individual-auth/docs/ARIA_MEMORY_V1.md), [app.js sur main](https://github.com/Neros31415/-aria-web/blob/main/app.js) | Partiel selon les branches ; à comparer et tester après sécurisation de l’identité. |
+| 9 | VOICE-01 | P0 | Consolider le HUD vocal : états d’écoute explicites, arrêt immédiat, mode texte, erreurs récupérables, accessibilité et parcours réel sur iPhone. | [PR #15](https://github.com/Neros31415/-aria-web/pull/15), [interface principale](https://github.com/Neros31415/-aria-web/blob/main/index.html), [styles](https://github.com/Neros31415/-aria-web/blob/main/styles.css) | Travail présent dans une PR ouverte ; validation iPhone réelle non attestée ici. |
+| 10 | IOS-01 | P0 | Créer le client iOS natif, gestion de session Keychain, permissions, cycle de vie audio, suppression de compte, build signé et tests appareil. | À créer après stabilisation du contrat API ; la base actuelle est une PWA. | Non implémenté ; nécessite un chemin macOS/Xcode et un compte Apple Developer. |
+| 11 | INTENT-01 | P1 | Séparer compréhension, planification, autorisation, exécution et vérification ; contrat d’action structuré et scénarios français reproductibles. | [PR #15](https://github.com/Neros31415/-aria-web/pull/15), Worker staging | Partiel/non consolidé ; aucune action ne doit être déclarée réussie sans preuve. |
+| 12 | ADV-01 | P0 pour la livraison 1.0 | Implémenter tâches reprenables, compétences versionnées, mémoire des décisions, proactivité, abstraction fournisseur, visualisations 3D/God’s Eye View et compagnon PC sécurisé. | Feuille de route [App Store](https://github.com/Neros31415/-aria-web/blob/docs/app-store-roadmap/docs/FEUILLE-DE-ROUTE-APPLE-APP-STORE-V1.md) | Pas considéré livré ; phases internes dédiées, tout reste dans ARIA 1.0. |
+| 13 | COM-01 | P0 pour la livraison 1.0 | Comptes/roles admin, clés privées de proches, droits Free/Premium, paiements/abonnements si offre payante, newsletter facultative et désinscription. | Architecture Auth et feuille de route App Store | Non implémenté ; dépend de l’identité et des contrôles serveur. |
+| 14 | WEB-01 | P0 pour la livraison 1.0 | Site cohérent, HTTPS, API serveur, RGPD, CGU, cookies selon le cas, SEO, support et politique de confidentialité. | Feuille de route App Store | À auditer et implémenter ; aucune publication de production autorisée par ce plan. |
+| 15 | RELEASE-01 | P0 | Tests d’acceptation complets, revue sécurité, sauvegarde/rétention, support, incidents, TestFlight, conformité et soumission App Store. | Feuille de route App Store | Bloqué jusqu’à validation de tous les lots précédents. |
+
+## 2. Premier lot en cours : identité et mémoire
+
+### Séquence de réalisation
+1. Garder la branche de staging et la production séparées ; ne pas toucher à main ni au Worker de production.
+2. Ajouter un validateur de jeton maintenu et compatible avec le runtime Worker, configuré par variables d’environnement ; ne jamais accepter un jeton simplement décodé.
+3. Rejeter les requêtes avant tout accès aux données ou appel payant si le jeton est invalide, expiré ou si la configuration est incomplète.
+4. Extraire sub uniquement après validation cryptographique et utiliser cet identifiant serveur pour l’espace mémoire versionné.
+5. Retirer clientId des opérations mémoire authentifiées ; ne pas migrer automatiquement les notes existantes basées sur UUID navigateur.
+6. Ajouter les tests négatifs et les tests d’isolation inter-comptes avant de considérer ce lot prêt.
+7. Documenter les variables de configuration requises et le retour arrière ; aucun secret réel dans le dépôt.
+8. Faire relire le diff et les résultats CI avant de demander une fusion. Aucun déploiement n’est inclus.
+
+### Dépendance externe à résoudre sans changer le périmètre
+L’architecture actuelle propose Supabase Auth, mais aucun projet n’est connecté/configuré. L’implémentation peut préparer un mode de staging configurable, mais l’intégration de bout en bout et la validation du jeton réel restent bloquées tant que l’émetteur, l’audience, les clés publiques et les domaines de redirection ne sont pas configurés. Ne pas créer un projet payant ni publier de secrets sans autorisation.
+
+## 3. Définition de « terminé »
+
+Une tâche ne passe à « terminé » que si :
+- le code est présent sur une branche dédiée et relié à l’exigence ;
+- les tests pertinents sont réellement exécutés et leurs résultats vérifiables ;
+- les contrôles de sécurité et de non-régression sont documentés ;
+- les environnements staging et production sont distingués ;
+- aucune fonctionnalité de la feuille de route n’a été supprimée ou reportée hors d’ARIA 1.0 ;
+- la fusion et le déploiement restent des décisions séparées, soumises à revue et autorisation.
+
+## 4. Journal de vérification
+
+- 2026-10-22 : main inventorié ; il contient index.html, app.js, styles.css, manifest.webmanifest, sw.js et README.md. Le README décrit une PWA avec conversation/mémoire locales, sans authentification ni backend intégré dans cette branche.
+- 2026-10-22 : PR #15, #18, #19 et #20 observées ouvertes/non fusionnées au moment du contrôle.
+- 2026-10-22 : PR #18 contient des changements de validation d’entrée et un fichier de tests ; cela ne résout pas l’identité individuelle ni l’isolation mémoire.
+- 2026-10-22 : aucun test n’a été exécuté par cette vérification documentaire ; aucune modification de main, aucun déploiement Cloudflare et aucune soumission Apple effectués.
