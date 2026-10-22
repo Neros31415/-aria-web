@@ -259,8 +259,12 @@ test("persists and retrieves memory notes through the memory routes", async () =
   ), memoryEnv);
 
   assert.equal(getResponse.status, 200);
-  assert.deepEqual(await getResponse.json(), {
-    memories: [{ id: "note-1", text: "Préférence de test", createdAt: 1, updatedAt: (await getResponse.clone?.()) ?? undefined }],
-    persisted: true
-  });
+  const saved = await getResponse.json();
+  assert.equal(saved.persisted, true);
+  assert.equal(saved.memories.length, 1);
+  assert.deepEqual(
+    { id: saved.memories[0].id, text: saved.memories[0].text, createdAt: saved.memories[0].createdAt },
+    { id: "note-1", text: "Préférence de test", createdAt: 1 }
+  );
+  assert.equal(typeof saved.memories[0].updatedAt, "number");
 });
