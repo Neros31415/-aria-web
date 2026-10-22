@@ -408,8 +408,11 @@ test("backend encodes the chosen initiative level and bounded-autonomy principle
 test("map scene connects real OpenStreetMap tiles, geocoding, and OSRM routing with an explicit data disclosure", () => {
   assert.match(visualEngine, /tile\.openstreetmap\.org/);
   assert.match(visualEngine, /nominatim\.openstreetmap\.org\/search/);
-  assert.match(visualEngine, /router\.project-osrm\.org\/route/);
+  assert.match(visualEngine, /routing\.openstreetmap\.de\//);
   assert.match(visualEngine, /OpenStreetMap/);
+  assert.match(visualEngine, /routed-foot/);
+  assert.match(visualEngine, /routed-bike/);
+  assert.match(visualEngine, /lastGeocodeAt/);
   assert.match(visualEngine, /aucune géolocalisation automatique/i);
   assert.match(app, /Carte et itinéraires/);
 });
