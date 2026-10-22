@@ -9,6 +9,20 @@ Un Worker de staging existe déjà. Il expose `/health`, `/chat` et `/memory`, a
 
 La priorité est de corriger les frontières de confiance du Worker avant d'élargir l'intégration.
 
+### État d'avancement des corrections
+
+Une branche de correction séparée, `fix/staging-worker-input-security`, a été ouverte en PR #18. Elle contient des modifications proposées, non fusionnées et non déployées :
+
+- rejet des rôles de message client autres que `user` et `assistant` ;
+- suppression du profil personnel codé en dur au profit d'une personnalité produit générique ;
+- plafonds de taille pour les messages, l'historique et les corps de requête ;
+- lecture du corps HTTP en flux, interrompue dès que la limite de 96 000 octets est dépassée ;
+- tests Node.js pour les rejets de rôles et les limites de taille, y compris `PUT /memory`.
+
+**Validation actuelle :** les tests ont été écrits mais ne sont pas encore exécutés ; aucun run GitHub Actions n'est associé au dernier commit. Il ne faut donc pas qualifier ces correctifs de validés. Les constats ci-dessous décrivent le code de la branche d'intégration examinée ; ils ne signifient pas que les correctifs proposés sont déjà présents dans cette branche.
+
+Le blocage S0 d'authentification reste entier : le jeton partagé et le `clientId` contrôlé par le client ne fournissent ni identité vérifiée ni isolation mémoire entre utilisateurs. Aucun test ni déploiement de production n'a été effectué.
+
 ## Constatations priorisées
 
 ### S0 — Bloquant avant toute distribution multi-utilisateur : jeton partagé + identité mémoire non authentifiée
