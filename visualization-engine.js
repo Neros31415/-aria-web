@@ -234,7 +234,7 @@
   async function openMap() {
     const sceneId = ++sceneEpoch;
     resetSceneContent();
-    const toolbar = element("form", "aria-scene-toolbar");
+    const toolbar = element("form", "aria-scene-toolbar aria-map-toolbar");
     const from = element("input");
     from.placeholder = "Départ (ville ou adresse)";
     from.setAttribute("aria-label", "Lieu de départ");
@@ -246,16 +246,70 @@
     [["car","Voiture"],["foot","À pied"],["bike","Vélo"]].forEach(([value,label]) => {
       const option = element("option", "", label); option.value = value; mode.appendChild(option);
     });
-    const search = element("button", "", "Rechercher");
+    const search = element("button", "", "Rechercher un lieu / calculer");
     search.type = "submit";
     toolbar.append(from, to, mode, search);
-    const status = element("p", "aria-scene-status", "Carte réelle OpenStreetMap. Saisissez un lieu ; aucune géolocalisation automatique n’est activée.");
+    const status = element("p", "aria-scene-status", "Carte OpenStreetMap. Saisissez un départ et une destination pour obtenir un itinéraire ; aucune géolocalisation automatique n’est activée.");
     status.setAttribute("role", "status");
+
     const mapBox = element("div", "aria-map-canvas");
+    mapBox.setAttribute("role", "region");
     mapBox.setAttribute("aria-label", "Carte interactive OpenStreetMap");
-    sceneRoot.append(toolbar, status, mapBox);
-    const disclosure = element("p", "aria-scene-disclosure", "Les recherches de lieux sont transmises à OpenStreetMap/Nominatim et les itinéraires à un service public OSRM (voiture, marche ou vélo). Ces services sont soumis à des quotas et à une disponibilité sans garantie ; un fournisseur contractuel sera nécessaire pour une exploitation commerciale robuste.");
-    sceneRoot.append(disclosure);
+    const mapLayout = element("div", "aria-map-layout");
+    const routePanel = element("section", "aria-route-panel");
+    routePanel.hidden = true;
+    routePanel.setAttribute("aria-label", "Résumé et étapes de l’itinéraire");
+    const routeSummary = element("div", "aria-route-summary");
+    const routeDistance = element("strong", "", "—");
+    const routeDuration = element("strong", "", "—");
+    const routeMode = element("strong", "", "—");
+    const metric = (label, value) => {
+      const card = element("article", "aria-route-metric");
+      card.append(element("span", "", label), value);
+      return card;
+    };
+    routeSummary.append(metric("Distance", routeDistance), metric("Durée estimée", routeDuration), metric("Mode", routeMode));
+    const routeHeading = element("h3", "aria-route-heading", "Étapes du trajet");
+    const routeSteps = element("ol", "aria-route-steps");
+    const clearRoute = element("button", "", "Effacer l’itinéraire");
+    clearRoute.type = "button";
+    routePanel.append(routeSummary, routeHeading, routeSteps, clearRoute);
+    mapLayout.append(mapBox, routePanel);
+    const disclosure = element("p", "aria-scene-disclosure", "Les recherches de lieux sont transmises à OpenStreetMap/Nominatim et les itinéraires à un service public OSRM (voiture, marche ou vélo). Les données de trajet sont indicatives, soumises aux quotas et à la disponibilité du service ; un fournisseur contractuel sera nécessaire pour une exploitation commerciale robuste.");
+    sceneRoot.append(toolbar, status, mapLayout, disclosure);
+
+    const formatDistance = metres => metres < 1000
+      ? Math.round(metres) + " m"
+      : (metres / 1000).toLocaleString("fr-FR", { maximumFractionDigits: 1 }) + " km";
+    const formatDuration = seconds => {
+      const minutes = Math.max(0, Math.round(seconds / 60));
+      if (minutes < 1) return "moins d’une minute";
+      if (minutes < 60) return minutes + " min";
+      const hours = Math.floor(minutes / 60);
+      const remainder = minutes % 60;
+      return hours + " h" + (remainder ? " " + remainder + " min" : "");
+    };
+    const maneuverText = maneuver => {
+      const type = String(maneuver?.type || "continue").toLowerCase();
+      const modifier = String(maneuver?.modifier || "").toLowerCase();
+      const directions = {
+        "uturn": "faire demi-tour", "sharp right": "prendre fortement à droite",
+        "right": "tourner à droite", "slight right": "prendre légèrement à droite",
+        "straight": "continuer tout droit", "slight left": "prendre légèrement à gauche",
+        "left": "tourner à gauche", "sharp left": "prendre fortement à gauche"
+      };
+      if (type === "depart") return "Départ";
+      if (type === "arrive") return "Arrivée";
+      if (type.includes("roundabout") || type === "rotary") {
+        return Number.isFinite(maneuver?.exit) ? "Prendre la sortie " + maneuver.exit + " du rond-point" : "Traverser le rond-point";
+      }
+      const labels = {
+        turn: "Tourner", merge: "S’insérer", "on ramp": "Prendre la bretelle d’accès",
+        "off ramp": "Prendre la sortie", fork: "À la bifurcation", "end of road": "Au bout de la route",
+        continue: "Continuer", "new name": "Continuer", notification: "Attention"
+      };
+      return directions[modifier] || labels[type] || "Continuer";
+    };
 
     try {
       loadStylesheet("https://unpkg.com/leaflet@1.9.4/dist/leaflet.css", "aria-leaflet-css");
@@ -271,7 +325,7 @@
       activeMapLayer = null;
       const mapInstance = activeMap;
       setTimeout(() => { if (sceneId === sceneEpoch && activeMap === mapInstance) mapInstance.invalidateSize(); }, 50);
-      status.textContent = "Carte chargée. Entrez un départ et, si souhaité, une destination pour tracer un itinéraire.";
+      status.textContent = "Carte chargée. Entrez un départ et une destination pour afficher le trajet et ses étapes.";
       updateContextStatus("CARTE ACTIVE", "OPENSTREETMAP / OSRM");
     } catch (error) {
       if (sceneId === sceneEpoch && viewport.dataset.scene === "map") {
@@ -281,12 +335,24 @@
       return;
     }
 
+    clearRoute.addEventListener("click", () => {
+      activeMapLayer?.remove();
+      activeMapLayer = null;
+      routeSteps.replaceChildren();
+      routePanel.hidden = true;
+      status.textContent = "Itinéraire effacé. Vous pouvez calculer un nouveau trajet.";
+    });
+
     toolbar.addEventListener("submit", async event => {
       event.preventDefault();
       const originQuery = from.value.trim();
       const destinationQuery = to.value.trim();
-      if (!originQuery) { status.textContent = "Saisissez au moins un lieu à rechercher."; from.focus(); return; }
+      if (!originQuery) { status.textContent = "Saisissez au moins un lieu de départ."; from.focus(); return; }
       search.disabled = true;
+      routePanel.hidden = true;
+      routeSteps.replaceChildren();
+      activeMapLayer?.remove();
+      activeMapLayer = null;
       try {
         const geocode = async query => {
           const wait = Math.max(0, 1100 - (Date.now() - lastGeocodeAt));
@@ -298,15 +364,17 @@
           if (!response.ok) throw new Error("Le service de recherche de lieux est temporairement indisponible.");
           const rows = await response.json();
           if (!Array.isArray(rows) || !rows[0]) throw new Error("Aucun résultat trouvé pour : " + query);
-          return { lat: Number(rows[0].lat), lon: Number(rows[0].lon), label: rows[0].display_name };
+          const lat = Number(rows[0].lat);
+          const lon = Number(rows[0].lon);
+          if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+            throw new Error("Le service a renvoyé des coordonnées invalides.");
+          }
+          return { lat, lon, label: String(rows[0].display_name || query).slice(0, 300) };
         };
         const origin = await geocode(originQuery);
         let destination = null;
-        if (destinationQuery) {
-          destination = await geocode(destinationQuery);
-        }
+        if (destinationQuery) destination = await geocode(destinationQuery);
         if (sceneId !== sceneEpoch || !activeMap || viewport.dataset.scene !== "map") return;
-        activeMapLayer?.remove();
         activeMapLayer = window.L.featureGroup().addTo(activeMap);
         window.L.marker([origin.lat, origin.lon]).bindPopup("Départ : " + origin.label).addTo(activeMapLayer);
         if (destination) {
@@ -314,24 +382,42 @@
           const routeProfile = mode.value === "foot" ? "routed-foot" : mode.value === "bike" ? "routed-bike" : "routed-car";
           const routeUrl = "https://routing.openstreetmap.de/" + routeProfile + "/route/v1/driving/" +
             origin.lon + "," + origin.lat + ";" + destination.lon + "," + destination.lat +
-            "?overview=full&geometries=geojson&steps=false";
+            "?overview=full&geometries=geojson&steps=true";
           const routeResponse = await fetch(routeUrl, { headers: { Accept: "application/json" } });
           if (!routeResponse.ok) throw new Error("Le calcul d’itinéraire est indisponible pour le moment.");
           const routeData = await routeResponse.json();
           if (sceneId !== sceneEpoch || !activeMap || viewport.dataset.scene !== "map") return;
           const route = routeData.routes?.[0];
-          if (!route) throw new Error("Aucun itinéraire routier n’a été trouvé.");
+          if (!route || !route.geometry || !Number.isFinite(route.distance) || !Number.isFinite(route.duration)) {
+            throw new Error("Aucun itinéraire valide n’a été renvoyé.");
+          }
           window.L.geoJSON(route.geometry, { style: { color: "#79e4ff", weight: 5, opacity: .9 } }).addTo(activeMapLayer);
-          const km = (route.distance / 1000).toFixed(1);
-          const mins = Math.round(route.duration / 60);
-          const modeLabel = mode.value === "foot" ? "à pied" : mode.value === "bike" ? "à vélo" : "en voiture";
-          status.textContent = origin.label + " → " + destination.label + " · " + km + " km · environ " + mins + " min " + modeLabel + " (OSRM).";
+          const modeLabel = mode.value === "foot" ? "À pied" : mode.value === "bike" ? "À vélo" : "Voiture";
+          routeDistance.textContent = formatDistance(route.distance);
+          routeDuration.textContent = formatDuration(route.duration);
+          routeMode.textContent = modeLabel;
+          const steps = (route.legs || []).flatMap(leg => Array.isArray(leg.steps) ? leg.steps : []);
+          steps.forEach((step, index) => {
+            const row = element("li", "aria-route-step");
+            row.appendChild(element("strong", "", (index + 1) + ". " + maneuverText(step.maneuver)));
+            const details = [typeof step.name === "string" && step.name.trim() ? step.name.trim() : "Route sans nom", formatDistance(Number(step.distance) || 0), formatDuration(Number(step.duration) || 0)];
+            row.appendChild(element("span", "", details.join(" · ")));
+            routeSteps.appendChild(row);
+          });
+          if (!steps.length) routeSteps.appendChild(element("li", "aria-route-step", "Le fournisseur n’a pas renvoyé de détail étape par étape."));
+          routePanel.hidden = false;
+          status.textContent = origin.label + " → " + destination.label + " · " + formatDistance(route.distance) + " · " + formatDuration(route.duration) + ".";
+          updateContextStatus("ITINÉRAIRE CALCULÉ", "OPENSTREETMAP / OSRM");
         } else {
-          status.textContent = "Lieu trouvé : " + origin.label;
+          status.textContent = "Lieu trouvé : " + origin.label + ". Ajoutez une destination pour calculer un itinéraire.";
         }
         activeMap.fitBounds(activeMapLayer.getBounds().pad(.18), { maxZoom: 13 });
       } catch (error) {
-        if (sceneId === sceneEpoch && viewport.dataset.scene === "map") status.textContent = error.message || "Une erreur est survenue lors de la recherche.";
+        if (sceneId === sceneEpoch && viewport.dataset.scene === "map") {
+          status.textContent = error.message || "Une erreur est survenue lors de la recherche.";
+          routePanel.hidden = true;
+          updateContextStatus("ITINÉRAIRE INDISPONIBLE", "SERVICE EXTERNE");
+        }
       } finally {
         if (sceneId === sceneEpoch) search.disabled = false;
       }
