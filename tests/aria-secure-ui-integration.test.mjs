@@ -181,3 +181,18 @@ test("latest secure Worker retains D1 authorization and hashed session-token loo
   assert.match(workerSource, /authorization_store_unavailable/);
   assert.match(workerSource, /ARIA_AUTHZ_DB/);
 });
+
+
+test("science scene includes a local interactive orbital simulation alongside the NASA catalogue", () => {
+  assert.match(visualEngine, /Système solaire/);
+  assert.match(visualEngine, /Simulation orbitale pédagogique exécutée localement/);
+  assert.match(visualEngine, /period: 365\.256/);
+  assert.match(visualEngine, /period: 60190/);
+  assert.match(visualEngine, /Vitesse de simulation/);
+  assert.match(visualEngine, /Réinitialiser/);
+  assert.match(visualEngine, /aria-label", "Simulation animée des orbites du Soleil et des huit planètes/);
+  assert.match(visualEngine, /function drawSolarSystem/);
+  assert.match(visualEngine, /Les tailles et distances ne sont pas à l’échelle/);
+  assert.match(css, /aria-solar-canvas/);
+  assert.match(css, /aria-scene-tabs/);
+});
