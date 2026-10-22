@@ -216,3 +216,90 @@ La vérification du backend et de l'API peut s'appuyer sur l'**OWASP Application
 
 ---
 **Limite de l'audit :** les métadonnées des Workers et Pages Cloudflare ont été consultées en lecture seule, et le code source de la branche d'intégration a été examiné. Les valeurs des secrets, les données utilisateurs, les performances réelles et le comportement de production n'ont pas été inspectés. Les requêtes directes au Worker de staging ont reçu un 403 de la passerelle de contrôle ; elles ne constituent pas un test de disponibilité du service.
+
+
+## 9. Audit complémentaire — exigences fonctionnelles V1.2.1
+
+**Document comparé :** `docs/CAHIER-DES-CHARGES-ARIA-COMPLEMENT-FONCTIONNEL-V1.2.1.md`, disponible sur la branche documentaire `docs/aria-legal-commercial-v1-2`.  
+**Périmètre de comparaison :** `main` (base de référence), plus les branches de travail d'intégration vocale et de sécurisation du Worker. Les capacités présentes uniquement dans une branche non fusionnée sont indiquées comme prototypes/propositions, et non comme fonctions livrées.
+
+| Exigence V1.2.1 | État dans `main` | Éléments repérés hors de `main` | Conclusion / action |
+|---|---|---|---|
+| F-INT-01 — compréhension de l'intention et planification | **Absent / non connecté** : l'interface V0.7 n'est pas connectée à un modèle réel. | La branche `feat/aria-voice-first-onboarding` contient un routage d'intentions et des actions structurées validées par schéma, mais pas un planificateur générique de tâches multi-étapes. | Réutiliser le routage structuré après validation ; définir ensuite un format de plan et des critères de réussite. Ne pas appeler cela un « compilateur d'intentions » complet à ce stade. |
+| F-MEM-01 — mémoire contextuelle contrôlée | **Partiel local** : notes et historique sont stockés dans le navigateur. | La branche d'intégration staging fournit des routes de mémoire KV. La branche vocale ajoute un consentement explicite et une suppression/synchronisation confirmée côté serveur. Des identités alpha provisionnées sont prévues dans une branche non fusionnée. | Bloquant : ne pas traiter le `clientId` navigateur comme identité. Lier la mémoire à une identité vérifiée côté serveur, tester l'isolation, le consentement désactivé, l'export/suppression et les échecs réseau. |
+| F-ACT-01 — exécution et vérification des actions | **Absent comme boucle d'agent** : le front-end V0.7 ne fournit pas d'exécution d'outils IA vérifiée. | Le routage vocal classe certaines actions d'interface ; cela ne démontre pas l'exécution générale de tâches ni une vérification de résultats externes. | Créer des contrats d'outils, des états d'action explicites et des tests réussite/échec/timeout/annulation avant d'élargir les actions disponibles. |
+| F-CONT-01 — continuité et reprise des tâches | **Absent** : l'historique local ne constitue pas un état structuré de tâche reprenable. | Aucun état durable de tâche multi-étapes n'a été identifié dans les fichiers examinés. | Définir un modèle de tâche versionné (objectif, étape, preuves, dépendances, prochaine action) après les fondations d'identité et de persistance. |
+| F-SKILL-01 — compétences réutilisables | **Absent / non trouvé** : pas de registre de compétences versionnées ni de banc de tests par compétence. | Aucun registre correspondant identifié dans les branches examinées. | Différer jusqu'à ce que le contrat d'outil et les tests d'exécution soient stables ; exiger permissions explicites, versions et retour arrière. |
+| F-PRO-01 — proactivité et gestion de l'attention | **Absent / non trouvé** : aucune orchestration planifiée ou gestion des notifications identifiée. | Des préférences de proactivité sont présentes dans le prototype vocal, mais pas un système de surveillance planifiée démontré. | Commencer par préférences, règles de fréquence et déclencheurs explicites ; ne pas annoncer de surveillance active sans ordonnanceur/connecteurs opérationnels. |
+| F-DEC-01 — mémoire des décisions | **Absent / non trouvé** : les notes ne distinguent pas décisions, hypothèses, options rejetées et raisons. | Aucun registre de décisions structuré identifié. | Ajouter après la mémoire par compte et le modèle de tâches, avec statut et mécanisme de réévaluation. |
+| ARCH-01 — modularité | **Partiel** : séparation basique HTML/CSS/JS, mais pas de contrats internes complets pour planification, outils, mémoire et vérification. | Les branches d'intégration séparent UI, Worker et moteur de visualisation. | Formaliser les contrats et leurs tests avant d'ajouter des modules spécialisés. |
+| ARCH-02 — indépendance du fournisseur IA | **Partiel / non démontré** : le socle `main` n'est pas connecté à un fournisseur. Le Worker alpha examiné appelle directement une API fournisseur. | Le Worker garde la clé côté serveur, mais son appel et son format sont spécifiques au fournisseur. | Définir une interface fournisseur interne, sans abstraction prématurée ; tester au moins un adaptateur réel et un adaptateur simulé. |
+| SEC-01 — autonomie contrôlée | **Partiel** : pas de système d'actions agentiques dans `main`. | Les branches de staging ajoutent des contrôles d'entrée ; la PR #18 propose le rejet du rôle `system` client, des limites de taille et la suppression du profil personnel codé en dur. La PR #19 documente une architecture d'authentification individuelle, mais n'implémente pas une inscription publique. | P0 : fusionner uniquement après revue, CI et tests de staging autorisés ; conserver le contrôle d'accès côté serveur. L'authentification multi-utilisateur reste un bloqueur distinct. |
+| OBS-01 — traçabilité et preuve | **Partiel** : états d'interface de base, pas de preuve durable par action. | Des tests et des messages d'erreur existent dans les branches de travail, mais aucune piste d'audit générale des actions n'a été identifiée. | Ajouter journaux minimisés sans secrets/contenu privé inutile, corrélation d'action et résultat vérifié. |
+| UX-01 — expérience ARIA cohérente | **Partiel dans `main`** : PWA responsive ; l'expérience vocale/HUD plus avancée se trouve dans une branche non fusionnée. | La branche vocale inclut onboarding, écoute interrompable, contrôles explicites et visualisations de démonstration clairement limitées. | Conserver le principe vocal/HUD ; tester sur iPhone réel et ne pas confondre scène de démonstration avec données 3D ou cartographiques réelles. |
+
+### 9.1 Conclusion de l'audit fonctionnel
+
+Les sept exigences fonctionnelles de l'annexe V1.2.1 ne sont pas toutes implémentées dans `main`. La mémoire locale est la seule capacité proche d'une première version, et elle ne remplace pas une mémoire distante isolée par identité. Le routage d'intentions, le consentement mémoire, la voix et certaines visualisations existent dans des branches de travail, mais ne doivent pas être annoncés comme livrés tant que les PR correspondantes ne sont pas fusionnées, testées et déployées.
+
+Les éléments les plus risqués sont toujours l'identité utilisateur, l'autorisation côté serveur et l'isolation mémoire. La validation des entrées (PR #18) améliore la sécurité, mais ne résout pas à elle seule le problème du jeton partagé ni l'absence d'inscription/authentification publique. La proposition d'authentification individuelle (PR #19) est documentaire et conditionnelle à une configuration explicite ; aucun projet Supabase n'est réputé créé ou connecté sur la seule base de cette proposition.
+
+## 10. Feuille de route ajustée aux exigences V1.2.1
+
+Les priorités suivantes complètent les phases existantes ; elles ne remplacent pas les obligations de conformité, les contrôles de sécurité ni la validation sur appareil réel.
+
+### P0-A — Consolider et valider les frontières de confiance du Worker
+1. Examiner le diff et la CI de la PR #18 (rôles de messages, tailles de corps/messages, profil générique, tests).
+2. Conserver l'exigence d'identité individuelle comme bloqueur avant toute distribution à plusieurs personnes ; ne pas partager le jeton d'alpha.
+3. Choisir explicitement la solution d'identité (par exemple une intégration Auth validée) avant d'implémenter les comptes. Ne pas supposer qu'une proposition documentaire ou un binding KV suffit.
+4. Dériver côté serveur l'identité qui indexe la mémoire ; ignorer tout identifiant de propriétaire envoyé par le navigateur.
+5. Ajouter des tests négatifs d'isolation inter-comptes, consentement mémoire désactivé, suppression confirmée, token absent/invalide, origine inconnue et limites de requête.
+6. Vérifier les résultats CI et le runtime de staging sans lire les secrets ni toucher à `aria-brain` production.
+
+**Sortie attendue :** contrat API documenté, contrôles d'entrée validés, identité serveur choisie, aucune affirmation de sécurité multi-utilisateur sans tests d'isolation réussis.
+
+### P0-B — Intégrer l'expérience vocale/HUD sans élargir prématurément l'autonomie
+1. Revoir la PR #15 : onboarding, consentement mémoire, sérialisation/annulation de la voix, sorties d'intention structurées, validation de schéma et états de visualisation.
+2. Vérifier que le Worker et le client utilisent le même contrat de sortie ; rejeter les actions inconnues ou malformées.
+3. Exécuter les tests automatisés existants, puis compléter les cas d'échec et tester sur iPhone réel.
+4. Garder les visualisations de démonstration étiquetées comme telles tant qu'aucune donnée ou simulation réelle n'est connectée.
+
+**Sortie attendue :** une interaction vocale cohérente et testable, sans prétendre qu'ARIA exécute déjà des tâches générales.
+
+### P1-A — Mémoire par compte et continuité
+1. Implémenter une mémoire distante associée à l'identité vérifiée, avec consentement, consultation, correction, suppression et stratégie de reprise sur erreur.
+2. Créer un état de tâche distinct des simples messages/souvenirs.
+3. Persister objectif, étapes, résultats vérifiés, dépendances et prochaine action.
+4. Tester fermeture/réouverture, interruption réseau et reprise sans rejouer aveuglément une action non idempotente.
+
+**Sortie attendue :** mémoire contrôlée par compte et tâches reprenables avec état vérifiable.
+
+### P1-B — Exécution vérifiée et compétences
+1. Définir un contrat d'outil (schéma d'entrée/sortie, permissions, délais, erreurs, preuve de résultat).
+2. Introduire des états « prévu », « en cours », « réussi », « échoué », « bloqué » et « non vérifié ».
+3. Autoriser uniquement les outils explicitement déclarés et testés ; demander confirmation pour les opérations sensibles.
+4. Transformer une procédure en compétence versionnée seulement après réussite des tests ; prévoir comparaison et retour arrière.
+
+**Sortie attendue :** aucune action annoncée comme réussie sans preuve, aucune compétence capable d'augmenter ses propres permissions.
+
+### P2 — Mémoire des décisions et proactivité
+1. Ajouter un registre structuré des décisions, hypothèses, alternatives et raisons, avec possibilité de réévaluation.
+2. Définir préférences de notification, fréquence, périodes de silence, sources autorisées et déclencheurs explicites.
+3. N'activer la proactivité que lorsque l'ordonnanceur ou l'intégration source existe réellement et a été testé.
+4. Mesurer les faux positifs et le coût d'interruption avant de généraliser les notifications.
+
+**Sortie attendue :** suggestions utiles et contrôlables, sans surveillance implicite ni notifications excessives.
+
+### P3 — Abstraction fournisseur et évolutivité
+1. Introduire une interface interne stable pour les fournisseurs IA, seulement au niveau nécessaire aux cas d'usage existants.
+2. Garder mémoire, autorisations, état des tâches et journalisation indépendants du format propriétaire du modèle.
+3. Tester les erreurs, indisponibilités et changements de fournisseur sans exposer les secrets.
+4. Reporter le registre étendu de compétences et les simulations avancées jusqu'à la stabilité des contrats d'outils.
+
+**Sortie attendue :** capacité de changer de modèle sans reconstruire la mémoire et l'orchestration.
+
+### Prochain incrément recommandé
+
+**Le prochain incrément de plus grande valeur est une revue consolidée de la PR #18 et de la PR #19, puis la validation du chemin d'authentification et de mémoire par identité avant de brancher davantage de capacités.** La PR #18 durcit la validation d'entrée, mais ne résout pas l'identité multi-utilisateur. La PR #19 décrit une architecture possible, mais son choix de fournisseur et sa configuration doivent être confirmés. Ne pas fusionner automatiquement, ne pas déployer, et ne pas toucher à la production dans le cadre de cet audit documentaire.
+
+---
