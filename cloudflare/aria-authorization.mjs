@@ -11,12 +11,6 @@
 
 export const ROLE_PERMISSIONS = Object.freeze({
   user: Object.freeze(["memory:own:read", "memory:own:write", "memory:own:delete"]),
-  premium: Object.freeze([
-    "memory:own:read",
-    "memory:own:write",
-    "memory:own:delete",
-    "feature:premium:use"
-  ]),
   admin: Object.freeze([
     "memory:own:read",
     "memory:own:write",
@@ -110,6 +104,8 @@ export function authorize({
         return { allowed: false, reason: "entitlement_expired" };
       }
     }
+    // Commercial entitlement is deliberately independent of the account role.
+    return { allowed: true, reason: "allowed", identity, role, permission };
   }
 
   const roleAllows = ROLE_PERMISSIONS[role].includes(permission);
