@@ -597,3 +597,28 @@ test("session_kv mode returns unavailable when the session registry throws", asy
   assert.equal(response.status, 503);
   assert.deepEqual(await response.json(), { error: "auth_storage_unavailable" });
 });
+
+
+test("individual-auth memory routes fail closed when the D1 authorization binding is missing", async (t) => {
+  const ownerId = "123e4567-e89b-42d3-a456-426614174000";
+  t.mock.method(globalThis, "fetch", async (url) => {
+    if (String(url).endsWith("/auth/v1/user")) {
+      return new Response(JSON.stringify({ id: ownerId }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+    throw new Error("provider must not be called");
+  });
+  const response = await worker.fetch(new Request("https://aria-staging.test/memory", {
+    headers: { Authorization: "Bearer valid-account-token" }
+  }), {
+    ARIA_AUTH_MODE: "individual",
+    SUPABASE_URL: "https://project.supabase.co",
+    SUPABASE_ANON_KEY: "test-anon-key",
+    OPENAI_API_KEY: "test-provider-key",
+    ARIA_MEMORY: env.ARIA_MEMORY
+  });
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: "authorization_store_unavailable" });
+});
