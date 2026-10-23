@@ -597,6 +597,60 @@ test("session_kv mode derives identity from the hashed session record but blocks
   assert.equal(memoryCalls, 0, "the memory store must not be touched");
 });
 
+test("session_kv chat remains available but never reads or writes memory before migration", async (t) => {
+  const token = "session-kv-chat-test-token-123456789012345678901";
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
+  const tokenHash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  let memoryCalls = 0;
+  let providerRequest;
+  const sessionEnv = {
+    ARIA_AUTH_MODE: "session_kv",
+    OPENAI_API_KEY: "test-provider-key",
+    ARIA_USERS: {
+      async get(key) {
+        assert.equal(key, "session:v1:" + tokenHash);
+        return "opaque-alpha-user-22";
+      }
+    },
+    ARIA_MEMORY: {
+      async get() { memoryCalls++; return [{ id: "private", text: "should not be read" }]; },
+      async put() { memoryCalls++; },
+      async delete() { memoryCalls++; }
+    }
+  };
+  t.mock.method(globalThis, "fetch", async (_url, options) => {
+    providerRequest = JSON.parse(options.body);
+    return new Response(JSON.stringify({
+      model: "test-model",
+      output: [{
+        type: "message",
+        content: [{ type: "output_text", text: JSON.stringify({
+          reply: "Je peux continuer, mais je ne peux pas conserver ce souvenir avant la migration du compte.",
+          action: "none",
+          scene: "none"
+        }) }]
+      }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  });
+
+  const response = await worker.fetch(new Request("https://aria-staging.test/chat", {
+    method: "POST",
+    headers: {
+      "Authorization": "Bearer " + token,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      memoryConsent: true,
+      messages: [{ role: "user", content: "Retiens que ma couleur préférée est bleue." }]
+    })
+  }), sessionEnv);
+
+  assert.equal(response.status, 200, "chat must remain available");
+  assert.match(providerRequest.instructions, /identité de compte canonique n’a pas été migrée/);
+  assert.equal(providerRequest.store, false);
+  assert.equal(memoryCalls, 0, "consent must not bypass the identity migration gate");
+});
+
 test("session_kv mode rejects missing, malformed, and cross-format identities closed", async () => {
   const token = "session-token-for-staging-test-12345678901234567890";
   const cases = [
