@@ -933,7 +933,7 @@ test("individual-auth memory routes fail closed when the D1 authorization bindin
     ARIA_MEMORY: env.ARIA_MEMORY
   });
   assert.equal(response.status, 503);
-  assert.deepEqual(await response.json(), { error: "authorization_store_unavailable" });
+  assert.deepEqual(await response.json(), { error: "consent_store_unavailable" });
 });
 
 
