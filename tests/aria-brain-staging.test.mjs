@@ -13,7 +13,7 @@ const env = {
 };
 
 
-function authorizationDb() {
+function authorizationDb(consentEnabled = true) {
   return {
     prepare(sql) {
       return {
@@ -23,8 +23,14 @@ function authorizationDb() {
               if (sql.includes("aria_user_roles")) {
                 return { userId: values[0], role: "user", active: 1 };
               }
+              if (sql.includes("aria_memory_consent")) {
+                return consentEnabled
+                  ? { enabled: 1, consentVersion: "memory-v1", updatedAt: Date.now() }
+                  : null;
+              }
               return null;
-            }
+            },
+            async run() { return { success: true }; }
           };
         }
       };
@@ -32,6 +38,32 @@ function authorizationDb() {
     async batch() {
       return [{ success: true }, { success: true }];
     }
+  };
+}
+
+function statefulMemoryConsentDb(initialEnabled = false) {
+  let consent = initialEnabled ? { enabled: 1, consentVersion: "memory-v1", updatedAt: Date.now() } : null;
+  return {
+    prepare(sql) {
+      return {
+        bind(...values) {
+          return {
+            async first() {
+              if (sql.includes("aria_user_roles")) return { userId: values[0], role: "user", active: 1 };
+              if (sql.includes("aria_memory_consent")) return consent ? { ...consent } : null;
+              return null;
+            },
+            async run() {
+              if (sql.includes("INSERT INTO aria_memory_consent")) {
+                consent = { enabled: values[1], consentVersion: "memory-v1", updatedAt: values[2] };
+              }
+              return { success: true };
+            }
+          };
+        }
+      };
+    },
+    async batch() { return [{ success: true }, { success: true }]; }
   };
 }
 
@@ -233,6 +265,76 @@ test("memory API requires explicit consent for reads and writes but permits dele
   assert.equal(memoryCalls, 1, "deletion remains available without memory consent");
 });
 
+test("durable memory consent is account-scoped, persisted, and revocable", async (t) => {
+  const ownerId = "123e4567-e89b-42d3-a456-426614174000";
+  const db = statefulMemoryConsentDb(false);
+  const stored = new Map([["memory:v2:" + ownerId, JSON.stringify([{ id: "note", text: "private" }])]]);
+  let memoryCalls = 0;
+  const memory = {
+    async get(key, type) {
+      memoryCalls++;
+      const value = stored.get(key);
+      if (value === undefined) return null;
+      return type === "json" ? JSON.parse(value) : value;
+    },
+    async put(key, value) { memoryCalls++; stored.set(key, value); },
+    async delete(key) { memoryCalls++; stored.delete(key); }
+  };
+  const individualEnv = {
+    ARIA_AUTH_MODE: "individual",
+    ARIA_AUTHZ_DB: db,
+    SUPABASE_URL: "https://project.supabase.co",
+    SUPABASE_ANON_KEY: "test-anon-key",
+    OPENAI_API_KEY: "test-provider-key",
+    ARIA_MEMORY: memory
+  };
+  t.mock.method(globalThis, "fetch", async (url) => {
+    if (String(url).endsWith("/auth/v1/user")) {
+      return new Response(JSON.stringify({ id: ownerId }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    return new Response("unexpected provider call", { status: 500 });
+  });
+
+  const denied = await worker.fetch(new Request("https://aria-staging.test/memory", {
+    headers: { Authorization: "Bearer account-token", "X-ARIA-Memory-Consent": "true" }
+  }), individualEnv);
+  assert.equal(denied.status, 403, "client-supplied consent header must not override server consent");
+  assert.deepEqual(await denied.json(), { error: "memory_consent_required" });
+  assert.equal(memoryCalls, 0);
+
+  const enable = await worker.fetch(new Request("https://aria-staging.test/memory/consent", {
+    method: "POST",
+    headers: { Authorization: "Bearer account-token", "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled: true })
+  }), individualEnv);
+  assert.equal(enable.status, 200);
+  assert.deepEqual(await enable.json(), {
+    enabled: true, persisted: true, consentVersion: "memory-v1", updatedAt: (await enable.clone().json()).updatedAt
+  });
+
+  const allowed = await worker.fetch(new Request("https://aria-staging.test/memory", {
+    headers: { Authorization: "Bearer account-token" }
+  }), individualEnv);
+  assert.equal(allowed.status, 200, "server consent, not a client header, authorizes reads");
+  assert.deepEqual((await allowed.json()).memories, [{ id: "note", text: "private" }]);
+  assert.equal(memoryCalls, 1);
+
+  const revoke = await worker.fetch(new Request("https://aria-staging.test/memory/consent", {
+    method: "POST",
+    headers: { Authorization: "Bearer account-token", "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled: false })
+  }), individualEnv);
+  assert.equal(revoke.status, 200);
+  assert.equal((await revoke.json()).enabled, false);
+
+  const blocked = await worker.fetch(new Request("https://aria-staging.test/memory", {
+    headers: { Authorization: "Bearer account-token", "X-ARIA-Memory-Consent": "true" }
+  }), individualEnv);
+  assert.equal(blocked.status, 403, "a stale or forged client header must not restore revoked consent");
+  assert.equal(memoryCalls, 1, "revocation must prevent further storage reads");
+});
+
+
 test("individual-auth memory consent is enforced and deletion fails closed without authorization storage", async (t) => {
   const ownerId = "123e4567-e89b-42d3-a456-426614174000";
   let memoryCalls = 0;
@@ -249,7 +351,7 @@ test("individual-auth memory consent is enforced and deletion fails closed witho
   };
   const individualEnv = {
     ARIA_AUTH_MODE: "individual",
-    ARIA_AUTHZ_DB: authorizationDb(),
+    ARIA_AUTHZ_DB: authorizationDb(false),
     SUPABASE_URL: "https://project.supabase.co",
     SUPABASE_ANON_KEY: "test-anon-key",
     OPENAI_API_KEY: "test-provider-key",
