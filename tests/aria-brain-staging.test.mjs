@@ -40,7 +40,6 @@ function request(body, extraHeaders = {}) {
     method: "POST",
     headers: {
       "Authorization": "Bearer test-token",
-      "X-ARIA-Memory-Consent": "true",
       "Content-Type": "application/json",
       ...extraHeaders
     },
