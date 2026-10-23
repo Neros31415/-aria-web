@@ -731,14 +731,36 @@ test("health reports authorization readiness for session_kv mode", async () => {
 
 test("health reports an individual-auth service as not configured without D1 authorization", async () => {
   const response = await worker.fetch(new Request("https://aria-staging.test/health"), {
-    ARIA_AUTH_MODE: "session_kv",
-    ARIA_USERS: { async get() { return null; } },
+    ARIA_AUTH_MODE: "individual",
+    SUPABASE_URL: "https://supabase.test",
+    SUPABASE_ANON_KEY: "test-anon-key",
     ARIA_MEMORY: env.ARIA_MEMORY,
     OPENAI_API_KEY: "test-provider-key"
   });
   const body = await response.json();
   assert.equal(response.status, 200);
   assert.equal(body.configured, false);
-  assert.equal(body.authenticationMode, "session_kv");
+  assert.equal(body.authenticationMode, "individual");
   assert.equal(body.authorizationStore, false);
+});
+
+test("health fails closed for an invalid authentication mode", async () => {
+  const response = await worker.fetch(new Request("https://aria-staging.test/health"), {
+    ARIA_AUTH_MODE: "individal",
+    ARIA_USERS: { async get() { return null; } },
+    ARIA_AUTHZ_DB: authorizationDb(),
+    ARIA_MEMORY: env.ARIA_MEMORY,
+    OPENAI_API_KEY: "test-provider-key"
+  });
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), {
+    status: "error",
+    service: "aria-api",
+    configured: false,
+    authenticationMode: "individal",
+    error: "invalid_auth_mode",
+    persistentMemory: false,
+    memoryStorageConfigured: true,
+    memoryStatus: "invalid_auth_mode"
+  });
 });

@@ -174,11 +174,23 @@ export default {
     const url = new URL(req.url);
     if (url.pathname === "/health" && req.method === "GET") {
       const authMode = env.ARIA_AUTH_MODE || "individual";
+      if (!["individual", "session_kv", "legacy"].includes(authMode)) {
+        return json({
+          status: "error",
+          service: "aria-api",
+          configured: false,
+          authenticationMode: authMode,
+          error: "invalid_auth_mode",
+          persistentMemory: false,
+          memoryStorageConfigured: Boolean(env.ARIA_MEMORY),
+          memoryStatus: "invalid_auth_mode"
+        }, 503);
+      }
       const authConfigured = authMode === "individual"
         ? Boolean(env.SUPABASE_URL && env.SUPABASE_ANON_KEY)
         : authMode === "session_kv"
           ? Boolean(env.ARIA_USERS)
-          : authMode === "legacy" && Boolean(env.ARIA_ACCESS_TOKEN);
+          : Boolean(env.ARIA_ACCESS_TOKEN);
       const individualMode = authMode === "individual" || authMode === "session_kv";
       const authorizationConfigured = !individualMode || Boolean(env.ARIA_AUTHZ_DB);
       const memoryStorageConfigured = Boolean(env.ARIA_MEMORY);
