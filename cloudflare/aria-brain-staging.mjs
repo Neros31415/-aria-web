@@ -29,6 +29,46 @@ async function readLimitedBody(request, maxBytes) {
 }
 
 
+const CANONICAL_ACCOUNT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+async function readServerMemoryConsent(env, ownerId) {
+  if (!CANONICAL_ACCOUNT_ID.test(ownerId || "")) return { ok: false, status: 503, error: "consent_store_unavailable" };
+  const db = env?.ARIA_AUTHZ_DB;
+  if (!db || typeof db.prepare !== "function") return { ok: false, status: 503, error: "consent_store_unavailable" };
+  try {
+    const row = await db.prepare(
+      "SELECT enabled, consent_version AS consentVersion, updated_at_ms AS updatedAt FROM aria_memory_consent WHERE owner_id = ? LIMIT 1"
+    ).bind(ownerId).first();
+    if (!row) return { ok: true, enabled: false };
+    if (![0, 1, true, false].includes(row.enabled) ||
+        typeof row.consentVersion !== "string" ||
+        !Number.isSafeInteger(row.updatedAt) || row.updatedAt < 0) {
+      return { ok: false, status: 503, error: "consent_store_unavailable" };
+    }
+    return { ok: true, enabled: row.enabled === 1 || row.enabled === true, consentVersion: row.consentVersion, updatedAt: row.updatedAt };
+  } catch {
+    return { ok: false, status: 503, error: "consent_store_unavailable" };
+  }
+}
+
+async function writeServerMemoryConsent(env, ownerId, enabled) {
+  if (!CANONICAL_ACCOUNT_ID.test(ownerId || "") || typeof enabled !== "boolean") {
+    return { ok: false, status: 400, error: "invalid_memory_consent" };
+  }
+  const db = env?.ARIA_AUTHZ_DB;
+  if (!db || typeof db.prepare !== "function") return { ok: false, status: 503, error: "consent_store_unavailable" };
+  try {
+    const now = Date.now();
+    const result = await db.prepare(
+      "INSERT INTO aria_memory_consent (owner_id, enabled, consent_version, updated_at_ms) VALUES (?, ?, 'memory-v1', ?) ON CONFLICT(owner_id) DO UPDATE SET enabled = excluded.enabled, consent_version = excluded.consent_version, updated_at_ms = excluded.updated_at_ms"
+    ).bind(ownerId, enabled ? 1 : 0, now).run();
+    if (result?.success === false) return { ok: false, status: 503, error: "consent_store_unavailable" };
+    return { ok: true, enabled, consentVersion: "memory-v1", updatedAt: now };
+  } catch {
+    return { ok: false, status: 503, error: "consent_store_unavailable" };
+  }
+}
+
 async function authorizeMemoryOperation(env, identity, permission) {
   const provisioned = await ensureDefaultUserRole({ identity, env });
   if (!provisioned.ok) {
@@ -201,9 +241,10 @@ export default {
         memoryStatus
       });
     }
-    if (url.pathname !== "/chat" && url.pathname !== "/memory") return json({ error: "not_found" }, 404);
+    if (url.pathname !== "/chat" && url.pathname !== "/memory" && url.pathname !== "/memory/consent") return json({ error: "not_found" }, 404);
     if (url.pathname === "/chat" && req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
     if (url.pathname === "/memory" && !["GET", "PUT", "DELETE"].includes(req.method)) return json({ error: "method_not_allowed" }, 405);
+    if (url.pathname === "/memory/consent" && !["GET", "POST"].includes(req.method)) return json({ error: "method_not_allowed" }, 405);
     if (!env.OPENAI_API_KEY) return json({ error: "service_not_configured" }, 503);
     const auth = await authenticateRequest(req, env);
     if (!auth.ok) return json({ error: auth.error }, auth.status);
@@ -216,6 +257,30 @@ export default {
 
     const validClientId = (value) =>
       typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+
+    if (url.pathname === "/memory/consent") {
+      if (!individualAuth || !canonicalAccountIdentity || !ownerId) return json({ error: "individual_auth_required" }, 409);
+      if (req.method === "GET") {
+        const consent = await readServerMemoryConsent(env, ownerId);
+        if (!consent.ok) return json({ error: consent.error }, consent.status);
+        return json({ enabled: consent.enabled, persisted: true, consentVersion: consent.consentVersion || null, updatedAt: consent.updatedAt || null });
+      }
+      const boundedBody = await readLimitedBody(req, 2048);
+      if (boundedBody.tooLarge) return json({ error: "request_too_large" }, 413);
+      if (boundedBody.readError) return json({ error: "invalid_request_body" }, 400);
+      let consentBody;
+      try { consentBody = JSON.parse(boundedBody.text); }
+      catch { return json({ error: "invalid_json" }, 400); }
+      if (!consentBody || typeof consentBody.enabled !== "boolean") return json({ error: "invalid_memory_consent" }, 400);
+      // Revocation remains available to the authenticated owner even if their role is inactive.
+      if (consentBody.enabled) {
+        const permission = await authorizeMemoryOperation(env, ownerId, "memory:own:write");
+        if (!permission.ok) return json({ error: permission.error }, permission.status);
+      }
+      const saved = await writeServerMemoryConsent(env, ownerId, consentBody.enabled);
+      if (!saved.ok) return json({ error: saved.error }, saved.status);
+      return json({ enabled: saved.enabled, persisted: true, consentVersion: saved.consentVersion, updatedAt: saved.updatedAt });
+    }
 
     if (url.pathname === "/memory") {
       if (individualAuth && !canonicalAccountIdentity) {
@@ -242,10 +307,16 @@ export default {
       }
       if (!individualAuth && !validClientId(clientId)) return json({ error: "invalid_client_id" }, 400);
       if (individualAuth && !ownerId) return json({ error: "unauthorized" }, 401);
-      // The API requires an explicit per-request consent signal for memory reads/writes.
-      // DELETE remains available so users can exercise their right to erase stored data.
-      if (req.method !== "DELETE" && req.headers.get("X-ARIA-Memory-Consent") !== "true") {
-        return json({ error: "memory_consent_required" }, 403);
+      // Individual accounts require durable server-side consent. The header is only a
+      // compatibility guard for the explicitly configured single-user legacy alpha.
+      if (req.method !== "DELETE") {
+        if (individualAuth) {
+          const consent = await readServerMemoryConsent(env, ownerId);
+          if (!consent.ok) return json({ error: consent.error }, consent.status);
+          if (!consent.enabled) return json({ error: "memory_consent_required" }, 403);
+        } else if (req.headers.get("X-ARIA-Memory-Consent") !== "true") {
+          return json({ error: "memory_consent_required" }, 403);
+        }
       }
       const key = individualAuth ? "memory:v2:" + ownerId : "memory:v1:" + clientId;
       if (individualAuth) {
@@ -346,7 +417,18 @@ export default {
     const lastUserMessage = messages.filter((item) => item.role === "user").at(-1)?.content.trim() || "";
     const rememberMatch = lastUserMessage.match(/^(?:Aria[,\s]+)?(?:retiens(?:\s+bien)?\s+que|mémorise(?:\s+que)?|souviens-toi\s+que|n'oublie pas que)\s+(.+)$/i);
     const requestedMemoryConsent = body.memoryConsent === true;
-    const memoryConsent = requestedMemoryConsent && canonicalAccountIdentity;
+    let memoryConsent = false;
+    if (individualAuth && canonicalAccountIdentity && requestedMemoryConsent) {
+      const consent = await readServerMemoryConsent(env, ownerId);
+      memoryConsent = consent.ok && consent.enabled;
+      if (!consent.ok) {
+        memoryWriteStatus = "Le consentement mémoire côté serveur ne peut pas être vérifié. Aucune mémoire persistante n’a été lue ni modifiée.";
+      } else if (!consent.enabled && rememberMatch) {
+        memoryWriteStatus = "Consentement mémoire désactivé côté serveur : aucune information n’a été enregistrée.";
+      }
+    } else if (!individualAuth) {
+      memoryConsent = requestedMemoryConsent && Boolean(memoryOwnerKey);
+    }
     if (individualAuth && memoryConsent) {
       const readDecision = await authorizeMemoryOperation(env, ownerId, "memory:own:read");
       if (!readDecision.ok) return json({ error: readDecision.error }, readDecision.status);
