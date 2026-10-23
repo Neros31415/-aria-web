@@ -201,11 +201,18 @@ export default {
     if (!auth.ok) return json({ error: auth.error }, auth.status);
     const individualAuth = auth.mode === "individual";
     const ownerId = auth.ownerId;
+    // Alpha session IDs are opaque server-side identifiers, not verified canonical
+    // account IDs. They may authenticate chat, but must not create D1 roles or
+    // authorize persistent memory until an audited identity migration maps them.
+    const canonicalAccountIdentity = individualAuth && auth.identitySource !== "session_kv";
 
     const validClientId = (value) =>
       typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 
     if (url.pathname === "/memory") {
+      if (individualAuth && !canonicalAccountIdentity) {
+        return json({ error: "identity_migration_required" }, 409);
+      }
       if (!env.ARIA_MEMORY) return json({ error: "memory_storage_unavailable" }, 503);
       let clientId = url.searchParams.get("clientId");
       let body;
@@ -320,12 +327,13 @@ export default {
     const preferenceInstructions = "Préférences utilisateur : initiative=" + chosenPreferences.proactivity + "; longueur=" + chosenPreferences.verbosity + "; humour=" + chosenPreferences.humor + ". Respecte ces réglages.\n\n" + initiativeInstructions + "\n\n" + agencyInstructions;
     const conversation = messages.slice(-20);
     let memoryWriteStatus = "";
-    const memoryOwnerKey = individualAuth
+    const memoryOwnerKey = canonicalAccountIdentity
       ? (ownerId ? "memory:v2:" + ownerId : null)
-      : (validClientId(body.clientId) ? "memory:v1:" + body.clientId : null);
+      : (!individualAuth && validClientId(body.clientId) ? "memory:v1:" + body.clientId : null);
     const lastUserMessage = messages.filter((item) => item.role === "user").at(-1)?.content.trim() || "";
     const rememberMatch = lastUserMessage.match(/^(?:Aria[,\s]+)?(?:retiens(?:\s+bien)?\s+que|mémorise(?:\s+que)?|souviens-toi\s+que|n'oublie pas que)\s+(.+)$/i);
-    const memoryConsent = body.memoryConsent === true;
+    const requestedMemoryConsent = body.memoryConsent === true;
+    const memoryConsent = requestedMemoryConsent && canonicalAccountIdentity;
     if (individualAuth && memoryConsent) {
       const readDecision = await authorizeMemoryOperation(env, ownerId, "memory:own:read");
       if (!readDecision.ok) return json({ error: readDecision.error }, readDecision.status);
@@ -334,7 +342,9 @@ export default {
         if (!writeDecision.ok) return json({ error: writeDecision.error }, writeDecision.status);
       }
     }
-    if (rememberMatch && !memoryConsent) {
+    if (rememberMatch && requestedMemoryConsent && !canonicalAccountIdentity && individualAuth) {
+      memoryWriteStatus = "La mémoire persistante est indisponible pour cette session alpha tant que l’identité de compte canonique n’a pas été migrée. Aucune donnée n’a été lue ni enregistrée.";
+    } else if (rememberMatch && !memoryConsent) {
       memoryWriteStatus = "Mémoire désactivée par l’utilisateur : aucune information n’a été enregistrée.";
     } else if (rememberMatch) {
       if (!env.ARIA_MEMORY || !memoryOwnerKey) {
