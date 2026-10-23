@@ -46,3 +46,6 @@ The secure integration Worker now distinguishes the authentication modes:
 The opaque owner ID retrieved from ARIA_USERS is not treated as a canonical account UUID. Do not auto-provision a D1 role for it or migrate existing notes based on a browser profile ID, token, or an unverified identifier match. Persistent memory for these sessions can be re-enabled only after a verified server-side mapping to a canonical account identity and migration tests covering ownership, collisions, revocation, and preservation/deletion of existing notes.
 
 The regression tests for this gate passed in PR #35. This change was merged into feat/aria-brain-staging-integration; it has not been deployed to Cloudflare staging or production. The active deployed Worker may therefore still behave differently until a separately validated staging deployment is performed.
+
+
+Defense in depth added on 23 October 2026: the D1 authorization adapter and default-role provisioning now accept canonical account UUIDs only. Opaque alpha identifiers are rejected before any D1 query or write, even if a future caller bypasses the Worker-level session_kv gate. This is not an identity migration and does not restore persistent memory for existing alpha sessions.
