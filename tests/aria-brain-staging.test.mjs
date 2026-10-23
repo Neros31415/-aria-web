@@ -996,6 +996,7 @@ test("health reports authorization readiness for session_kv mode", async () => {
     configured: true,
     authenticationMode: "session_kv",
     authorizationStore: true,
+    memoryConsentStoreConfigured: null,
     provider: "openai",
     model: "gpt-6-astra",
     persistentMemory: false,
@@ -1003,6 +1004,31 @@ test("health reports authorization readiness for session_kv mode", async () => {
     memoryStatus: "identity_migration_required"
   });
 });
+
+test("health reports individual auth as not ready when the durable consent schema is missing", async () => {
+  const response = await worker.fetch(new Request("https://aria-staging.test/health"), {
+    ARIA_AUTH_MODE: "individual",
+    SUPABASE_URL: "https://project.supabase.co",
+    SUPABASE_ANON_KEY: "test-anon-key",
+    OPENAI_API_KEY: "test-provider-key",
+    ARIA_MEMORY: env.ARIA_MEMORY,
+    ARIA_AUTHZ_DB: {
+      prepare(sql) {
+        return { bind() { return { async first() {
+          if (sql.includes("aria_memory_consent")) throw new Error("no such table");
+          return null;
+        } }; } };
+      }
+    }
+  });
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.configured, false);
+  assert.equal(body.memoryConsentStoreConfigured, false);
+  assert.equal(body.persistentMemory, false);
+  assert.equal(body.memoryStatus, "consent_store_unavailable");
+});
+
 
 test("health reports an individual-auth service as not configured without D1 authorization", async () => {
   const response = await worker.fetch(new Request("https://aria-staging.test/health"), {
