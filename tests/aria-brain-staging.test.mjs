@@ -443,6 +443,9 @@ test("individual-auth memory is isolated by the validated account, not clientId"
       },
       async put(key, value) {
         store.set(key, value);
+      },
+      async delete(key) {
+        store.delete(key);
       }
     }
   };
@@ -482,6 +485,17 @@ test("individual-auth memory is isolated by the validated account, not clientId"
   const accountBMemory = await getResponse.json();
   assert.deepEqual(accountBMemory.memories, []);
   assert.equal(accountBMemory.persisted, true);
+
+  // A delete request authenticated as B must only address B's canonical key,
+  // even when the client supplies A's identifier in the query string.
+  const deleteResponse = await worker.fetch(new Request(
+    "https://aria-staging.test/memory?clientId=" + ownerA,
+    { method: "DELETE", headers: { "Authorization": "Bearer token-b" } }
+  ), memoryEnv);
+  assert.equal(deleteResponse.status, 200);
+  assert.deepEqual(await deleteResponse.json(), { deleted: true, persisted: true });
+  assert.equal(store.has("memory:v2:" + ownerA), true, "account B must not delete account A's memory");
+  assert.equal(store.has("memory:v2:" + ownerB), false, "account B's own memory key remains isolated");
 });
 
 
