@@ -76,6 +76,13 @@ test("voice frontend sends preferences and explicit memory consent and applies s
   assert.match(app, /scientific_model/);
 });
 
+test("disabled memory consent blocks remote memory reads and writes in the UI", () => {
+  assert.match(app, /async function syncRemoteMemory\(\) \{\s*if \(profile\.memoryConsent !== true\)/);
+  assert.match(app, /Mémoire désactivée : aucune donnée distante n’a été consultée/);
+  assert.match(app, /async function saveRemoteMemory\(\) \{\s*if \(profile\.memoryConsent !== true\)/);
+  assert.match(app, /Mémoire désactivée : aucune donnée distante n’a été lue ou modifiée/);
+});
+
 test("map, finance and science scenes use real external sources and disclose their limitations", () => {
   assert.match(visualEngine, /tile\.openstreetmap\.org/);
   assert.match(visualEngine, /nominatim\.openstreetmap\.org\/search/);

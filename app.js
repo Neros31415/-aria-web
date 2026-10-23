@@ -221,6 +221,10 @@ function openPanel(id) {
   }
 }
 async function syncRemoteMemory() {
+  if (profile.memoryConsent !== true) {
+    $("memoryStatus").textContent = "Mémoire désactivée : aucune donnée distante n’a été consultée. Les souvenirs affichés restent locaux.";
+    return;
+  }
   const token = getApiToken();
   if (!token) {
     $("memoryStatus").textContent = "Mémoire locale affichée. Configurez le jeton alpha pour synchroniser la mémoire distante.";
@@ -247,6 +251,10 @@ async function syncRemoteMemory() {
   }
 }
 async function saveRemoteMemory() {
+  if (profile.memoryConsent !== true) {
+    $("memoryStatus").textContent = "Mémoire désactivée : aucune donnée distante n’a été lue ou modifiée. Les changements restent locaux.";
+    return false;
+  }
   const token = getApiToken();
   if (!token) {
     $("memoryStatus").textContent = "Modification locale enregistrée. La suppression distante n’est pas confirmée : configurez un jeton alpha pour synchroniser.";
