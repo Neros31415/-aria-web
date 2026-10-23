@@ -245,7 +245,7 @@ export default {
     if (url.pathname === "/chat" && req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
     if (url.pathname === "/memory" && !["GET", "PUT", "DELETE"].includes(req.method)) return json({ error: "method_not_allowed" }, 405);
     if (url.pathname === "/memory/consent" && !["GET", "POST"].includes(req.method)) return json({ error: "method_not_allowed" }, 405);
-    if (!env.OPENAI_API_KEY) return json({ error: "service_not_configured" }, 503);
+    if (url.pathname === "/chat" && !env.OPENAI_API_KEY) return json({ error: "service_not_configured" }, 503);
     const auth = await authenticateRequest(req, env);
     if (!auth.ok) return json({ error: auth.error }, auth.status);
     const individualAuth = auth.mode === "individual";
@@ -439,7 +439,7 @@ export default {
     }
     if (rememberMatch && requestedMemoryConsent && !canonicalAccountIdentity && individualAuth) {
       memoryWriteStatus = "La mémoire persistante est indisponible pour cette session alpha tant que l’identité de compte canonique n’a pas été migrée. Aucune donnée n’a été lue ni enregistrée.";
-    } else if (rememberMatch && !memoryConsent) {
+    } else if (rememberMatch && !memoryConsent && !memoryWriteStatus) {
       memoryWriteStatus = "Mémoire désactivée par l’utilisateur : aucune information n’a été enregistrée.";
     } else if (rememberMatch) {
       if (!env.ARIA_MEMORY || !memoryOwnerKey) {
