@@ -222,7 +222,7 @@ export default {
       const individualMode = authMode === "individual" || authMode === "session_kv";
       const authorizationConfigured = !individualMode || Boolean(env.ARIA_AUTHZ_DB);
       const memoryStorageConfigured = Boolean(env.ARIA_MEMORY);
-      let memoryConsentStoreConfigured = authMode !== "individual";
+      let memoryConsentStoreConfigured = null;
       if (authMode === "individual" && env.ARIA_AUTHZ_DB && typeof env.ARIA_AUTHZ_DB.prepare === "function") {
         try {
           await env.ARIA_AUTHZ_DB.prepare(
@@ -233,18 +233,18 @@ export default {
           memoryConsentStoreConfigured = false;
         }
       }
-      const memoryAvailable = memoryStorageConfigured && authMode !== "session_kv" && memoryConsentStoreConfigured;
+      const memoryAvailable = memoryStorageConfigured && authMode !== "session_kv" && (authMode !== "individual" || memoryConsentStoreConfigured === true);
       const memoryStatus = !memoryStorageConfigured
         ? "storage_not_configured"
         : authMode === "session_kv"
           ? "identity_migration_required"
-          : !memoryConsentStoreConfigured
+           : authMode === "individual" && memoryConsentStoreConfigured !== true
             ? "consent_store_unavailable"
             : "available";
       return json({
         status: "ok",
         service: "aria-api",
-        configured: Boolean(env.OPENAI_API_KEY && authConfigured && authorizationConfigured && (!individualMode || memoryStorageConfigured) && memoryConsentStoreConfigured),
+        configured: Boolean(env.OPENAI_API_KEY && authConfigured && authorizationConfigured && (!individualMode || memoryStorageConfigured) && (authMode !== "individual" || memoryConsentStoreConfigured === true)),
         authenticationMode: authMode,
         authorizationStore: Boolean(env.ARIA_AUTHZ_DB),
         memoryConsentStoreConfigured,
