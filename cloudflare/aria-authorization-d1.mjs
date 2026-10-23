@@ -5,10 +5,14 @@
  * must be performed by a separate, authenticated, audited administrative path.
  * The D1 binding must remain server-side; never expose it to a client.
  */
-import { authorize, isValidAuthorizationIdentity } from "./aria-authorization.mjs";
+import { authorize } from "./aria-authorization.mjs";
 
+// D1 authorization records belong to canonical account identities only.
+// Opaque legacy/session_kv identifiers may be authenticated for chat, but must
+// never create or address D1 roles or entitlements.
 function validIdentity(value) {
-  return isValidAuthorizationIdentity(value);
+  return typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 function normalizeRole(row, identity) {
