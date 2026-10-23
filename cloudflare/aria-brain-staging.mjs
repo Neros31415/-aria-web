@@ -222,18 +222,32 @@ export default {
       const individualMode = authMode === "individual" || authMode === "session_kv";
       const authorizationConfigured = !individualMode || Boolean(env.ARIA_AUTHZ_DB);
       const memoryStorageConfigured = Boolean(env.ARIA_MEMORY);
-      const memoryAvailable = memoryStorageConfigured && authMode !== "session_kv";
+      let memoryConsentStoreConfigured = authMode !== "individual";
+      if (authMode === "individual" && env.ARIA_AUTHZ_DB && typeof env.ARIA_AUTHZ_DB.prepare === "function") {
+        try {
+          await env.ARIA_AUTHZ_DB.prepare(
+            "SELECT owner_id FROM aria_memory_consent WHERE owner_id = ? LIMIT 1"
+          ).bind("00000000-0000-4000-8000-000000000000").first();
+          memoryConsentStoreConfigured = true;
+        } catch {
+          memoryConsentStoreConfigured = false;
+        }
+      }
+      const memoryAvailable = memoryStorageConfigured && authMode !== "session_kv" && memoryConsentStoreConfigured;
       const memoryStatus = !memoryStorageConfigured
         ? "storage_not_configured"
         : authMode === "session_kv"
           ? "identity_migration_required"
-          : "available";
+          : !memoryConsentStoreConfigured
+            ? "consent_store_unavailable"
+            : "available";
       return json({
         status: "ok",
         service: "aria-api",
-        configured: Boolean(env.OPENAI_API_KEY && authConfigured && authorizationConfigured && (!individualMode || memoryStorageConfigured)),
+        configured: Boolean(env.OPENAI_API_KEY && authConfigured && authorizationConfigured && (!individualMode || memoryStorageConfigured) && memoryConsentStoreConfigured),
         authenticationMode: authMode,
         authorizationStore: Boolean(env.ARIA_AUTHZ_DB),
+        memoryConsentStoreConfigured,
         provider: "openai",
         model: "gpt-6-astra",
         persistentMemory: memoryAvailable,
