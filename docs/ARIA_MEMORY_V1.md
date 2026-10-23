@@ -49,3 +49,15 @@ The regression tests for this gate passed in PR #35. This change was merged into
 
 
 Defense in depth added on 23 October 2026: the D1 authorization adapter and default-role provisioning now accept canonical account UUIDs only. Opaque alpha identifiers are rejected before any D1 query or write, even if a future caller bypasses the Worker-level session_kv gate. This is not an identity migration and does not restore persistent memory for existing alpha sessions.
+
+## Durable consent ledger — PR #43, 24 October 2026
+
+The current implementation adds an account-scoped D1 consent record in migration `migrations/0002_aria_memory_consent.sql` and an authenticated `/memory/consent` endpoint for individual-account mode.
+
+- `GET /memory/consent` returns the server-stored state.
+- `POST /memory/consent` accepts only `{ "enabled": true|false }`; enabling requires the account's memory-write permission. Revocation remains available to the authenticated owner even if the role is inactive.
+- Individual-account `GET /memory` and `PUT /memory` require the persisted server consent to be enabled. A client-supplied `X-ARIA-Memory-Consent` header cannot grant or restore consent.
+- Chat memory reads/writes also require both the client's current preference and the server-side consent record. If the consent store is unavailable, persistent memory fails closed.
+- `DELETE /memory` remains available without active memory consent, but still requires authenticated ownership and authorization.
+
+**Release limitation:** the migration is versioned in the pull request but has not been applied to the actual D1 database. Individual-account persistent memory therefore must not be considered deployable until the migration is reviewed/applied to the approved staging database and the endpoints are verified there. The single-user legacy alpha retains its separate compatibility behavior and does not provide this durable account-level consent guarantee.
