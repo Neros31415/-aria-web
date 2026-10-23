@@ -565,12 +565,12 @@ test("individual-auth DELETE removes only the authenticated account memory", asy
 });
 
 
-test("session_kv mode derives identity only from a server-side hashed session record", async () => {
+test("session_kv mode derives identity from the hashed session record but blocks memory until migration", async () => {
   const token = "session-token-for-staging-test-12345678901234567890";
-  const ownerId = "123e4567-e89b-42d3-a456-426614174000";
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
   const tokenHash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
   const keys = [];
+  let memoryCalls = 0;
   const sessionEnv = {
     ARIA_AUTH_MODE: "session_kv",
     ARIA_AUTHZ_DB: authorizationDb(),
@@ -582,21 +582,19 @@ test("session_kv mode derives identity only from a server-side hashed session re
       }
     },
     ARIA_MEMORY: {
-      async get(key, type) {
-        assert.equal(key, "memory:v2:account_user_01");
-        return type === "json" ? [{ id: "m1", text: "Compte A" }] : JSON.stringify([{ id: "m1", text: "Compte A" }]);
-      },
-      async put() {},
-      async delete() {}
+      async get() { memoryCalls++; return [{ id: "m1", text: "Compte A" }]; },
+      async put() { memoryCalls++; },
+      async delete() { memoryCalls++; }
     }
   };
   const response = await worker.fetch(new Request("https://aria-staging.test/memory?clientId=223e4567-e89b-42d3-a456-426614174001", {
     headers: { Authorization: "Bearer " + token }
   }), sessionEnv);
 
-  assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { memories: [{ id: "m1", text: "Compte A" }], persisted: true });
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), { error: "identity_migration_required" });
   assert.deepEqual(keys, ["session:v1:" + tokenHash]);
+  assert.equal(memoryCalls, 0, "the memory store must not be touched");
 });
 
 test("session_kv mode rejects missing, malformed, and cross-format identities closed", async () => {
