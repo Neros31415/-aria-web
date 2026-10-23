@@ -40,6 +40,7 @@ function request(body, extraHeaders = {}) {
     method: "POST",
     headers: {
       "Authorization": "Bearer test-token",
+      "X-ARIA-Memory-Consent": "true",
       "Content-Type": "application/json",
       ...extraHeaders
     },
@@ -116,6 +117,7 @@ test("rejects an oversized actual memory PUT body", async () => {
     method: "PUT",
     headers: {
       "Authorization": "Bearer test-token",
+      "X-ARIA-Memory-Consent": "true",
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
@@ -133,6 +135,7 @@ test("rejects a non-object memory PUT payload", async () => {
     method: "PUT",
     headers: {
       "Authorization": "Bearer test-token",
+      "X-ARIA-Memory-Consent": "true",
       "Content-Type": "application/json"
     },
     body: "null"
@@ -197,6 +200,40 @@ test("opaque alpha session IDs cannot access persistent memory before identity m
   assert.equal(memoryCalls, 0, "the memory store must not be touched");
 });
 
+test("memory API requires explicit consent for reads and writes but permits deletion", async () => {
+  let memoryCalls = 0;
+  const memory = {
+    async get() { memoryCalls++; return []; },
+    async put() { memoryCalls++; },
+    async delete() { memoryCalls++; }
+  };
+  const testEnv = { ...env, ARIA_MEMORY: memory };
+  const clientId = "123e4567-e89b-42d3-a456-426614174000";
+  const read = await worker.fetch(new Request("https://aria-staging.test/memory?clientId=" + clientId, {
+    method: "GET",
+    headers: { "Authorization": "Bearer test-token" }
+  }), testEnv);
+  assert.equal(read.status, 403);
+  assert.deepEqual(await read.json(), { error: "memory_consent_required" });
+
+  const write = await worker.fetch(new Request("https://aria-staging.test/memory", {
+    method: "PUT",
+    headers: { "Authorization": "Bearer test-token", "Content-Type": "application/json" },
+    body: JSON.stringify({ clientId, memories: [{ text: "must not persist" }] })
+  }), testEnv);
+  assert.equal(write.status, 403);
+  assert.deepEqual(await write.json(), { error: "memory_consent_required" });
+  assert.equal(memoryCalls, 0, "the storage must not be read or written without request consent");
+
+  const deletion = await worker.fetch(new Request("https://aria-staging.test/memory?clientId=" + clientId, {
+    method: "DELETE",
+    headers: { "Authorization": "Bearer test-token" }
+  }), testEnv);
+  assert.equal(deletion.status, 200);
+  assert.deepEqual(await deletion.json(), { deleted: true, persisted: true });
+  assert.equal(memoryCalls, 1, "deletion remains available without memory consent");
+});
+
 test("rejects memory reads without a valid profile identifier", async () => {
   const response = await worker.fetch(new Request("https://aria-staging.test/memory?clientId=not-a-uuid", {
     method: "GET",
@@ -238,6 +275,7 @@ test("rejects memory writes containing more than 100 notes", async () => {
     method: "PUT",
     headers: {
       "Authorization": "Bearer test-token",
+      "X-ARIA-Memory-Consent": "true",
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
@@ -298,6 +336,7 @@ test("persists and retrieves memory notes through the memory routes", async () =
     method: "PUT",
     headers: {
       "Authorization": "Bearer test-token",
+      "X-ARIA-Memory-Consent": "true",
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
@@ -311,7 +350,7 @@ test("persists and retrieves memory notes through the memory routes", async () =
 
   const getResponse = await worker.fetch(new Request(
     "https://aria-staging.test/memory?clientId=" + clientId,
-    { method: "GET", headers: { "Authorization": "Bearer test-token" } }
+    { method: "GET", headers: { "Authorization": "Bearer test-token", "X-ARIA-Memory-Consent": "true" } }
   ), memoryEnv);
 
   assert.equal(getResponse.status, 200);
@@ -424,6 +463,7 @@ test("individual-auth memory is isolated by the validated account, not clientId"
     method: "PUT",
     headers: {
       "Authorization": "Bearer token-a",
+      "X-ARIA-Memory-Consent": "true",
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
@@ -437,7 +477,7 @@ test("individual-auth memory is isolated by the validated account, not clientId"
 
   const getResponse = await worker.fetch(new Request(
     "https://aria-staging.test/memory?clientId=" + ownerA,
-    { method: "GET", headers: { "Authorization": "Bearer token-b" } }
+    { method: "GET", headers: { "Authorization": "Bearer token-b", "X-ARIA-Memory-Consent": "true" } }
   ), memoryEnv);
   assert.equal(getResponse.status, 200);
   const accountBMemory = await getResponse.json();
@@ -693,7 +733,7 @@ test("individual-auth memory routes fail closed when the D1 authorization bindin
     throw new Error("provider must not be called");
   });
   const response = await worker.fetch(new Request("https://aria-staging.test/memory", {
-    headers: { Authorization: "Bearer valid-account-token" }
+    headers: { Authorization: "Bearer valid-account-token", "X-ARIA-Memory-Consent": "true" }
   }), {
     ARIA_AUTH_MODE: "individual",
     SUPABASE_URL: "https://project.supabase.co",
