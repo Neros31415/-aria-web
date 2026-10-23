@@ -52,7 +52,9 @@ test("secure backend readiness reports auth, D1 authorization and persistent-mem
   assert.equal(body.configured, true);
   assert.equal(body.authenticationMode, "session_kv");
   assert.equal(body.authorizationStore, true);
-  assert.equal(body.persistentMemory, true);
+  assert.equal(body.persistentMemory, false);
+  assert.equal(body.memoryStorageConfigured, true);
+  assert.equal(body.memoryStatus, "identity_migration_required");
 });
 
 test("voice-first HUD loads the scene engine and responsive styles without a permanent chat composer", () => {

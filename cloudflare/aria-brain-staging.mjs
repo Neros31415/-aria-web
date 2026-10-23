@@ -181,16 +181,24 @@ export default {
           : authMode === "legacy" && Boolean(env.ARIA_ACCESS_TOKEN);
       const individualMode = authMode === "individual" || authMode === "session_kv";
       const authorizationConfigured = !individualMode || Boolean(env.ARIA_AUTHZ_DB);
-      const memoryConfigured = Boolean(env.ARIA_MEMORY);
+      const memoryStorageConfigured = Boolean(env.ARIA_MEMORY);
+      const memoryAvailable = memoryStorageConfigured && authMode !== "session_kv";
+      const memoryStatus = !memoryStorageConfigured
+        ? "storage_not_configured"
+        : authMode === "session_kv"
+          ? "identity_migration_required"
+          : "available";
       return json({
         status: "ok",
         service: "aria-api",
-        configured: Boolean(env.OPENAI_API_KEY && authConfigured && authorizationConfigured && (!individualMode || memoryConfigured)),
+        configured: Boolean(env.OPENAI_API_KEY && authConfigured && authorizationConfigured && (!individualMode || memoryStorageConfigured)),
         authenticationMode: authMode,
         authorizationStore: Boolean(env.ARIA_AUTHZ_DB),
         provider: "openai",
         model: "gpt-6-astra",
-        persistentMemory: memoryConfigured
+        persistentMemory: memoryAvailable,
+        memoryStorageConfigured,
+        memoryStatus
       });
     }
     if (url.pathname !== "/chat" && url.pathname !== "/memory") return json({ error: "not_found" }, 404);

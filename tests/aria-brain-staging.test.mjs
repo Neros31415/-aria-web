@@ -723,7 +723,9 @@ test("health reports authorization readiness for session_kv mode", async () => {
     authorizationStore: true,
     provider: "openai",
     model: "gpt-6-astra",
-    persistentMemory: true
+    persistentMemory: false,
+    memoryStorageConfigured: true,
+    memoryStatus: "identity_migration_required"
   });
 });
 
