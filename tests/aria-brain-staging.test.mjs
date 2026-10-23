@@ -233,6 +233,77 @@ test("memory API requires explicit consent for reads and writes but permits dele
   assert.equal(memoryCalls, 1, "deletion remains available without memory consent");
 });
 
+test("individual-auth memory consent is enforced and deletion fails closed without authorization storage", async (t) => {
+  const ownerId = "123e4567-e89b-42d3-a456-426614174000";
+  let memoryCalls = 0;
+  const store = new Map([["memory:v2:" + ownerId, JSON.stringify([{ id: "private", text: "private note" }])]]);
+  const memory = {
+    async get(key, type) {
+      memoryCalls++;
+      const value = store.get(key);
+      if (value === undefined) return null;
+      return type === "json" ? JSON.parse(value) : value;
+    },
+    async put(key, value) { memoryCalls++; store.set(key, value); },
+    async delete(key) { memoryCalls++; store.delete(key); }
+  };
+  const individualEnv = {
+    ARIA_AUTH_MODE: "individual",
+    ARIA_AUTHZ_DB: authorizationDb(),
+    SUPABASE_URL: "https://project.supabase.co",
+    SUPABASE_ANON_KEY: "test-anon-key",
+    OPENAI_API_KEY: "test-provider-key",
+    ARIA_MEMORY: memory
+  };
+
+  t.mock.method(globalThis, "fetch", async (url) => {
+    if (String(url).endsWith("/auth/v1/user")) {
+      return new Response(JSON.stringify({ id: ownerId }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+    return new Response("unexpected provider call", { status: 500 });
+  });
+
+  const read = await worker.fetch(new Request("https://aria-staging.test/memory", {
+    method: "GET",
+    headers: { "Authorization": "Bearer account-token" }
+  }), individualEnv);
+  assert.equal(read.status, 403);
+  assert.deepEqual(await read.json(), { error: "memory_consent_required" });
+
+  const write = await worker.fetch(new Request("https://aria-staging.test/memory", {
+    method: "PUT",
+    headers: {
+      "Authorization": "Bearer account-token",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ memories: [{ text: "must not persist" }] })
+  }), individualEnv);
+  assert.equal(write.status, 403);
+  assert.deepEqual(await write.json(), { error: "memory_consent_required" });
+  assert.equal(memoryCalls, 0, "individual-auth reads and writes without consent must not touch storage");
+
+  const deleteWithoutAuthz = await worker.fetch(new Request("https://aria-staging.test/memory", {
+    method: "DELETE",
+    headers: { "Authorization": "Bearer account-token" }
+  }), { ...individualEnv, ARIA_AUTHZ_DB: undefined });
+  assert.equal(deleteWithoutAuthz.status, 503);
+  assert.deepEqual(await deleteWithoutAuthz.json(), { error: "authorization_store_unavailable" });
+  assert.equal(memoryCalls, 0, "deletion must not touch storage when authorization cannot be verified");
+
+  const deletion = await worker.fetch(new Request("https://aria-staging.test/memory", {
+    method: "DELETE",
+    headers: { "Authorization": "Bearer account-token" }
+  }), individualEnv);
+  assert.equal(deletion.status, 200);
+  assert.deepEqual(await deletion.json(), { deleted: true, persisted: true });
+  assert.equal(memoryCalls, 1);
+  assert.equal(store.has("memory:v2:" + ownerId), false, "authorized deletion should remove only the authenticated account key");
+});
+
+
 test("rejects memory reads without a valid profile identifier", async () => {
   const response = await worker.fetch(new Request("https://aria-staging.test/memory?clientId=not-a-uuid", {
     method: "GET",
