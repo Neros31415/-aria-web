@@ -11,7 +11,9 @@
 - Aucun binding `SUPABASE_URL` ou `SUPABASE_ANON_KEY` n'était présent lors du dernier audit en lecture seule.
 - En mode `session_kv`, le chat peut répondre, mais les routes de mémoire persistante doivent rester bloquées avec `409 identity_migration_required` tant qu'une liaison fiable vers une identité de compte canonique n'est pas prouvée.
 - La variable `ARIA_REQUIRE_INDIVIDUAL_AUTH=true` observée sur le Worker n'est pas lue par le code inspecté : elle ne doit pas être considérée comme une protection effective.
-- PR #39 ajoute un refus explicite pour un mode d'authentification inconnu. PR #40 teste qu'un consentement mémoire désactivé n'entraîne aucun accès au stockage persistant. Les deux ont une CI verte, mais restent des PR de brouillon selon le dernier état consulté.
+- PR #39 ajoute un refus explicite pour un mode d'authentification inconnu ; PR #40 teste que le chat avec consentement mémoire désactivé n'accède pas au stockage persistant. Leur CI est verte et elles sont actuellement ouvertes, non fusionnées et prêtes pour revue (elles ne sont plus en brouillon).
+- PR #43 ajoute un garde-fou par requête sur `/memory` : GET et PUT exigent `X-ARIA-Memory-Consent: true`, tandis que DELETE reste possible sans ce signal. La CI du commit `f71372b6e0d043a44788db612d8f3378e6dba536` a réussi : 61 tests Worker et 16 tests d'intégration UI.
+- **Limite à ne pas confondre avec une preuve de consentement :** l'en-tête de PR #43 est contrôlé par le client. Il réduit les accès accidentels mais ne constitue pas un registre de consentement durable ni une garantie contre un client malveillant. La conception d'un enregistrement serveur du consentement et de sa révocation reste à traiter avant la distribution publique.
 
 ## 2. Décision à prendre
 
@@ -31,7 +33,8 @@ Choisir et consigner **une seule** stratégie cible avant toute migration ou ouv
 - [ ] Vérification serveur du jeton : valide, invalide, expiré, révoqué, mauvaise audience/émetteur et indisponibilité du fournisseur.
 - [ ] L'identifiant propriétaire provient uniquement de la réponse d'identité vérifiée côté serveur ; aucun `userId`, `ownerId` ou `clientId` fourni par le navigateur ne peut changer le propriétaire mémoire.
 - [ ] Autorisation D1 échoue de manière fermée si la base est indisponible ou si le rôle n'est pas actif.
-- [ ] Tests négatifs : A ne peut pas lire/écrire/supprimer la mémoire de B ; jeton invalide refusé ; consentement désactivé = zéro accès KV ; session alpha non liée = mémoire refusée ; suppression confirmée uniquement après succès serveur.
+- [ ] Tests négatifs : A ne peut pas lire/écrire/supprimer la mémoire de B ; jeton invalide refusé ; consentement désactivé = zéro accès KV sur le parcours chat ; session alpha non liée = mémoire refusée ; suppression confirmée uniquement après succès serveur.
+- [ ] Contrat de consentement mémoire durable défini et vérifié côté serveur ; ne pas considérer un en-tête client comme preuve suffisante du consentement.
 - [ ] Les résultats CI sont verts sur le commit exact qui sera déployé.
 - [ ] Déploiement staging approuvé, puis vérification HTTP de `/health`, `/chat` et `/memory` avec comptes de test distincts.
 - [ ] La réponse de santé reflète la configuration effective ; le mode invalide ne signale jamais le service comme configuré.
