@@ -315,7 +315,7 @@ async function saveRemoteMemory() {
     if (isMemoryRequestCurrent(generation)) {
       $("memoryStatus").textContent = "Modification locale enregistrée. La synchronisation distante a échoué; l’état serveur reste incertain.";
     } else {
-      $("memoryStatus").textContent = "Consentement révoqué pendant une requête : l’application ignore sa réponse. L’état distant peut être incertain si le serveur avait déjà traité la requête.";
+      $("memoryStatus").textContent = "Requête mémoire interrompue : l’application ignore sa réponse. L’état distant peut être incertain si le serveur avait déjà traité la requête.";
     }
     return false;
   } finally {
