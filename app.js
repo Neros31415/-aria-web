@@ -245,7 +245,7 @@ async function syncRemoteMemory() {
   activeMemoryControllers.add(controller);
   try {
     const response = await fetch(API_BASE + "/memory?clientId=" + encodeURIComponent(getClientId()), {
-      headers: { "Authorization": "Bearer " + token },
+      headers: { "Authorization": "Bearer " + token, "X-ARIA-Memory-Consent": "true" },
       signal: controller.signal
     });
     if (!isMemoryRequestCurrent(generation)) return;
@@ -286,7 +286,7 @@ async function saveRemoteMemory() {
   try {
     const response = await fetch(API_BASE + "/memory", {
       method: "PUT",
-      headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
+      headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json", "X-ARIA-Memory-Consent": "true" },
       body: JSON.stringify({
         clientId: getClientId(),
         memories: memories.map(item => typeof item === "string" ? {text:item} : item)
