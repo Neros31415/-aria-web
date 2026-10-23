@@ -446,6 +446,63 @@ test("individual-auth memory is isolated by the validated account, not clientId"
 });
 
 
+test("individual-auth chat never accesses persistent memory when consent is disabled", async (t) => {
+  const owner = "123e4567-e89b-42d3-a456-426614174000";
+  let memoryCalls = 0;
+  let providerRequest;
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    if (String(url).endsWith("/auth/v1/user")) {
+      return new Response(JSON.stringify({ id: owner }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+    providerRequest = JSON.parse(options.body);
+    return new Response(JSON.stringify({
+      model: "test-model",
+      output: [{
+        type: "message",
+        content: [{
+          type: "output_text",
+          text: JSON.stringify({
+            reply: "Je ne conserverai rien sans votre consentement.",
+            action: "none",
+            scene: "none"
+          })
+        }]
+      }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  });
+
+  const response = await worker.fetch(new Request("https://aria-staging.test/chat", {
+    method: "POST",
+    headers: {
+      "Authorization": "Bearer valid-user-token",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      memoryConsent: false,
+      messages: [{ role: "user", content: "Retiens que ma couleur préférée est bleue." }]
+    })
+  }), {
+    ARIA_AUTH_MODE: "individual",
+    ARIA_AUTHZ_DB: authorizationDb(),
+    SUPABASE_URL: "https://project.supabase.co",
+    SUPABASE_ANON_KEY: "test-anon-key",
+    OPENAI_API_KEY: "test-provider-key",
+    ARIA_MEMORY: {
+      async get() { memoryCalls++; return []; },
+      async put() { memoryCalls++; },
+      async delete() { memoryCalls++; }
+    }
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(providerRequest.store, false);
+  assert.match(providerRequest.instructions, /Mémoire personnelle désactivée par l’utilisateur/);
+  assert.equal(memoryCalls, 0, "disabled consent must prevent all persistent-memory access");
+});
+
 test("unknown auth mode fails closed instead of falling back to the shared token", async () => {
   const response = await worker.fetch(request({ messages: [{ role: "user", content: "Bonjour" }] }), {
     ...env,
