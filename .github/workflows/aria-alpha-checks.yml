@@ -1,0 +1,47 @@
+name: ARIA alpha checks
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'app.js'
+      - 'index.html'
+      - 'sw.js'
+      - 'cloudflare/aria-brain-staging.mjs'
+      - 'docs/ARIA_MEMORY_V1.md'
+      - '.github/workflows/aria-alpha-checks.yml'
+  push:
+    branches: [feat/aria-alpha-integration-clean]
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check frontend JavaScript syntax
+        run: node --check app.js
+      - name: Check Cloudflare Worker JavaScript syntax
+        run: node --check cloudflare/aria-brain-staging.mjs
+      - name: Check required chat and memory wiring
+        run: |
+          node --input-type=module -e "
+          import fs from 'node:fs';
+          const html = fs.readFileSync('index.html', 'utf8');
+          const app = fs.readFileSync('app.js', 'utf8');
+          const worker = fs.readFileSync('cloudflare/aria-brain-staging.mjs', 'utf8');
+          for (const id of ['chatForm','messageInput','apiTokenForm','memoryForm','memoryStatus']) {
+            if (!html.includes('id=\"' + id + '\"')) throw new Error('Missing HTML element: ' + id);
+          }
+          for (const marker of ['sendToAria','syncMemories','saveMemoriesToServer']) {
+            if (!app.includes(marker)) throw new Error('Missing frontend function: ' + marker);
+          }
+          for (const marker of ['/chat','/memory','ARIA_ACCESS_TOKEN','OPENAI_API_KEY']) {
+            if (!worker.includes(marker)) throw new Error('Missing worker contract marker: ' + marker);
+          }
+          console.log('ARIA alpha wiring checks passed.');
+          "
