@@ -2,7 +2,7 @@
 
 Date de travail : 23 octobre 2026  
 Branche d’intégration : `feat/aria-brain-staging-integration`  
-Statut : les PR #31, #32, #33 et #34 sont fusionnées dans la branche d’intégration sécurisée. Aucun déploiement ni publication en production n’a été effectué.
+Statut : les PR #31 à #38 sont fusionnées dans la branche d’intégration sécurisée, sauf qu’aucune fonctionnalité n’est déployée en production par ces changements. PR #37 corrige le statut de disponibilité mémoire dans `/health`; PR #38 impose les UUID canoniques pour l’autorisation D1. Aucun déploiement ni publication en production n’a été effectué.
 
 ## Objectif
 Relier les scènes contextuelles du HUD à des sources réelles plutôt que de présenter des écrans de démonstration comme des fonctionnalités opérationnelles. Cette livraison ne réduit pas le périmètre ARIA 1.0.
@@ -23,7 +23,7 @@ Relier les scènes contextuelles du HUD à des sources réelles plutôt que de p
 - Le catalogue NASA apporte une recherche de médias, pas des données instrumentales validées. Le simulateur orbital est pédagogique et simplifié : il ne remplace pas une simulation physique précise, des éphémérides ou un laboratoire scientifique 3D.
 - La scène carte reste une carte 2D avec itinéraire routier ; relief 3D, itinéraires multimodaux, vues immersives et God’s Eye View restent à intégrer.
 - Le modèle de moteur/mécanisme 3D reste à développer.
-- La session alpha `session_kv` utilise actuellement des identifiants opaques ; les opérations de mémoire soumises à l’autorisation D1 restent bloquées tant qu’une migration vérifiée vers une identité de compte canonique n’est pas réalisée. Ne pas contourner ce contrôle.
+- La session alpha `session_kv` utilise actuellement des identifiants opaques ; les opérations de mémoire restent bloquées tant qu’une migration vérifiée vers une identité de compte canonique n’est pas réalisée. Le Worker refuse ces opérations avec `409 identity_migration_required`; `/health` distingue désormais le stockage configuré de la disponibilité effective (`persistentMemory: false`, `memoryStatus: identity_migration_required`). Le module d’autorisation D1 refuse également les identifiants non UUID avant toute requête ou écriture, comme protection en profondeur. Ne pas contourner ces contrôles.
 - Aucun test visuel iPhone, aucun test réseau réel et aucune validation de bout en bout n'ont encore été exécutés pour cette branche. Les tests automatisés des PR d’intégration ont passé ; il reste à exécuter les validations réseau et appareils réels avant une fusion vers main ou un déploiement.
 - Aucune publication ni aucun déploiement n'est inclus.
 
