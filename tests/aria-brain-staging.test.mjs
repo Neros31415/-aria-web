@@ -337,6 +337,50 @@ test("durable memory consent is account-scoped, persisted, and revocable", async
 });
 
 
+test("chat cannot read or write persistent memory when durable consent is absent", async (t) => {
+  const ownerId = "123e4567-e89b-42d3-a456-426614174000";
+  let memoryCalls = 0;
+  let providerBody;
+  const individualEnv = {
+    ARIA_AUTH_MODE: "individual",
+    ARIA_AUTHZ_DB: authorizationDb(false),
+    SUPABASE_URL: "https://project.supabase.co",
+    SUPABASE_ANON_KEY: "test-anon-key",
+    OPENAI_API_KEY: "test-provider-key",
+    ARIA_MEMORY: {
+      async get() { memoryCalls++; return [{ id: "private", text: "should never be read" }]; },
+      async put() { memoryCalls++; },
+      async delete() { memoryCalls++; }
+    }
+  };
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    if (String(url).endsWith("/auth/v1/user")) {
+      return new Response(JSON.stringify({ id: ownerId }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    providerBody = JSON.parse(options.body);
+    return new Response(JSON.stringify({
+      model: "test-model",
+      output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify({ reply: "Je n’ai rien enregistré.", action: "none", scene: "none" }) }] }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  });
+
+  const response = await worker.fetch(new Request("https://aria-staging.test/chat", {
+    method: "POST",
+    headers: { Authorization: "Bearer account-token", "Content-Type": "application/json" },
+    body: JSON.stringify({
+      clientId: ownerId,
+      memoryConsent: true,
+      messages: [{ role: "user", content: "Retiens que mon projet est confidentiel." }]
+    })
+  }), individualEnv);
+
+  assert.equal(response.status, 200);
+  assert.equal(memoryCalls, 0, "chat must not touch memory storage without a persisted consent record");
+  assert.match(providerBody.instructions, /Consentement mémoire désactivé côté serveur/);
+  assert.doesNotMatch(providerBody.instructions, /should never be read/);
+});
+
+
 test("individual-auth memory consent is enforced and deletion fails closed without authorization storage", async (t) => {
   const ownerId = "123e4567-e89b-42d3-a456-426614174000";
   let memoryCalls = 0;
