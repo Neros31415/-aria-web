@@ -1,0 +1,405 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import worker from "../cloudflare/aria-brain-staging.mjs";
+
+const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+const app = await readFile(new URL("../app.js", import.meta.url), "utf8");
+const css = await readFile(new URL("../voice.css", import.meta.url), "utf8");
+const sw = await readFile(new URL("../sw.js", import.meta.url), "utf8");
+const workerSource = await readFile(new URL("../cloudflare/aria-brain-staging.mjs", import.meta.url), "utf8");
+const visualEngine = await readFile(new URL("../visualization-engine.js", import.meta.url), "utf8");
+
+test("health endpoint reports readiness for individual auth without shared token", async () => {
+  const env = {
+    OPENAI_API_KEY: "test-key",
+    ARIA_REQUIRE_INDIVIDUAL_AUTH: "true",
+    ARIA_USERS: { async get() { return null; } },
+    ARIA_MEMORY: { async get() { return []; } }
+  };
+  const response = await worker.fetch(new Request("https://aria-brain-staging.quentineros-sevesi.workers.dev/health"), env);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    status: "ok",
+    service: "aria-api",
+    configured: true,
+    authenticationMode: "individual",
+    provider: "openai",
+    model: "gpt-6-astra",
+    persistentMemory: true
+  });
+});
+
+test("voice-first HUD has no permanent chat composer and the orb is not a control", () => {
+  assert.match(html, /id="ariaOrb" role="img"/);
+  assert.doesNotMatch(html, /id="ariaOrb"[^>]*role="button"/);
+  assert.doesNotMatch(html, /<textarea|id="chatForm"|id="messageInput"/i);
+  assert.match(html, /id="transcriptWidget"/);
+});
+
+test("first-run onboarding explains voice and personal preferences", () => {
+  assert.match(app, /function beginOnboarding/);
+  assert.match(app, /proactivity/);
+  assert.match(app, /verbosity/);
+  assert.match(app, /memoryConsent/);
+  assert.match(app, /Quand l'orbe s'anime doucement, je vous écoute/);
+  assert.match(app, /Quand sa lumière se concentre, je réfléchis/);
+  assert.match(app, /const affirmative =/);
+  assert.match(app, /const negative =/);
+  assert.match(app, /Souhaitez-vous autoriser la mémoire : oui ou non/);
+  assert.match(app, /Vous pouvez aussi dire « passer »/);
+  assert.match(app, /profile\.memoryConsent = affirmative/);
+  assert.match(html, /id="memoryConsentSetting" type="checkbox"/);
+  assert.match(app, /profile\.memoryConsent = \$\("memoryConsentSetting"\)\.checked/);
+  assert.match(app, /memoryConsent: profile\.memoryConsent === true/);
+  assert.match(app, /preferences: \{/);
+});
+
+test("legacy local ARIA data is purged on first launch and remote deletion is explicit", () => {
+  assert.match(app, /aria\.v07\.messages/);
+  assert.match(app, /remoteResetPromise/);
+  assert.match(app, /sessionStorage\.removeItem\(SESSION_TOKEN_KEY\)/);
+  assert.match(app, /method: "DELETE"/);
+  assert.match(app, /Mémoire locale effacée/i);
+});
+
+test("the voice-first stylesheet and cache version are included in the PWA", () => {
+  assert.match(sw, /aria-voice-v11-shell-1/);
+  assert.match(sw, /"\.\/visualization-engine\.js"/);
+  assert.match(sw, /"\.\/voice\.css"/);
+  assert.match(css, /data-state="listening"/);
+  assert.match(css, /prefers-reduced-motion/);
+});
+
+test("frontend calls the real chat endpoint and keeps alpha credentials in session storage", () => {
+  assert.match(app, /const API_BASE = "https:\/\/aria-brain-staging\.quentineros-sevesi\.workers\.dev"/);
+  assert.match(app, /async function requestAriaReply/);
+  assert.match(app, /fetch\(API_BASE \+ "\/chat"/);
+  assert.match(app, /sessionStorage\.setItem\(SESSION_TOKEN_KEY, token\)/);
+  assert.doesNotMatch(app, /localStorage\.setItem\(SESSION_TOKEN_KEY/);
+  assert.match(html, /id="apiTokenSetting" type="password"/);
+  assert.match(app, /clientId: getClientId\(\)/);
+  assert.match(app, /async function syncRemoteMemory/);
+  assert.match(app, /async function saveRemoteMemory/);
+  assert.match(app, /localStorage\.removeItem\(KEYS\.clientId\)/);
+  assert.match(app, /clientIdsToDelete = \[\.\.\.new Set\(\[currentClientId, oldClientId\]/);
+  assert.match(app, /memories: memories\.map\(item => typeof item === "string" \? \{text:item\} : item\)/);
+});
+
+test("interface actions are model-classified and memory requests are not swallowed by keyword shortcuts", () => {
+  assert.match(app, /function applyIntentAction/);
+  assert.match(app, /case "open_visualization"/);
+  assert.match(app, /case "open_memory"/);
+  assert.match(app, /const result = local \|\| await requestAriaReply\(utterance\)/);
+  assert.match(app, /action: allowedActions\.includes\(data\.action\)/);
+  assert.doesNotMatch(app, /if \(\/mémoire\|souviens\|retiens\/\.test\(lower\)\)/);
+  assert.doesNotMatch(app, /montre\|affiche\|visualise\|ouvre\|prépare.*globe/);
+  assert.match(workerSource, /type: "json_schema"/);
+  assert.match(workerSource, /name: "aria_turn"/);
+  assert.match(workerSource, /Analyse l’intention réelle de l’utilisateur, pas seulement des mots-clés/);
+  assert.match(workerSource, /allowedActions\.has\(turn\.action\)/);
+  assert.match(workerSource, /allowedScenes\.has\(turn\.scene\)/);
+});
+
+test("voice turns are serialized, abortable, and cannot speak after the user pauses", () => {
+  assert.match(app, /let turnInProgress = false/);
+  assert.match(app, /let turnGeneration = 0/);
+  assert.match(app, /let activeChatController = null/);
+  assert.match(app, /if \(speaking \|\| requestInFlight \|\| turnInProgress\) return/);
+  assert.match(app, /activeChatController\.abort\(\)/);
+  assert.match(app, /signal:activeChatController\.signal/);
+  assert.match(app, /thisTurn !== turnGeneration/);
+  assert.match(app, /"audio-capture": "Aucun microphone utilisable/);
+  assert.match(app, /"language-not-supported": "La reconnaissance vocale française/);
+});
+
+test("backend memory deletion requires a valid bearer token and deletes only the requested profile key", async () => {
+  const deleted = [];
+  const env = {
+    ARIA_ACCESS_TOKEN: "test-token",
+    OPENAI_API_KEY: "test-key",
+    ARIA_MEMORY: {
+      async delete(key) { deleted.push(key); },
+      async get() { return null; },
+      async put() {}
+    }
+  };
+  const clientId = "123e4567-e89b-42d3-a456-426614174000";
+  const response = await worker.fetch(new Request(
+    "https://aria-brain-staging.quentineros-sevesi.workers.dev/memory?clientId=" + clientId,
+    { method: "DELETE", headers: { Origin: "https://neros31415.github.io", Authorization: "Bearer test-token" } }
+  ), env);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { deleted: true, persisted: true });
+  assert.deepEqual(deleted, ["memory:v1:" + clientId]);
+});
+
+test("individually provisioned bearer tokens isolate memory by stable user identity", async () => {
+  const hashToken = async (token) => {
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
+    return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  };
+  const tokenA = "a".repeat(64);
+  const tokenB = "b".repeat(64);
+  const weakToken = "short-token";
+  const sessions = new Map([
+    ["session:v1:" + await hashToken(tokenA), "alpha_user_a"],
+    ["session:v1:" + await hashToken(tokenB), "alpha_user_b"],
+    ["session:v1:" + await hashToken(weakToken), "weak_user"]
+  ]);
+  const memoryReads = [];
+  const env = {
+    OPENAI_API_KEY: "test-key",
+    ARIA_USERS: { async get(key) { return sessions.get(key) || null; } },
+    ARIA_MEMORY: {
+      async get(key) { memoryReads.push(key); return []; },
+      async put() {},
+      async delete() {}
+    }
+  };
+  const request = (token) => new Request(
+    "https://aria-brain-staging.quentineros-sevesi.workers.dev/memory?clientId=123e4567-e89b-42d3-a456-426614174000",
+    {headers:{Origin:"https://neros31415.github.io",Authorization:"Bearer " + token}}
+  );
+  const first = await worker.fetch(request(tokenA), env);
+  const second = await worker.fetch(request(tokenB), env);
+  const invalid = await worker.fetch(request("not-provisioned"), env);
+  const weak = await worker.fetch(request(weakToken), env);
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.equal(invalid.status, 401);
+  assert.equal(weak.status, 401);
+  assert.deepEqual(memoryReads, ["memory:v2:user:alpha_user_a", "memory:v2:user:alpha_user_b"]);
+});
+
+test("individual-auth mode rejects the shared alpha token", async () => {
+  const env = {
+    OPENAI_API_KEY: "test-key",
+    ARIA_ACCESS_TOKEN: "legacy-shared-token",
+    ARIA_REQUIRE_INDIVIDUAL_AUTH: "true",
+    ARIA_USERS: { async get() { return null; } },
+    ARIA_MEMORY: { async get() { return []; }, async put() {}, async delete() {} }
+  };
+  const response = await worker.fetch(new Request(
+    "https://aria-brain-staging.quentineros-sevesi.workers.dev/memory?clientId=123e4567-e89b-42d3-a456-426614174000",
+    {headers:{Origin:"https://neros31415.github.io",Authorization:"Bearer legacy-shared-token"}}
+  ), env);
+  assert.equal(response.status, 401);
+  assert.deepEqual(await response.json(), {error:"unauthorized"});
+});
+
+test("backend rejects an invalid token without deleting memory", async () => {
+  const deleted = [];
+  const env = {
+    ARIA_ACCESS_TOKEN: "test-token",
+    OPENAI_API_KEY: "test-key",
+    ARIA_MEMORY: { async delete(key) { deleted.push(key); }, async get() { return null; }, async put() {} }
+  };
+  const response = await worker.fetch(new Request(
+    "https://aria-brain-staging.quentineros-sevesi.workers.dev/memory?clientId=123e4567-e89b-42d3-a456-426614174000",
+    { method: "DELETE", headers: { Origin: "https://neros31415.github.io", Authorization: "Bearer invalid" } }
+  ), env);
+  assert.equal(response.status, 401);
+  assert.deepEqual(deleted, []);
+});
+
+test("memory deletion and synchronization require explicit server confirmation", () => {
+  assert.match(app, /result\.deleted === true && result\.persisted === true/);
+  assert.match(app, /result\?\.deleted !== true \|\| result\?\.persisted !== true/);
+  assert.match(app, /data\.persisted !== true \|\| !Array\.isArray\(data\.memories\)/);
+  assert.match(app, /la suppression distante n’est pas confirmée/i);
+  assert.match(app, /l’état serveur reste incertain/i);
+});
+
+test("contextual HUD widgets are responsive, explicit, and do not claim a real 3D scene", () => {
+  assert.match(html, /id="contextWidget"/);
+  assert.match(html, /id="sceneToolsWidget"/);
+  assert.match(html, /id="contextClose"/);
+  assert.match(app, /function showContextWidgets/);
+  assert.match(app, /function hideContextWidgets/);
+  assert.match(app, /la scène 3D connectée reste à intégrer/i);
+  assert.match(app, /AUCUNE DONNÉE EXTERNE/);
+  assert.match(css, /\.context-widget\[hidden\]/);
+  assert.match(css, /\.visualization-stage\{grid-column:2;grid-row:1\}/);
+  assert.match(css, /\.context-widget-right\{grid-column:3;grid-row:1/);
+  assert.match(css, /\.visualization-stage\{grid-column:1;grid-row:1\}/);
+  assert.match(css, /@media\(max-width:800px\)/);
+  assert.match(css, /prefers-reduced-motion/);
+});
+
+test("logo transition opens and returns from the central visualization workspace", () => {
+  assert.match(html, /id="visualizationStage"/);
+  assert.match(html, /id="visualizationBack"/);
+  assert.match(html, /id="logoTransition"/);
+  assert.match(app, /function openVisualization/);
+  assert.match(app, /function closeVisualization/);
+  assert.match(app, /dataset\.phase = "enter"/);
+  assert.match(app, /dataset\.phase = "return"/);
+  assert.match(app, /prefers-reduced-motion: reduce/);
+  assert.match(css, /logo-zoom-through/);
+  assert.match(css, /logo-zoom-back/);
+  assert.match(app, /La scène demandée n’est pas encore disponible/i);
+});
+
+test("the globe scene uses WebGL locally and supports pointer rotation without external map data", () => {
+  assert.match(html, /id="visualizationCanvas"/);
+  assert.match(html, /src="visualization-engine.js"/);
+  assert.match(visualEngine, /getContext\("webgl"/);
+  assert.match(visualEngine, /gl\.drawElements\(gl\.TRIANGLES/);
+  assert.match(visualEngine, /-r\.z \* perspective \* 0\.45/);
+  assert.match(visualEngine, /pointermove/);
+  assert.match(visualEngine, /rotationY \+= dx \* 0\.008/);
+  assert.match(app, /généré localement, sans données géographiques externes/i);
+  assert.match(app, /window\.AriaVisualization\?\.open/);
+});
+
+test("backend never reads or writes persistent memories when consent is disabled", async () => {
+  const writes = [];
+  const reads = [];
+  const env = {
+    ARIA_ACCESS_TOKEN: "test-token",
+    OPENAI_API_KEY: "test-key",
+    ARIA_MEMORY: {
+      async delete() {},
+      async get(key) { reads.push(key); return [{id:"existing",text:"private memory"}]; },
+      async put(key, value) { writes.push({key,value}); }
+    }
+  };
+  const originalFetch = globalThis.fetch;
+  let providerRequest;
+  globalThis.fetch = async (_url, options) => {
+    providerRequest = JSON.parse(options.body);
+    return new Response(JSON.stringify({
+      model:"test-model",
+      output:[{type:"message",content:[{type:"output_text",text:JSON.stringify({reply:"Je ne l’ai pas mémorisé.",action:"none",scene:"none"})}]}]
+    }), {status:200,headers:{"Content-Type":"application/json"}});
+  };
+  try {
+    const response = await worker.fetch(new Request(
+      "https://aria-brain-staging.quentineros-sevesi.workers.dev/chat",
+      {
+        method:"POST",
+        headers:{Origin:"https://neros31415.github.io",Authorization:"Bearer test-token","Content-Type":"application/json"},
+        body:JSON.stringify({
+          clientId:"123e4567-e89b-42d3-a456-426614174000",
+          memoryConsent:false,
+          messages:[{role:"user",content:"Retiens que je préfère le thé."}]
+        })
+      }
+    ), env);
+    assert.equal(response.status, 200);
+    assert.deepEqual(writes, []);
+    assert.deepEqual(reads, []);
+    assert.match(providerRequest.instructions, /Mémoire personnelle désactivée par l’utilisateur/);
+    assert.match(providerRequest.instructions, /aucune information n’a été enregistrée/);
+    assert.equal(providerRequest.text.format.type, "json_schema");
+    assert.equal(providerRequest.text.format.name, "aria_turn");
+    assert.equal(providerRequest.text.format.strict, true);
+    assert.equal(providerRequest.text.format.schema.additionalProperties, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("backend returns only schema-valid model intent actions", async () => {
+  const env = {
+    ARIA_ACCESS_TOKEN: "test-token",
+    OPENAI_API_KEY: "test-key",
+    ARIA_MEMORY: { async get() { return []; }, async put() {}, async delete() {} }
+  };
+  const originalFetch = globalThis.fetch;
+  let providerText = JSON.stringify({
+    reply:"J’ouvre le globe 3D.",
+    action:"open_visualization",
+    scene:"globe"
+  });
+  globalThis.fetch = async (_url, options) => {
+    const payload = JSON.parse(options.body);
+    assert.equal(payload.text.format.name, "aria_turn");
+    return new Response(JSON.stringify({
+      model:"test-model",
+      output:[{type:"message",content:[{type:"output_text",text:providerText}]}]
+    }), {status:200,headers:{"Content-Type":"application/json"}});
+  };
+  const request = () => new Request(
+    "https://aria-brain-staging.quentineros-sevesi.workers.dev/chat",
+    {
+      method:"POST",
+      headers:{Origin:"https://neros31415.github.io",Authorization:"Bearer test-token","Content-Type":"application/json"},
+      body:JSON.stringify({
+        clientId:"123e4567-e89b-42d3-a456-426614174000",
+        memoryConsent:false,
+        messages:[{role:"user",content:"Peux-tu me montrer le globe ?"}]
+      })
+    }
+  );
+  try {
+    const valid = await worker.fetch(request(), env);
+    assert.equal(valid.status, 200);
+    assert.deepEqual(await valid.json(), {
+      reply:"J’ouvre le globe 3D.",
+      action:"open_visualization",
+      scene:"globe",
+      model:"test-model"
+    });
+    providerText = "ceci n'est pas un JSON";
+    const invalid = await worker.fetch(request(), env);
+    assert.equal(invalid.status, 502);
+    assert.deepEqual(await invalid.json(), {error:"invalid_provider_output"});
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("backend no longer embeds a personal profile", () => {
+  assert.doesNotMatch(workerSource, /assistante personnelle de Quentin|centres d’intérêt IA|Quentin utilise principalement/i);
+});
+
+test("backend encodes the chosen initiative level and bounded-autonomy principles", async () => {
+  const env = {
+    ARIA_ACCESS_TOKEN: "test-token",
+    OPENAI_API_KEY: "test-key",
+    ARIA_MEMORY: { async get() { return []; }, async put() {}, async delete() {} }
+  };
+  const originalFetch = globalThis.fetch;
+  let providerInstructions = "";
+  globalThis.fetch = async (_url, options) => {
+    providerInstructions = JSON.parse(options.body).instructions;
+    return new Response(JSON.stringify({
+      model: "test-model",
+      output: [{type:"message",content:[{type:"output_text",text:JSON.stringify({reply:"Réponse de test.",action:"none",scene:"none"})}]}]
+    }), {status:200,headers:{"Content-Type":"application/json"}});
+  };
+  const modes = [
+    ["discrete", "Initiative discrète"],
+    ["balanced", "Initiative équilibrée"],
+    ["proactive", "Initiative proactive"]
+  ];
+  try {
+    for (const [proactivity, expectedInstruction] of modes) {
+      const response = await worker.fetch(new Request(
+        "https://aria-brain-staging.quentineros-sevesi.workers.dev/chat",
+        {
+          method: "POST",
+          headers: {Origin:"https://neros31415.github.io",Authorization:"Bearer test-token","Content-Type":"application/json"},
+          body: JSON.stringify({
+            clientId: "123e4567-e89b-42d3-a456-426614174000",
+            memoryConsent: false,
+            preferences: {proactivity},
+            messages: [{role:"user",content:"Aide-moi à avancer sur mon objectif."}]
+          })
+        }
+      ), env);
+      assert.equal(response.status, 200);
+      assert.ok(providerInstructions.includes(expectedInstruction), "chosen initiative policy must reach the model");
+      assert.ok(providerInstructions.includes("ne suppriment pas les limites techniques"), "provider limits must remain explicit");
+      assert.ok(providerInstructions.includes("n’autorisent aucune action externe"), "prompt policy must not grant tools");
+    }
+    assert.ok(providerInstructions.includes("Liberté intellectuelle"));
+    assert.ok(providerInstructions.includes("Exige une confirmation explicite"));
+    assert.ok(providerInstructions.includes("N’affirme jamais travailler en arrière-plan"));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+

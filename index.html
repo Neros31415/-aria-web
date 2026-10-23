@@ -3,64 +3,136 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#090d16">
-  <meta name="description" content="ARIA — assistant personnel, prototype web.">
+  <meta name="theme-color" content="#05070b">
+  <meta name="description" content="ARIA — assistante personnelle vocale et interface holographique.">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="styles.css">
-  <title>ARIA — Assistant personnel</title>
+  <link rel="stylesheet" href="voice.css">
+  <title>ARIA — Présence vocale</title>
 </head>
 <body>
-  <div class="app-shell">
+  <div class="hud-shell">
     <header class="topbar">
-      <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
-      <div class="brand-copy"><div class="brand">ARIA <span>PERSONAL AI</span></div><div class="status"><i></i><span id="statusText">Chat web · moteur IA à connecter</span></div></div>
-      <button class="icon-button" id="settingsBtn" aria-label="Paramètres" title="Paramètres">⚙</button>
+      <div class="brand" aria-label="ARIA"><span class="brand-symbol" aria-hidden="true">A</span><span><strong>ARIA</strong><small>PERSONAL INTELLIGENCE</small></span></div>
+      <div class="system-status" aria-live="polite"><i id="statusDot"></i><span id="statusText">PRÉSENCE</span></div>
+      <button class="icon-button" id="settingsBtn" aria-label="Paramètres" title="Paramètres">⌘</button>
     </header>
 
-    <main>
-      <section class="hero" id="welcome">
-        <div class="eyebrow">ARIA · ASSISTANTE PERSONNELLE</div>
-        <h1>Parlons.<br><em>Je vous écoute.</em></h1>
-        <p>Un espace unique pour échanger avec ARIA. Vos conversations et notes restent dans ce navigateur sur cet appareil.</p>
-        <div class="capability-row"><span>◈ Conversation intégrée</span><span>◈ Mémoire locale</span><span>◈ Interface mobile</span></div>
-      </section>
-
-      <section class="workspace">
-        <div class="section-head"><div><div class="eyebrow">ESPACE ARIA</div><h2>Votre conversation</h2></div><button id="clearBtn" class="text-button">Effacer</button></div>
-        <div id="messages" class="messages" aria-live="polite">
-          <article class="message aria-message"><div class="avatar">A</div><div class="bubble"><div class="message-label">ARIA <span>PROTOCOLE INITIAL</span></div><p>Bonjour. Mon interface est prête, mais mon moteur IA distant n’est pas encore connecté. Vous pouvez tester la conversation locale et la mémoire de ce prototype.</p></div></article>
+    <main class="voice-main">
+      <aside class="context-widget context-widget-left" id="contextWidget" aria-label="Contexte de la visualisation" hidden>
+        <div class="widget-kicker">CONTEXTE</div>
+        <div class="widget-rule"></div>
+        <h2 id="contextTitle">Visualisation</h2>
+        <p id="contextDescription">Les informations contextuelles apparaîtront ici lorsque vous en aurez besoin.</p>
+        <div class="widget-state"><span class="mini-dot"></span><span id="contextStatus">EN ATTENTE</span></div>
+      </aside>
+      <section class="core-stage" id="coreStage" data-state="presence" aria-label="Présence visuelle d'ARIA">
+        <div class="stage-caption"><span>ARIA / CORE</span><span id="clockLabel">INITIALISATION</span></div>
+        <div class="core-wrap" id="ariaOrb" role="img" aria-label="Orbe représentant l'état d'ARIA">
+          <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><div class="orbit orbit-three"></div>
+          <div class="core-halo"></div>
+          <svg class="core-globe" viewBox="0 0 240 240" aria-hidden="true">
+            <defs><radialGradient id="sphereFill" cx="35%" cy="25%" r="75%"><stop offset="0" stop-color="#d6f6ff" stop-opacity=".2"/><stop offset=".55" stop-color="#4f9bb8" stop-opacity=".09"/><stop offset="1" stop-color="#0a1722" stop-opacity=".02"/></radialGradient><clipPath id="sphereClip"><circle cx="120" cy="120" r="75"/></clipPath></defs>
+            <circle cx="120" cy="120" r="75" fill="url(#sphereFill)" stroke="#bdefff" stroke-opacity=".58"/>
+            <g clip-path="url(#sphereClip)" fill="none" stroke="#9edff3" stroke-opacity=".45" stroke-width=".8">
+              <ellipse cx="120" cy="120" rx="31" ry="75"/><ellipse cx="120" cy="120" rx="59" ry="75"/>
+              <ellipse cx="120" cy="120" rx="75" ry="24"/><ellipse cx="120" cy="120" rx="75" ry="49"/>
+              <path d="M35 120h170M120 42v156M54 75q66 30 132 0M54 165q66-30 132 0"/>
+              <path d="M74 70l14 9 7 17-11 10 4 14-17 10-5 22 16 20 19-5 11-23 18-10 5-18-15-15-5-15-22-6z" fill="#8fdff3" fill-opacity=".12"/>
+            </g>
+            <circle cx="120" cy="120" r="83" fill="none" stroke="#c7f3ff" stroke-opacity=".12" stroke-dasharray="1 7"/>
+            <circle cx="120" cy="120" r="4" fill="#effcff"/><circle cx="120" cy="120" r="11" fill="none" stroke="#b7f1ff" stroke-opacity=".5"/>
+          </svg>
+          <div class="core-crosshair crosshair-a"></div><div class="core-crosshair crosshair-b"></div>
+          <span class="core-label">A</span>
         </div>
-        <form id="chatForm" class="composer">
-          <label class="sr-only" for="messageInput">Votre message</label>
-          <textarea id="messageInput" rows="1" placeholder="Écrivez à ARIA…" maxlength="2000"></textarea>
-          <button class="send-button" type="submit" aria-label="Envoyer">↑</button>
-        </form>
-        <div class="composer-note"><span>ENTRÉE POUR ENVOYER · MAJ + ENTRÉE POUR UN SAUT DE LIGNE</span><span id="charCount">0/2000</span></div>
+        <div class="core-state"><span class="pulse-dot"></span><span id="coreState">PRÉSENTE</span></div>
+        <h1 id="sceneTitle">Bonjour.</h1>
+        <p class="scene-subtitle" id="sceneSubtitle">Je suis là. Vous pouvez me parler naturellement.</p>
+        <div class="voice-controls">
+          <button class="primary-button" id="voiceStart" type="button">Commencer notre rencontre</button>
+          <button class="quiet-action voice-stop" id="voiceStop" type="button" hidden>Mettre l'écoute en pause</button>
+        </div>
+        <p class="voice-note" id="voiceNote">La voix nécessite l'autorisation du microphone. L'écoute continue dépend des possibilités du navigateur et du système.</p>
       </section>
 
-      <section class="memory-panel">
-        <div class="section-head"><div><div class="eyebrow">CONTEXTE PERSISTANT</div><h2>Mémoire locale</h2></div><span class="pill">SUR CET APPAREIL</span></div>
-        <p class="panel-description">Les notes ajoutées ici restent dans le stockage de ce navigateur. Elles ne sont pas envoyées à un serveur.</p>
-        <form id="memoryForm" class="memory-form"><input id="memoryInput" maxlength="300" placeholder="Ajouter une préférence ou une note…"><button type="submit">Ajouter</button></form>
+      <aside class="context-widget context-widget-right" id="sceneToolsWidget" aria-label="État et commandes de visualisation" hidden>
+        <div class="widget-kicker">ESPACE VISUEL</div>
+        <div class="widget-rule"></div>
+        <h2>État de la scène</h2>
+        <p id="sceneToolsDescription">Aucune scène n'est ouverte.</p>
+        <div class="widget-status-box"><span class="widget-status-label">SOURCE</span><strong id="sceneSourceStatus">AUCUNE DONNÉE</strong></div>
+        <button class="quiet-action widget-close" id="contextClose" type="button">Fermer les widgets</button>
+      </aside>
+      <section class="visualization-stage" id="visualizationStage" aria-label="Espace de visualisation" hidden>
+        <header class="visualization-header">
+          <div><span class="widget-kicker">ARIA / IMMERSIVE SPACE</span><h2 id="visualizationTitle">Visualisation</h2></div>
+          <button class="quiet-action" id="visualizationBack" type="button">Retour à ARIA</button>
+        </header>
+        <div class="visualization-viewport" id="visualizationViewport" aria-live="polite">
+          <canvas id="visualizationCanvas" class="visualization-canvas" aria-label="Globe filaire 3D interactif, faites glisser pour le faire tourner" hidden></canvas>
+          <div class="visualization-rings" aria-hidden="true"><span></span><span></span><span></span></div>
+          <div class="visualization-center"><span class="visualization-mark">A</span><span class="visualization-caption">ESPACE VISUEL</span></div>
+          <div class="visualization-grid" aria-hidden="true"></div>
+        </div>
+        <p class="visualization-note" id="visualizationNote">Espace de visualisation en préparation. Aucune scène 3D ou donnée externe n’est encore connectée.</p>
+      </section>
+      <div class="logo-transition" id="logoTransition" hidden aria-hidden="true">
+        <span class="transition-mark">A</span>
+      </div>
+      <aside class="transcript-widget" id="transcriptWidget" aria-live="polite" hidden>
+        <div class="transcript-head"><span>TRANSCRIPTION</span><button id="transcriptClose" type="button" aria-label="Masquer la transcription">×</button></div>
+        <div id="transcriptText">La transcription apparaîtra ici si vous l'activez.</div>
+      </aside>
+
+      <section class="memory-drawer" id="memoryPanel" aria-label="Mémoire ARIA" hidden>
+        <div class="drawer-heading"><div><span class="micro-heading">CONTRÔLE PERSONNEL</span><h2>Ma mémoire</h2></div><button class="close-drawer" id="memoryClose" type="button" aria-label="Fermer la mémoire">×</button></div>
+        <p class="drawer-note">ARIA ne doit conserver que les informations que vous choisissez de lui confier.</p>
         <ul id="memoryList" class="memory-list"></ul>
+        <button class="quiet-action" id="resetMemoryBtn" type="button">Effacer les données personnelles de cet appareil</button>
+        <p class="drawer-note" id="memoryStatus" role="status">La suppression locale ne confirme pas la suppression d'éventuelles données sur le serveur.</p>
       </section>
-
-      <section class="security-note"><span class="shield">◇</span><div><strong>Mode prototype sécurisé</strong><p>Aucune action sur votre téléphone ou un PC n’est exécutée. Aucun compte, paiement ou accès distant n’est configuré.</p></div></section>
     </main>
-    <footer>ARIA · ESPACE WEB <span>CONVERSATION · MÉMOIRE LOCALE</span></footer>
+
+    <footer class="command-dock">
+      <button class="icon-button small-action" id="transcriptToggle" type="button" aria-label="Afficher ou masquer la transcription" title="Transcription">≋</button>
+      <span class="dock-hint">PARLEZ NATURELLEMENT À ARIA</span>
+      <button class="icon-button small-action" id="memoryToggle" type="button" aria-label="Ouvrir la mémoire" title="Mémoire">◇</button>
+      <button class="icon-button small-action" id="pauseToggle" type="button" aria-label="Mettre la voix en pause" title="Pause de l'écoute">Ⅱ</button>
+    </footer>
   </div>
+
+  <dialog id="onboardingDialog">
+    <form method="dialog" class="dialog-content">
+      <div class="micro-heading">PREMIÈRE RENCONTRE</div>
+      <h2>Faisons connaissance.</h2>
+      <p>ARIA vous guidera oralement dans cette configuration. Vous pouvez passer une question ou tout recommencer.</p>
+      <div class="setting-row"><span>Voix et écoute</span><b>À CONFIGURER</b></div>
+      <div class="setting-row"><span>Style de conversation</span><b>À CONFIGURER</b></div>
+      <div class="setting-row"><span>Mémoire personnelle</span><b>VIERGE</b></div>
+      <button class="primary-button" id="onboardingBegin" value="begin">Commencer</button>
+      <button class="text-button" id="onboardingSkip" value="skip">Passer pour le moment</button>
+    </form>
+  </dialog>
 
   <dialog id="settingsDialog">
     <form method="dialog" class="dialog-content">
-      <div class="section-head"><div><div class="eyebrow">CONFIGURATION</div><h2>État du prototype</h2></div><button class="icon-button" aria-label="Fermer">×</button></div>
-      <div class="setting-row"><span>Interface PWA</span><b class="good">ACTIVE</b></div>
-      <div class="setting-row"><span>Mémoire locale</span><b class="good">ACTIVE</b></div>
-      <div class="setting-row"><span>Modèle IA réel</span><b class="pending">NON CONNECTÉ</b></div>
-      <div class="setting-row"><span>Agent Web / Windows</span><b class="pending">NON CONNECTÉ</b></div>
-      <p class="dialog-help">Pour connecter un vrai modèle, il faudra déployer un backend sécurisé. Une clé API ne doit jamais être placée dans le code de cette application.</p>
-      <button class="primary-button">Fermer</button>
+      <div class="drawer-heading"><div><span class="micro-heading">CONFIGURATION</span><h2>Préférences d'ARIA</h2></div><button class="close-drawer" aria-label="Fermer">×</button></div>
+      <p class="dialog-help">Le mode vocal dépend des autorisations et des capacités du navigateur. L'écoute peut s'interrompre en arrière-plan sur mobile. Pour connecter le moteur de conversation de l’alpha, saisissez le jeton qui vous a été fourni par l’administrateur. Il n’est jamais inclus dans le code public.</p>
+      <label class="token-field" for="apiTokenSetting"><span>Jeton d’accès alpha</span><input id="apiTokenSetting" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Non configuré"></label>
+      <p class="token-help">Conservé uniquement dans la session de ce navigateur. Ne partagez pas ce jeton.</p>
+      <div class="setting-row"><span>Proactivité</span><select id="proactivitySetting"><option value="discrete">Discrète</option><option value="balanced" selected>Équilibrée</option><option value="proactive">Proactive</option></select></div>
+      <div class="setting-row"><span>Réponses</span><select id="verbositySetting"><option value="short">Plutôt courtes</option><option value="balanced" selected>Équilibrées</option><option value="detailed">Détaillées</option></select></div>
+      <div class="setting-row"><span>Humour</span><select id="humorSetting"><option value="low">Discret</option><option value="balanced" selected>Naturel</option><option value="high">Fréquent</option></select></div>
+      <label class="setting-row" for="memoryConsentSetting"><span>Autoriser la mémoire personnelle</span><input id="memoryConsentSetting" type="checkbox"></label>
+      <p class="token-help">Si cette option est désactivée, ARIA n'utilise pas les souvenirs enregistrés dans ses réponses et ne mémorise pas automatiquement vos demandes. Vous gardez l'accès au panneau pour consulter ou supprimer les données existantes.</p>
+      <button class="primary-button" id="saveSettings" value="save">Enregistrer</button>
+      <button class="text-button" id="restartOnboarding" value="restart">Recommencer la première rencontre</button>
+      <button class="text-button" id="settingsMemory" value="memory">Ouvrir la mémoire</button>
     </form>
   </dialog>
+
+  <script src="visualization-engine.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
