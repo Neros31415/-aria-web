@@ -83,6 +83,7 @@ test("memory consent revocation aborts pending requests and ignores stale remote
   assert.ok(app.includes("signal: controller.signal"));
   assert.ok(app.includes("if (!isMemoryRequestCurrent(generation)) return"));
   assert.ok(app.includes("if (previousMemoryConsent && !profile.memoryConsent)"));
+  assert.ok(app.includes("Requête mémoire interrompue : l’application ignore sa réponse."));
   assert.ok(app.includes("l’état distant peut être incertain si le serveur avait déjà traité la requête"));
 });
 
