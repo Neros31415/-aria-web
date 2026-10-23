@@ -33,3 +33,16 @@ The worker uses `store: false` for Responses API requests. Memory storage is sep
 ## Limitations
 
 This is a single-user alpha, not a multi-user account system. The random browser profile ID is an identifier, not an authentication credential; access is protected by the ARIA access token. Do not reuse the same access token with untrusted users. KV is persistent but eventually consistent, so it is not a transactional database. No automatic summarization, conflict resolution, or cross-device account linking is implemented yet.
+
+
+## Identity migration gate (23 October 2026)
+
+The secure integration Worker now distinguishes the authentication modes:
+
+- **Supabase individual mode:** persistent memory is scoped to the UUID returned by successful server-side Supabase Auth validation and is protected by D1 authorization.
+- **Legacy single-user alpha mode:** the existing memory:v1:<clientId> compatibility path remains for explicitly configured alpha clients; the shared token must never be distributed to untrusted users.
+- **session_kv alpha mode:** chat authentication may succeed, but GET/PUT/DELETE /memory returns 409 identity_migration_required. With memory consent enabled, chat does not read or write persistent memory for these sessions and tells the model that persistence is unavailable. The memory store must not be touched.
+
+The opaque owner ID retrieved from ARIA_USERS is not treated as a canonical account UUID. Do not auto-provision a D1 role for it or migrate existing notes based on a browser profile ID, token, or an unverified identifier match. Persistent memory for these sessions can be re-enabled only after a verified server-side mapping to a canonical account identity and migration tests covering ownership, collisions, revocation, and preservation/deletion of existing notes.
+
+The regression tests for this gate passed in PR #35. This change was merged into feat/aria-brain-staging-integration; it has not been deployed to Cloudflare staging or production. The active deployed Worker may therefore still behave differently until a separately validated staging deployment is performed.
