@@ -486,6 +486,9 @@ test("individual-auth memory is isolated by the validated account, not clientId"
   assert.deepEqual(accountBMemory.memories, []);
   assert.equal(accountBMemory.persisted, true);
 
+  // Seed B's own key so the test proves DELETE actually removes B's data.
+  store.set("memory:v2:" + ownerB, JSON.stringify([{ id: "b-note", text: "Note du compte B" }]));
+
   // A delete request authenticated as B must only address B's canonical key,
   // even when the client supplies A's identifier in the query string.
   const deleteResponse = await worker.fetch(new Request(
