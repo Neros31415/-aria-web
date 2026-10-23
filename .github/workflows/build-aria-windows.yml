@@ -1,0 +1,38 @@
+name: Build ARIA Windows
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "desktop/**"
+      - ".github/workflows/build-aria-windows.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r desktop/requirements.txt
+          pip install pyinstaller
+      - name: Build single-file executable
+        run: pyinstaller --noconfirm --clean --onefile --windowed --name ARIA desktop/aria_desktop.py
+      - name: Verify executable exists
+        run: if (!(Test-Path "dist/ARIA.exe")) { throw "Expected dist/ARIA.exe was not created." }
+        shell: pwsh
+      - name: Upload executable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ARIA-Windows-MVP
+          path: dist/ARIA.exe
+          if-no-files-found: error
