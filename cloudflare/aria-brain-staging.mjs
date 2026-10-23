@@ -459,8 +459,8 @@ export default {
     }
     if (rememberMatch && requestedMemoryConsent && !canonicalAccountIdentity && individualAuth) {
       memoryWriteStatus = "La mémoire persistante est indisponible pour cette session alpha tant que l’identité de compte canonique n’a pas été migrée. Aucune donnée n’a été lue ni enregistrée.";
-    } else if (rememberMatch && !memoryConsent && !memoryWriteStatus) {
-      memoryWriteStatus = "Mémoire désactivée par l’utilisateur : aucune information n’a été enregistrée.";
+    } else if (rememberMatch && !memoryConsent) {
+      if (!memoryWriteStatus) memoryWriteStatus = "Mémoire désactivée par l’utilisateur : aucune information n’a été enregistrée.";
     } else if (rememberMatch) {
       if (!env.ARIA_MEMORY || !memoryOwnerKey) {
         memoryWriteStatus = "Échec : le stockage persistant n’est pas disponible. Ne prétends pas que l’information a été mémorisée.";
