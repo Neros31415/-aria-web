@@ -164,7 +164,7 @@ export default {
     if (allowedOrigins.has(origin)) {
       headers["Access-Control-Allow-Origin"] = origin;
       headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS";
-      headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type";
+      headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type, X-ARIA-Memory-Consent";
     }
     const json = (data, status = 200) =>
       new Response(data === null ? null : JSON.stringify(data), { status, headers });
@@ -242,6 +242,11 @@ export default {
       }
       if (!individualAuth && !validClientId(clientId)) return json({ error: "invalid_client_id" }, 400);
       if (individualAuth && !ownerId) return json({ error: "unauthorized" }, 401);
+      // The API requires an explicit per-request consent signal for memory reads/writes.
+      // DELETE remains available so users can exercise their right to erase stored data.
+      if (req.method !== "DELETE" && req.headers.get("X-ARIA-Memory-Consent") !== "true") {
+        return json({ error: "memory_consent_required" }, 403);
+      }
       const key = individualAuth ? "memory:v2:" + ownerId : "memory:v1:" + clientId;
       if (individualAuth) {
         const permission = req.method === "GET"
