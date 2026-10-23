@@ -328,6 +328,12 @@ export default {
         const decision = await authorizeMemoryOperation(env, ownerId, permission);
         if (!decision.ok) return json({ error: decision.error }, decision.status);
       }
+      // Recheck immediately before the KV operation to narrow the revocation race.
+      if (individualAuth && req.method !== "DELETE") {
+        const latestConsent = await readServerMemoryConsent(env, ownerId);
+        if (!latestConsent.ok) return json({ error: latestConsent.error }, latestConsent.status);
+        if (!latestConsent.enabled) return json({ error: "memory_consent_required" }, 403);
+      }
       try {
         if (req.method === "GET") {
           const saved = await env.ARIA_MEMORY.get(key, "json");
@@ -446,32 +452,72 @@ export default {
         memoryWriteStatus = "Échec : le stockage persistant n’est pas disponible. Ne prétends pas que l’information a été mémorisée.";
       } else {
         try {
-          const key = memoryOwnerKey;
-          const saved = await env.ARIA_MEMORY.get(key, "json");
-          const memories = Array.isArray(saved) ? saved : [];
-          const text = rememberMatch[1].trim().slice(0, 300);
-          const existing = memories.find((item) => typeof item.text === "string" && item.text.trim().toLocaleLowerCase("fr") === text.toLocaleLowerCase("fr"));
-          const now = Date.now();
-          if (existing) {
-            existing.text = text;
-            existing.updatedAt = now;
+          if (individualAuth) {
+            const latestConsent = await readServerMemoryConsent(env, ownerId);
+            if (!latestConsent.ok || !latestConsent.enabled) {
+              memoryWriteStatus = latestConsent.ok
+                ? "Consentement mémoire révoqué avant l’écriture : aucune information n’a été enregistrée."
+                : "Le consentement mémoire ne peut plus être vérifié : aucune information n’a été enregistrée.";
+            } else {
+              const key = memoryOwnerKey;
+              const saved = await env.ARIA_MEMORY.get(key, "json");
+              const memories = Array.isArray(saved) ? saved : [];
+              const text = rememberMatch[1].trim().slice(0, 300);
+              const existing = memories.find((item) => typeof item.text === "string" && item.text.trim().toLocaleLowerCase("fr") === text.toLocaleLowerCase("fr"));
+              const now = Date.now();
+              if (existing) {
+                existing.text = text;
+                existing.updatedAt = now;
+              } else {
+                memories.push({id: crypto.randomUUID(), text, createdAt: now, updatedAt: now});
+              }
+              const bounded = memories.slice(-100);
+              const finalConsent = await readServerMemoryConsent(env, ownerId);
+              if (!finalConsent.ok || !finalConsent.enabled) {
+                memoryWriteStatus = finalConsent.ok
+                  ? "Consentement mémoire révoqué avant la validation de l’écriture : aucune information n’a été enregistrée."
+                  : "Le consentement mémoire ne peut plus être vérifié : aucune information n’a été enregistrée.";
+              } else {
+                await env.ARIA_MEMORY.put(key, JSON.stringify(bounded), {
+                  metadata: {schema: 1, count: bounded.length, updatedAt: now}
+                });
+                memoryWriteStatus = "Succès : l’information a été enregistrée dans la mémoire persistante.";
+              }
+            }
           } else {
-            memories.push({id: crypto.randomUUID(), text, createdAt: now, updatedAt: now});
-          }
-          const bounded = memories.slice(-100);
-          await env.ARIA_MEMORY.put(key, JSON.stringify(bounded), {
-            metadata: {schema: 1, count: bounded.length, updatedAt: now}
-          });
-          memoryWriteStatus = "Succès : l’information a été enregistrée dans la mémoire persistante.";
-        } catch {
+            const key = memoryOwnerKey;
+            const saved = await env.ARIA_MEMORY.get(key, "json");
+            const memories = Array.isArray(saved) ? saved : [];
+            const text = rememberMatch[1].trim().slice(0, 300);
+            const existing = memories.find((item) => typeof item.text === "string" && item.text.trim().toLocaleLowerCase("fr") === text.toLocaleLowerCase("fr"));
+            const now = Date.now();
+            if (existing) {
+              existing.text = text;
+              existing.updatedAt = now;
+            } else {
+              memories.push({id: crypto.randomUUID(), text, createdAt: now, updatedAt: now});
+            }
+            const bounded = memories.slice(-100);
+            await env.ARIA_MEMORY.put(key, JSON.stringify(bounded), {
+              metadata: {schema: 1, count: bounded.length, updatedAt: now}
+            });
+            memoryWriteStatus = "Succès : l’information a été enregistrée dans la mémoire persistante.";
+          }        } catch {
           memoryWriteStatus = "Échec : le serveur n’a pas pu enregistrer l’information. Ne prétends pas qu’elle a été mémorisée.";
         }
       }
     }
 
+    if (individualAuth && memoryConsent) {
+      const latestConsent = await readServerMemoryConsent(env, ownerId);
+      if (!latestConsent.ok || !latestConsent.enabled) {
+        memoryConsent = false;
+        if (!latestConsent.ok) memoryWriteStatus = "Le consentement mémoire ne peut pas être vérifié ; aucun souvenir persistant ne sera utilisé.";
+      }
+    }
     let memoryContext = memoryConsent
       ? "Aucune mémoire persistante enregistrée pour ce compte."
-      : "Mémoire personnelle désactivée par l’utilisateur. N’utilise aucun souvenir persistant et n’enregistre rien.";
+      : "Mémoire personnelle désactivée ou non autorisée côté serveur. N’utilise aucun souvenir persistant et n’enregistre rien.";
     if (memoryConsent && env.ARIA_MEMORY && memoryOwnerKey) {
       try {
         const saved = await env.ARIA_MEMORY.get(memoryOwnerKey, "json");
