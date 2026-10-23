@@ -502,7 +502,8 @@ export default {
               metadata: {schema: 1, count: bounded.length, updatedAt: now}
             });
             memoryWriteStatus = "Succès : l’information a été enregistrée dans la mémoire persistante.";
-          }        } catch {
+          }
+        } catch {
           memoryWriteStatus = "Échec : le serveur n’a pas pu enregistrer l’information. Ne prétends pas qu’elle a été mémorisée.";
         }
       }
