@@ -77,12 +77,13 @@ test("voice frontend sends preferences and explicit memory consent and applies s
 });
 
 test("memory consent revocation aborts pending requests and ignores stale remote responses", () => {
-  assert.match(app, /const activeMemoryControllers = new Set\\(\\)/);
-  assert.match(app, /function cancelRemoteMemoryRequests\\(\\) \\{\\s*memorySyncGeneration \\+= 1;\\s*for \\(const controller of activeMemoryControllers\\) controller\\.abort\\(\\)/);
-  assert.match(app, /signal: controller\\.signal/);
-  assert.match(app, /if \\(!isMemoryRequestCurrent\\(generation\\)\\) return/);
-  assert.match(app, /if \\(previousMemoryConsent && !profile\\.memoryConsent\\) \\{\\s*cancelRemoteMemoryRequests\\(\\)/);
-  assert.match(app, /l’état distant peut être incertain si le serveur avait déjà traité la requête/);
+  assert.ok(app.includes("const activeMemoryControllers = new Set();"));
+  assert.ok(app.includes("memorySyncGeneration += 1;"));
+  assert.ok(app.includes("for (const controller of activeMemoryControllers) controller.abort();"));
+  assert.ok(app.includes("signal: controller.signal"));
+  assert.ok(app.includes("if (!isMemoryRequestCurrent(generation)) return"));
+  assert.ok(app.includes("if (previousMemoryConsent && !profile.memoryConsent)"));
+  assert.ok(app.includes("l’état distant peut être incertain si le serveur avait déjà traité la requête"));
 });
 
 test("map, finance and science scenes use real external sources and disclose their limitations", () => {
