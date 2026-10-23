@@ -167,6 +167,36 @@ test("rejects conversations that do not end with a user message", async () => {
   assert.deepEqual(await response.json(), { error: "invalid_messages" });
 });
 
+test("opaque alpha session IDs cannot access persistent memory before identity migration", async () => {
+  const token = "alpha-session-token-".padEnd(48, "x");
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
+  const tokenHash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  let memoryCalls = 0;
+  const sessionEnv = {
+    ...env,
+    ARIA_AUTH_MODE: "session_kv",
+    ARIA_USERS: {
+      async get(key) {
+        assert.equal(key, "session:v1:" + tokenHash);
+        return "opaque-alpha-user-17";
+      }
+    },
+    ARIA_MEMORY: {
+      async get() { memoryCalls++; return null; },
+      async put() { memoryCalls++; },
+      async delete() { memoryCalls++; }
+    }
+  };
+  const response = await worker.fetch(new Request("https://aria-staging.test/memory", {
+    method: "GET",
+    headers: { "Authorization": "Bearer " + token }
+  }), sessionEnv);
+
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), { error: "identity_migration_required" });
+  assert.equal(memoryCalls, 0, "the memory store must not be touched");
+});
+
 test("rejects memory reads without a valid profile identifier", async () => {
   const response = await worker.fetch(new Request("https://aria-staging.test/memory?clientId=not-a-uuid", {
     method: "GET",
