@@ -308,9 +308,11 @@ test("durable memory consent is account-scoped, persisted, and revocable", async
     body: JSON.stringify({ enabled: true })
   }), individualEnv);
   assert.equal(enable.status, 200);
-  assert.deepEqual(await enable.json(), {
-    enabled: true, persisted: true, consentVersion: "memory-v1", updatedAt: (await enable.clone().json()).updatedAt
-  });
+  const enabledResult = await enable.json();
+  assert.equal(enabledResult.enabled, true);
+  assert.equal(enabledResult.persisted, true);
+  assert.equal(enabledResult.consentVersion, "memory-v1");
+  assert.equal(typeof enabledResult.updatedAt, "number");
 
   const allowed = await worker.fetch(new Request("https://aria-staging.test/memory", {
     headers: { Authorization: "Bearer account-token" }
