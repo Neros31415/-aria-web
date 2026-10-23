@@ -254,6 +254,7 @@ test("memory consent revocation ignores a late remote response at runtime", asyn
     profile: { memoryConsent: true },
     memories: [{ text: "local memory" }],
     memorySyncGeneration: 0,
+    isMemoryRequestCurrent: (generation) => generation === context.memorySyncGeneration && context.profile.memoryConsent === true,
     activeMemoryControllers: new Set(),
     API_BASE: endpoint,
     getApiToken: () => "test-token",
