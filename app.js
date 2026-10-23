@@ -41,6 +41,29 @@ function setApiToken(value) {
   else sessionStorage.removeItem(SESSION_TOKEN_KEY);
 }
 
+async function persistRemoteMemoryConsent(enabled) {
+  const token = getApiToken();
+  if (!token) return { ok: false, reason: "token_missing" };
+  try {
+    const response = await fetch(API_BASE + "/memory/consent", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled })
+    });
+    let data = null;
+    try { data = await response.json(); } catch {}
+    if (response.ok && data?.persisted === true && data.enabled === enabled) {
+      return { ok: true };
+    }
+    if (response.status === 409 && data?.error === "individual_auth_required") {
+      return { ok: false, reason: "alpha_unsupported" };
+    }
+    return { ok: false, reason: data?.error || "server_refused" };
+  } catch {
+    return { ok: false, reason: "network_error" };
+  }
+}
+
 // The user explicitly requested a fresh personal start. Remove legacy ARIA
 // profile/history keys on this build's first launch; keep unrelated site data.
 let remoteResetPromise = Promise.resolve(false);
@@ -649,6 +672,15 @@ async function handleOnboardingAnswer(text) {
     profile.memoryConsent = affirmative;
   }
   saveProfile();
+  if (q.key === "memoryConsent") {
+    void persistRemoteMemoryConsent(profile.memoryConsent).then(result => {
+      if (!result.ok && $("memoryStatus")) {
+        $("memoryStatus").textContent = result.reason === "alpha_unsupported"
+          ? "Le consentement durable sera disponible après activation de l’authentification individuelle."
+          : "Le choix mémoire est enregistré localement ; sa persistance côté serveur n’a pas été confirmée.";
+      }
+    });
+  }
   onboardingStep += 1;
   if (onboardingStep < onboardingQuestions.length) {
     speak(onboardingQuestions[onboardingStep].prompt, {resume:true});
@@ -701,19 +733,34 @@ function finishSetupIfReturning() {
     $("voiceStart").textContent = "Commencer à parler";
   }
 }
-function saveSettingsFromDialog() {
+async function saveSettingsFromDialog() {
   setApiToken($("apiTokenSetting").value);
   profile.proactivity = $("proactivitySetting").value;
   profile.verbosity = $("verbositySetting").value;
   profile.humor = $("humorSetting").value;
   const previousMemoryConsent = profile.memoryConsent === true;
   profile.memoryConsent = $("memoryConsentSetting").checked;
+  const consentChanged = previousMemoryConsent !== profile.memoryConsent;
   if (previousMemoryConsent && !profile.memoryConsent) {
     cancelRemoteMemoryRequests();
-    $("memoryStatus").textContent = "Consentement mémoire révoqué. Les réponses réseau en cours seront ignorées ; une écriture déjà traitée par le serveur peut rester incertaine.";
+    $("memoryStatus").textContent = "Révocation locale appliquée. Vérification de la révocation côté serveur…";
   }
   saveProfile();
   $("settingsDialog").close();
+  if (consentChanged) {
+    const result = await persistRemoteMemoryConsent(profile.memoryConsent);
+    if (result.ok) {
+      $("memoryStatus").textContent = profile.memoryConsent
+        ? "Consentement mémoire enregistré côté serveur."
+        : "Consentement mémoire révoqué côté serveur.";
+    } else if (result.reason === "alpha_unsupported") {
+      $("memoryStatus").textContent = "Le registre de consentement durable exige une authentification individuelle. Le mode alpha actuel ne le prend pas encore en charge.";
+    } else {
+      $("memoryStatus").textContent = profile.memoryConsent
+        ? "Préférence locale enregistrée, mais le consentement serveur n’a pas été confirmé. La mémoire distante reste bloquée."
+        : "Révocation locale appliquée, mais la révocation serveur n’a pas été confirmée. État distant à vérifier.";
+    }
+  }
   speak(getApiToken() ? "Vos préférences sont enregistrées. Le jeton alpha est disponible pour cette session." : "Vos préférences sont enregistrées. Le moteur distant restera indisponible tant que le jeton alpha n'est pas configuré.", {resume:true});
 }
 function updateClock() {
