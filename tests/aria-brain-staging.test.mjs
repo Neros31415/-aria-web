@@ -561,7 +561,7 @@ test("individual-auth memory consent is enforced and deletion fails closed witho
   };
   const individualEnv = {
     ARIA_AUTH_MODE: "individual",
-    ARIA_AUTHZ_DB: authorizationDb(false),
+    ARIA_AUTHZ_DB: db,
     SUPABASE_URL: "https://project.supabase.co",
     SUPABASE_ANON_KEY: "test-anon-key",
     OPENAI_API_KEY: "test-provider-key",
