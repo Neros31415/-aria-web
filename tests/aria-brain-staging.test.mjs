@@ -82,9 +82,11 @@ function individualMemoryDb({ consent = {}, documents = {} } = {}) {
               if (sql.includes("aria_user_roles")) return { userId: values[0], role: "user", active: 1 };
               if (sql.includes("aria_memory_documents")) {
                 const ownerId = values[0];
-                if (consents.get(ownerId)?.enabled !== 1 && consents.get(ownerId)?.enabled !== true) return null;
-                const memoriesJson = memories.get(ownerId);
-                return memoriesJson === undefined ? null : { memoriesJson };
+                const consentEnabled = consents.get(ownerId)?.enabled;
+                return {
+                  consentEnabled: consentEnabled === 1 || consentEnabled === true ? 1 : 0,
+                  memoriesJson: memories.get(ownerId) ?? null
+                };
               }
               if (sql.includes("aria_memory_consent")) return consents.get(values[0]) || null;
               return null;
@@ -1158,6 +1160,30 @@ test("health reports individual auth as not ready when the durable consent schem
       prepare(sql) {
         return { bind() { return { async first() {
           if (sql.includes("aria_memory_consent")) throw new Error("no such table");
+          return null;
+        } }; } };
+      }
+    }
+  });
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.configured, false);
+  assert.equal(body.memoryConsentStoreConfigured, false);
+  assert.equal(body.persistentMemory, false);
+  assert.equal(body.memoryStatus, "consent_store_unavailable");
+});
+
+
+test("health reports individual memory as unavailable when the D1 document table is missing", async () => {
+  const response = await worker.fetch(new Request("https://aria-staging.test/health"), {
+    ARIA_AUTH_MODE: "individual",
+    SUPABASE_URL: "https://project.supabase.co",
+    SUPABASE_ANON_KEY: "test-anon-key",
+    OPENAI_API_KEY: "test-provider-key",
+    ARIA_AUTHZ_DB: {
+      prepare(sql) {
+        return { bind() { return { async first() {
+          if (sql.includes("aria_memory_documents")) throw new Error("no such table");
           return null;
         } }; } };
       }
