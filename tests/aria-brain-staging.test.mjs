@@ -381,6 +381,92 @@ test("chat cannot read or write persistent memory when durable consent is absent
 });
 
 
+test("durable memory consent is isolated between authenticated accounts", async (t) => {
+  const accountA = "123e4567-e89b-42d3-a456-426614174000";
+  const accountB = "123e4567-e89b-42d3-a456-426614174001";
+  const consentByOwner = new Map();
+  const db = {
+    prepare(sql) {
+      return {
+        bind(...values) {
+          return {
+            async first() {
+              if (sql.includes("aria_user_roles")) return { userId: values[0], role: "user", active: 1 };
+              if (sql.includes("aria_memory_consent")) return consentByOwner.get(values[0]) || null;
+              return null;
+            },
+            async run() {
+              if (sql.includes("INSERT INTO aria_memory_consent")) {
+                consentByOwner.set(values[0], {
+                  enabled: values[1],
+                  consentVersion: "memory-v1",
+                  updatedAt: values[2]
+                });
+              }
+              return { success: true };
+            }
+          };
+        }
+      };
+    },
+    async batch() { return [{ success: true }, { success: true }]; }
+  };
+  const stored = new Map([
+    ["memory:v2:" + accountA, JSON.stringify([{ id: "a-note", text: "secret for A" }])],
+    ["memory:v2:" + accountB, JSON.stringify([{ id: "b-note", text: "secret for B" }])]
+  ]);
+  let storageReads = 0;
+  const env = {
+    ARIA_AUTH_MODE: "individual",
+    ARIA_AUTHZ_DB: db,
+    SUPABASE_URL: "https://project.supabase.co",
+    SUPABASE_ANON_KEY: "test-anon-key",
+    ARIA_MEMORY: {
+      async get(key, type) {
+        storageReads++;
+        const value = stored.get(key);
+        if (value === undefined) return null;
+        return type === "json" ? JSON.parse(value) : value;
+      },
+      async put(key, value) { stored.set(key, value); },
+      async delete(key) { stored.delete(key); }
+    }
+  };
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    if (String(url).endsWith("/auth/v1/user")) {
+      const token = options.headers.Authorization.replace(/^Bearer\s+/i, "");
+      return new Response(JSON.stringify({ id: token === "account-a" ? accountA : accountB }), {
+        status: 200, headers: { "Content-Type": "application/json" }
+      });
+    }
+    return new Response("unexpected provider call", { status: 500 });
+  });
+
+  const enableA = await worker.fetch(new Request("https://aria-staging.test/memory/consent", {
+    method: "POST",
+    headers: { Authorization: "Bearer account-a", "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled: true })
+  }), env);
+  assert.equal(enableA.status, 200);
+
+  const readB = await worker.fetch(new Request("https://aria-staging.test/memory", {
+    headers: { Authorization: "Bearer account-b", "X-ARIA-Memory-Consent": "true" }
+  }), env);
+  assert.equal(readB.status, 403);
+  assert.deepEqual(await readB.json(), { error: "memory_consent_required" });
+  assert.equal(storageReads, 0, "account B must not read storage based on account A's consent");
+
+  const consentA = await worker.fetch(new Request("https://aria-staging.test/memory/consent", {
+    headers: { Authorization: "Bearer account-a" }
+  }), env);
+  const consentB = await worker.fetch(new Request("https://aria-staging.test/memory/consent", {
+    headers: { Authorization: "Bearer account-b" }
+  }), env);
+  assert.equal((await consentA.json()).enabled, true);
+  assert.equal((await consentB.json()).enabled, false);
+});
+
+
 test("individual-auth memory consent is enforced and deletion fails closed without authorization storage", async (t) => {
   const ownerId = "123e4567-e89b-42d3-a456-426614174000";
   let memoryCalls = 0;
