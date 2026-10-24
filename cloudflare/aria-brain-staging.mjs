@@ -78,9 +78,12 @@ async function readAccountMemory(env, ownerId) {
   const db = env?.ARIA_AUTHZ_DB;
   if (!db || typeof db.prepare !== "function") throw new Error("memory_storage_unavailable");
   const row = await db.prepare(
-    "SELECT memories_json AS memoriesJson FROM aria_memory_documents WHERE owner_id = ? AND EXISTS (SELECT 1 FROM aria_memory_consent WHERE owner_id = ? AND enabled = 1) LIMIT 1"
-  ).bind(ownerId, ownerId).first();
-  if (!row) return [];
+    "SELECT c.enabled AS consentEnabled, d.memories_json AS memoriesJson FROM aria_memory_consent c LEFT JOIN aria_memory_documents d ON d.owner_id = c.owner_id WHERE c.owner_id = ? LIMIT 1"
+  ).bind(ownerId).first();
+  if (!row || (row.consentEnabled !== 1 && row.consentEnabled !== true)) {
+    throw new Error("memory_consent_required");
+  }
+  if (row.memoriesJson === null || row.memoriesJson === undefined) return [];
   if (typeof row.memoriesJson !== "string") throw new Error("invalid_memory_document");
   const memories = JSON.parse(row.memoriesJson);
   if (!Array.isArray(memories)) throw new Error("invalid_memory_document");
@@ -264,19 +267,26 @@ export default {
           : authMode === "legacy" && Boolean(env.ARIA_ACCESS_TOKEN);
       const individualMode = authMode === "individual" || authMode === "session_kv";
       const authorizationConfigured = !individualMode || Boolean(env.ARIA_AUTHZ_DB);
-      const memoryStorageConfigured = Boolean(env.ARIA_MEMORY);
+      const memoryStorageConfigured = authMode === "individual"
+        ? Boolean(env.ARIA_AUTHZ_DB && typeof env.ARIA_AUTHZ_DB.prepare === "function")
+        : Boolean(env.ARIA_MEMORY);
       let memoryConsentStoreConfigured = null;
       if (authMode === "individual" && env.ARIA_AUTHZ_DB && typeof env.ARIA_AUTHZ_DB.prepare === "function") {
         try {
           await env.ARIA_AUTHZ_DB.prepare(
             "SELECT owner_id FROM aria_memory_consent WHERE owner_id = ? LIMIT 1"
           ).bind("00000000-0000-4000-8000-000000000000").first();
+          await env.ARIA_AUTHZ_DB.prepare(
+            "SELECT owner_id FROM aria_memory_documents WHERE owner_id = ? LIMIT 1"
+          ).bind("00000000-0000-4000-8000-000000000000").first();
           memoryConsentStoreConfigured = true;
         } catch {
           memoryConsentStoreConfigured = false;
         }
       }
-      const memoryAvailable = memoryStorageConfigured && authMode !== "session_kv" && (authMode !== "individual" || memoryConsentStoreConfigured === true);
+      const memoryAvailable = authMode === "individual"
+        ? memoryStorageConfigured && memoryConsentStoreConfigured === true
+        : memoryStorageConfigured && authMode !== "session_kv";
       const memoryStatus = !memoryStorageConfigured
         ? "storage_not_configured"
         : authMode === "session_kv"
@@ -385,8 +395,13 @@ export default {
       try {
         if (req.method === "GET") {
           if (individualAuth) {
-            const memories = await readAccountMemory(env, ownerId);
-            return json({ memories, persisted: true });
+            try {
+              const memories = await readAccountMemory(env, ownerId);
+              return json({ memories, persisted: true });
+            } catch (error) {
+              if (error?.message === "memory_consent_required") return json({ error: "memory_consent_required" }, 403);
+              throw error;
+            }
           }
           const saved = await env.ARIA_MEMORY.get("memory:v1:" + clientId, "json");
           return json({ memories: Array.isArray(saved) ? saved : [], persisted: true });
