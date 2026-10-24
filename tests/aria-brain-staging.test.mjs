@@ -488,6 +488,62 @@ test("durable memory consent is isolated between authenticated accounts", async 
   assert.equal(JSON.parse(db.memories.get(accountB))[0].text, "secret for B");
 });
 
+test("D1 memory write is rejected if consent is revoked before the conditional write", async (t) => {
+  const ownerId = "123e4567-e89b-42d3-a456-426614174000";
+  const db = individualMemoryDb({
+    consent: { [ownerId]: { enabled: 1, consentVersion: "memory-v1", updatedAt: 1 } }
+  });
+  const prepare = db.prepare.bind(db);
+  db.prepare = (sql) => {
+    const statement = prepare(sql);
+    if (!sql.includes("aria_user_roles")) return statement;
+    return {
+      bind(...values) {
+        const bound = statement.bind(...values);
+        return {
+          ...bound,
+          async first() {
+            // Simulate a concurrent revocation after the route's initial consent
+            // check but before the memory INSERT statement reaches D1.
+            db.consents.set(ownerId, { enabled: 0, consentVersion: "memory-v1", updatedAt: 2 });
+            return bound.first();
+          }
+        };
+      }
+    };
+  };
+  const env = {
+    ARIA_AUTH_MODE: "individual",
+    ARIA_AUTHZ_DB: db,
+    SUPABASE_URL: "https://project.supabase.co",
+    SUPABASE_ANON_KEY: "test-anon-key",
+    ARIA_MEMORY: {
+      async get() { throw new Error("individual memory must not use KV"); },
+      async put() { throw new Error("individual memory must not use KV"); },
+      async delete() { throw new Error("individual memory must not use KV"); }
+    }
+  };
+  t.mock.method(globalThis, "fetch", async (url) => {
+    if (String(url).endsWith("/auth/v1/user")) {
+      return new Response(JSON.stringify({ id: ownerId }), {
+        status: 200, headers: { "Content-Type": "application/json" }
+      });
+    }
+    return new Response("unexpected provider call", { status: 500 });
+  });
+
+  const response = await worker.fetch(new Request("https://aria-staging.test/memory", {
+    method: "PUT",
+    headers: { Authorization: "Bearer account-token", "Content-Type": "application/json" },
+    body: JSON.stringify({ memories: [{ text: "must not persist after revocation" }] })
+  }), env);
+
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { error: "memory_consent_required" });
+  assert.equal(db.memories.has(ownerId), false, "conditional D1 write must not persist after revocation");
+});
+
+
 test("individual-auth memory consent is enforced and deletion fails closed without authorization storage", async (t) => {
   const ownerId = "123e4567-e89b-42d3-a456-426614174000";
   let memoryCalls = 0;
