@@ -317,8 +317,8 @@ test("memory API requires explicit consent for reads and writes but permits dele
 
 test("durable memory consent is account-scoped, persisted, and revocable", async (t) => {
   const ownerId = "123e4567-e89b-42d3-a456-426614174000";
-  const db = statefulMemoryConsentDb(false);
-  const stored = new Map([["memory:v2:" + ownerId, JSON.stringify([{ id: "note", text: "private" }])]]);
+  const db = individualMemoryDb({ documents: { [ownerId]: JSON.stringify([{ id: "note", text: "private" }]) } });
+  const stored = new Map();
   let memoryCalls = 0;
   const memory = {
     async get(key, type) {
@@ -369,7 +369,7 @@ test("durable memory consent is account-scoped, persisted, and revocable", async
   }), individualEnv);
   assert.equal(allowed.status, 200, "server consent, not a client header, authorizes reads");
   assert.deepEqual((await allowed.json()).memories, [{ id: "note", text: "private" }]);
-  assert.equal(memoryCalls, 1);
+  assert.equal(memoryCalls, 0, "individual account memory no longer uses KV");
 
   const revoke = await worker.fetch(new Request("https://aria-staging.test/memory/consent", {
     method: "POST",
@@ -383,7 +383,7 @@ test("durable memory consent is account-scoped, persisted, and revocable", async
     headers: { Authorization: "Bearer account-token", "X-ARIA-Memory-Consent": "true" }
   }), individualEnv);
   assert.equal(blocked.status, 403, "a stale or forged client header must not restore revoked consent");
-  assert.equal(memoryCalls, 1, "revocation must prevent further storage reads");
+  assert.equal(memoryCalls, 0, "individual account memory no longer uses KV");
 });
 
 
@@ -393,7 +393,7 @@ test("chat cannot read or write persistent memory when durable consent is absent
   let providerBody;
   const individualEnv = {
     ARIA_AUTH_MODE: "individual",
-    ARIA_AUTHZ_DB: authorizationDb(false),
+    ARIA_AUTHZ_DB: db,
     SUPABASE_URL: "https://project.supabase.co",
     SUPABASE_ANON_KEY: "test-anon-key",
     OPENAI_API_KEY: "test-provider-key",
@@ -434,37 +434,12 @@ test("chat cannot read or write persistent memory when durable consent is absent
 test("durable memory consent is isolated between authenticated accounts", async (t) => {
   const accountA = "123e4567-e89b-42d3-a456-426614174000";
   const accountB = "123e4567-e89b-42d3-a456-426614174001";
-  const consentByOwner = new Map();
-  const db = {
-    prepare(sql) {
-      return {
-        bind(...values) {
-          return {
-            async first() {
-              if (sql.includes("aria_user_roles")) return { userId: values[0], role: "user", active: 1 };
-              if (sql.includes("aria_memory_consent")) return consentByOwner.get(values[0]) || null;
-              return null;
-            },
-            async run() {
-              if (sql.includes("INSERT INTO aria_memory_consent")) {
-                consentByOwner.set(values[0], {
-                  enabled: values[1],
-                  consentVersion: "memory-v1",
-                  updatedAt: values[2]
-                });
-              }
-              return { success: true };
-            }
-          };
-        }
-      };
-    },
-    async batch() { return [{ success: true }, { success: true }]; }
-  };
-  const stored = new Map([
-    ["memory:v2:" + accountA, JSON.stringify([{ id: "a-note", text: "secret for A" }])],
-    ["memory:v2:" + accountB, JSON.stringify([{ id: "b-note", text: "secret for B" }])]
-  ]);
+  const db = individualMemoryDb({
+    documents: {
+      [accountA]: JSON.stringify([{ id: "a-note", text: "secret for A" }]),
+      [accountB]: JSON.stringify([{ id: "b-note", text: "secret for B" }])
+    }
+  });
   let storageReads = 0;
   const env = {
     ARIA_AUTH_MODE: "individual",
@@ -472,19 +447,14 @@ test("durable memory consent is isolated between authenticated accounts", async 
     SUPABASE_URL: "https://project.supabase.co",
     SUPABASE_ANON_KEY: "test-anon-key",
     ARIA_MEMORY: {
-      async get(key, type) {
-        storageReads++;
-        const value = stored.get(key);
-        if (value === undefined) return null;
-        return type === "json" ? JSON.parse(value) : value;
-      },
-      async put(key, value) { stored.set(key, value); },
-      async delete(key) { stored.delete(key); }
+      async get() { storageReads++; return []; },
+      async put() { storageReads++; },
+      async delete() { storageReads++; }
     }
   };
   t.mock.method(globalThis, "fetch", async (url, options) => {
     if (String(url).endsWith("/auth/v1/user")) {
-      const token = options.headers.Authorization.replace(/^Bearer\s+/i, "");
+      const token = options.headers.Authorization.replace(/^Bearer\\s+/i, "");
       return new Response(JSON.stringify({ id: token === "account-a" ? accountA : accountB }), {
         status: 200, headers: { "Content-Type": "application/json" }
       });
@@ -504,7 +474,7 @@ test("durable memory consent is isolated between authenticated accounts", async 
   }), env);
   assert.equal(readB.status, 403);
   assert.deepEqual(await readB.json(), { error: "memory_consent_required" });
-  assert.equal(storageReads, 0, "account B must not read storage based on account A's consent");
+  assert.equal(storageReads, 0, "individual memory must never touch the legacy KV store");
 
   const consentA = await worker.fetch(new Request("https://aria-staging.test/memory/consent", {
     headers: { Authorization: "Bearer account-a" }
@@ -514,13 +484,15 @@ test("durable memory consent is isolated between authenticated accounts", async 
   }), env);
   assert.equal((await consentA.json()).enabled, true);
   assert.equal((await consentB.json()).enabled, false);
+  assert.equal(JSON.parse(db.memories.get(accountA))[0].text, "secret for A");
+  assert.equal(JSON.parse(db.memories.get(accountB))[0].text, "secret for B");
 });
-
 
 test("individual-auth memory consent is enforced and deletion fails closed without authorization storage", async (t) => {
   const ownerId = "123e4567-e89b-42d3-a456-426614174000";
   let memoryCalls = 0;
   const store = new Map([["memory:v2:" + ownerId, JSON.stringify([{ id: "private", text: "private note" }])]]);
+  const db = individualMemoryDb({ documents: { [ownerId]: JSON.stringify([{ id: "private", text: "private note" }]) } });
   const memory = {
     async get(key, type) {
       memoryCalls++;
@@ -583,8 +555,8 @@ test("individual-auth memory consent is enforced and deletion fails closed witho
   }), individualEnv);
   assert.equal(deletion.status, 200);
   assert.deepEqual(await deletion.json(), { deleted: true, persisted: true });
-  assert.equal(memoryCalls, 1);
-  assert.equal(store.has("memory:v2:" + ownerId), false, "authorized deletion should remove only the authenticated account key");
+  assert.equal(memoryCalls, 0, "individual account deletion must use D1, not KV");
+  assert.equal(db.memories.has(ownerId), false, "authorized deletion should remove only the authenticated account document");
 });
 
 
@@ -783,26 +755,15 @@ test("individual-auth mode rejects a token that Supabase does not validate", asy
 test("individual-auth memory is isolated by the validated account, not clientId", async (t) => {
   const ownerA = "123e4567-e89b-42d3-a456-426614174000";
   const ownerB = "223e4567-e89b-42d3-a456-426614174001";
-  const store = new Map();
+  const enabled = { enabled: 1, consentVersion: "memory-v1", updatedAt: 1 };
+  const db = individualMemoryDb({ consent: { [ownerA]: enabled, [ownerB]: enabled } });
   const memoryEnv = {
     ARIA_AUTH_MODE: "individual",
-    ARIA_AUTHZ_DB: authorizationDb(),
+    ARIA_AUTHZ_DB: db,
     SUPABASE_URL: "https://project.supabase.co",
     SUPABASE_ANON_KEY: "test-anon-key",
     OPENAI_API_KEY: "test-provider-key",
-    ARIA_MEMORY: {
-      async get(key, type) {
-        const value = store.get(key);
-        if (value === undefined) return null;
-        return type === "json" ? JSON.parse(value) : value;
-      },
-      async put(key, value) {
-        store.set(key, value);
-      },
-      async delete(key) {
-        store.delete(key);
-      }
-    }
+    ARIA_MEMORY: env.ARIA_MEMORY
   };
 
   t.mock.method(globalThis, "fetch", async (url, options) => {
@@ -820,7 +781,6 @@ test("individual-auth memory is isolated by the validated account, not clientId"
     method: "PUT",
     headers: {
       "Authorization": "Bearer token-a",
-      "X-ARIA-Memory-Consent": "true",
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
@@ -829,33 +789,28 @@ test("individual-auth memory is isolated by the validated account, not clientId"
     })
   }), memoryEnv);
   assert.equal(putResponse.status, 200);
-  assert.equal(store.has("memory:v2:" + ownerA), true);
-  assert.equal(store.has("memory:v2:" + ownerB), false);
+  assert.equal(JSON.parse(db.memories.get(ownerA))[0].text, "Note privée du compte A");
+  assert.equal(db.memories.has(ownerB), false);
 
   const getResponse = await worker.fetch(new Request(
     "https://aria-staging.test/memory?clientId=" + ownerA,
-    { method: "GET", headers: { "Authorization": "Bearer token-b", "X-ARIA-Memory-Consent": "true" } }
+    { method: "GET", headers: { "Authorization": "Bearer token-b" } }
   ), memoryEnv);
   assert.equal(getResponse.status, 200);
   const accountBMemory = await getResponse.json();
   assert.deepEqual(accountBMemory.memories, []);
   assert.equal(accountBMemory.persisted, true);
 
-  // Seed B's own key so the test proves DELETE actually removes B's data.
-  store.set("memory:v2:" + ownerB, JSON.stringify([{ id: "b-note", text: "Note du compte B" }]));
-
-  // A delete request authenticated as B must only address B's canonical key,
-  // even when the client supplies A's identifier in the query string.
+  db.memories.set(ownerB, JSON.stringify([{ id: "b-note", text: "Note du compte B" }]));
   const deleteResponse = await worker.fetch(new Request(
     "https://aria-staging.test/memory?clientId=" + ownerA,
     { method: "DELETE", headers: { "Authorization": "Bearer token-b" } }
   ), memoryEnv);
   assert.equal(deleteResponse.status, 200);
   assert.deepEqual(await deleteResponse.json(), { deleted: true, persisted: true });
-  assert.equal(store.has("memory:v2:" + ownerA), true, "account B must not delete account A's memory");
-  assert.equal(store.has("memory:v2:" + ownerB), false, "account B's own memory key remains isolated");
+  assert.equal(db.memories.has(ownerA), true, "account B must not delete account A's memory");
+  assert.equal(db.memories.has(ownerB), false, "account B's own memory document is deleted");
 });
-
 
 test("unknown auth mode fails closed instead of falling back to the shared token", async () => {
   const response = await worker.fetch(request({ messages: [{ role: "user", content: "Bonjour" }] }), {
@@ -932,25 +887,21 @@ test("individual-auth mode rejects a successful auth response without a valid us
 test("individual-auth DELETE removes only the authenticated account memory", async (t) => {
   const ownerA = "123e4567-e89b-42d3-a456-426614174000";
   const ownerB = "223e4567-e89b-42d3-a456-426614174001";
-  const store = new Map([
-    ["memory:v2:" + ownerA, JSON.stringify([{ id: "a", text: "Mémoire A" }])],
-    ["memory:v2:" + ownerB, JSON.stringify([{ id: "b", text: "Mémoire B" }])]
-  ]);
+  const enabled = { enabled: 1, consentVersion: "memory-v1", updatedAt: 1 };
+  const db = individualMemoryDb({
+    consent: { [ownerA]: enabled, [ownerB]: enabled },
+    documents: {
+      [ownerA]: JSON.stringify([{ id: "a", text: "Mémoire A" }]),
+      [ownerB]: JSON.stringify([{ id: "b", text: "Mémoire B" }])
+    }
+  });
   const memoryEnv = {
     ARIA_AUTH_MODE: "individual",
-    ARIA_AUTHZ_DB: authorizationDb(),
+    ARIA_AUTHZ_DB: db,
     SUPABASE_URL: "https://project.supabase.co",
     SUPABASE_ANON_KEY: "test-anon-key",
     OPENAI_API_KEY: "test-provider-key",
-    ARIA_MEMORY: {
-      async get(key, type) {
-        const value = store.get(key);
-        if (value === undefined) return null;
-        return type === "json" ? JSON.parse(value) : value;
-      },
-      async put(key, value) { store.set(key, value); },
-      async delete(key) { store.delete(key); }
-    }
+    ARIA_MEMORY: env.ARIA_MEMORY
   };
 
   t.mock.method(globalThis, "fetch", async (url, options) => {
@@ -971,10 +922,9 @@ test("individual-auth DELETE removes only the authenticated account memory", asy
 
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { deleted: true, persisted: true });
-  assert.equal(store.has("memory:v2:" + ownerA), false);
-  assert.equal(store.has("memory:v2:" + ownerB), true);
+  assert.equal(db.memories.has(ownerA), false);
+  assert.equal(db.memories.has(ownerB), true);
 });
-
 
 test("session_kv mode derives identity from the hashed session record but blocks memory until migration", async () => {
   const token = "session-token-for-staging-test-12345678901234567890";
