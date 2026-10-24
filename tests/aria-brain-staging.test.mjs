@@ -454,7 +454,7 @@ test("durable memory consent is isolated between authenticated accounts", async 
   };
   t.mock.method(globalThis, "fetch", async (url, options) => {
     if (String(url).endsWith("/auth/v1/user")) {
-      const token = options.headers.Authorization.replace(/^Bearer\\s+/i, "");
+      const token = options.headers.Authorization.replace(/^Bearer\s+/i, "");
       return new Response(JSON.stringify({ id: token === "account-a" ? accountA : accountB }), {
         status: 200, headers: { "Content-Type": "application/json" }
       });
