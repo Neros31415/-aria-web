@@ -343,9 +343,6 @@ export default {
       if (individualAuth && !canonicalAccountIdentity) {
         return json({ error: "identity_migration_required" }, 409);
       }
-      if (individualAuth && (!env.ARIA_AUTHZ_DB || typeof env.ARIA_AUTHZ_DB.prepare !== "function")) {
-        return json({ error: "memory_storage_unavailable" }, 503);
-      }
       if (!individualAuth && !env.ARIA_MEMORY) return json({ error: "memory_storage_unavailable" }, 503);
       let clientId = url.searchParams.get("clientId");
       let body;
