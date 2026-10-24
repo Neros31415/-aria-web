@@ -80,13 +80,13 @@ function individualMemoryDb({ consent = {}, documents = {} } = {}) {
           return {
             async first() {
               if (sql.includes("aria_user_roles")) return { userId: values[0], role: "user", active: 1 };
-              if (sql.includes("aria_memory_consent")) return consents.get(values[0]) || null;
               if (sql.includes("aria_memory_documents")) {
                 const ownerId = values[0];
                 if (consents.get(ownerId)?.enabled !== 1 && consents.get(ownerId)?.enabled !== true) return null;
                 const memoriesJson = memories.get(ownerId);
                 return memoriesJson === undefined ? null : { memoriesJson };
               }
+              if (sql.includes("aria_memory_consent")) return consents.get(values[0]) || null;
               return null;
             },
             async run() {
@@ -393,7 +393,7 @@ test("chat cannot read or write persistent memory when durable consent is absent
   let providerBody;
   const individualEnv = {
     ARIA_AUTH_MODE: "individual",
-    ARIA_AUTHZ_DB: db,
+    ARIA_AUTHZ_DB: authorizationDb(false),
     SUPABASE_URL: "https://project.supabase.co",
     SUPABASE_ANON_KEY: "test-anon-key",
     OPENAI_API_KEY: "test-provider-key",
