@@ -67,6 +67,56 @@ function statefulMemoryConsentDb(initialEnabled = false) {
   };
 }
 
+
+function individualMemoryDb({ consent = {}, documents = {} } = {}) {
+  const consents = new Map(Object.entries(consent));
+  const memories = new Map(Object.entries(documents));
+  return {
+    consents,
+    memories,
+    prepare(sql) {
+      return {
+        bind(...values) {
+          return {
+            async first() {
+              if (sql.includes("aria_user_roles")) return { userId: values[0], role: "user", active: 1 };
+              if (sql.includes("aria_memory_consent")) return consents.get(values[0]) || null;
+              if (sql.includes("aria_memory_documents")) {
+                const ownerId = values[0];
+                if (consents.get(ownerId)?.enabled !== 1 && consents.get(ownerId)?.enabled !== true) return null;
+                const memoriesJson = memories.get(ownerId);
+                return memoriesJson === undefined ? null : { memoriesJson };
+              }
+              return null;
+            },
+            async run() {
+              if (sql.includes("INSERT INTO aria_memory_consent")) {
+                consents.set(values[0], { enabled: values[1], consentVersion: "memory-v1", updatedAt: values[2] });
+                return { success: true, meta: { changes: 1 } };
+              }
+              if (sql.includes("INSERT INTO aria_memory_documents")) {
+                const [ownerId, memoriesJson, updatedAt, consentOwner, conflictOwner] = values;
+                if (consentOwner !== ownerId || conflictOwner !== ownerId ||
+                    (consents.get(ownerId)?.enabled !== 1 && consents.get(ownerId)?.enabled !== true)) {
+                  return { success: true, meta: { changes: 0 } };
+                }
+                memories.set(ownerId, memoriesJson);
+                return { success: true, meta: { changes: 1 } };
+              }
+              if (sql.includes("DELETE FROM aria_memory_documents")) {
+                const existed = memories.delete(values[0]);
+                return { success: true, meta: { changes: existed ? 1 : 0 } };
+              }
+              return { success: true, meta: { changes: 1 } };
+            }
+          };
+        }
+      };
+    },
+    async batch() { return [{ success: true }, { success: true }]; }
+  };
+}
+
 function request(body, extraHeaders = {}) {
   return new Request("https://aria-staging.test/chat", {
     method: "POST",
