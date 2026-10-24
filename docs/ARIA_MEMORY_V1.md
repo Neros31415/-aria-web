@@ -2,7 +2,8 @@
 
 ## What it does
 
-- Stores up to 100 short notes per browser profile in the Cloudflare Workers KV namespace `ARIA_MEMORY_STAGING`, with EU jurisdiction.
+- In the legacy single-user alpha only, stores up to 100 short notes per browser profile in the Cloudflare Workers KV namespace `ARIA_MEMORY_STAGING`, with EU jurisdiction.
+- In individual-account mode, stores the account's memory document in D1 alongside the durable consent ledger; the canonical authenticated account UUID is the only owner key.
 - Uses a random UUID stored locally as the profile key; the access token remains in `sessionStorage` and is not committed or stored with notes.
 - Loads saved notes into each model request so ARIA can use them in later chats.
 - Supports explicit capture in French: messages beginning with `Retiens que`, `Retiens bien que`, `Mémorise`, `Souviens-toi que`, or `N'oublie pas que` are saved before the model responds.
@@ -32,7 +33,7 @@ The worker uses `store: false` for Responses API requests. Memory storage is sep
 
 ## Limitations
 
-This is a single-user alpha, not a multi-user account system. The random browser profile ID is an identifier, not an authentication credential; access is protected by the ARIA access token. Do not reuse the same access token with untrusted users. KV is persistent but eventually consistent, so it is not a transactional database. No automatic summarization, conflict resolution, or cross-device account linking is implemented yet.
+The legacy KV path remains a single-user alpha, not a multi-user account system. The random browser profile ID is an identifier, not an authentication credential; access is protected by the ARIA access token. Do not reuse the same access token with untrusted users. KV is persistent but eventually consistent, so it is not a transactional database. No automatic summarization, conflict resolution, or cross-device account linking is implemented yet.
 
 
 ## Identity migration gate (23 October 2026)
@@ -49,3 +50,19 @@ The regression tests for this gate passed in PR #35. This change was merged into
 
 
 Defense in depth added on 23 October 2026: the D1 authorization adapter and default-role provisioning now accept canonical account UUIDs only. Opaque alpha identifiers are rejected before any D1 query or write, even if a future caller bypasses the Worker-level session_kv gate. This is not an identity migration and does not restore persistent memory for existing alpha sessions.
+
+## Account memory and durable consent — PR #43, 24 October 2026
+
+The individual-account path uses the authenticated canonical Supabase UUID and the D1 binding `ARIA_AUTHZ_DB` for both the durable consent ledger and memory documents.
+
+- `migrations/0002_aria_memory_consent.sql` creates the account-scoped consent record.
+- `migrations/0003_aria_memory_documents.sql` creates the account-scoped memory document table with JSON-array validation and a foreign key to the consent record.
+- `GET /memory/consent` returns the server-stored state.
+- `POST /memory/consent` accepts only `{ "enabled": true|false }`; enabling requires the account's memory-write permission. Revocation remains available to the authenticated owner even if the role is inactive.
+- Individual-account `GET /memory` and chat reads query D1 with a consent predicate. Individual-account `PUT /memory` and chat writes use a conditional D1 statement that only inserts/updates while the consent row is enabled. This removes the prior cross-store D1-consent/KV-payload race for individual-account writes.
+- A client-supplied `X-ARIA-Memory-Consent` header cannot grant or restore individual-account consent. The legacy single-user alpha still uses KV and the header guard.
+- `DELETE /memory` remains available after consent revocation, but still requires authenticated ownership and authorization.
+
+**Release limitation:** migrations 0002 and 0003 are versioned in this pull request but have not been applied to the actual D1 database. Individual-account persistent memory must remain unavailable in any environment where the D1 schema is absent; requests fail closed. The legacy alpha compatibility path remains separate and does not provide account-level durable consent.
+
+**Concurrency semantics:** a D1 read is authorized at the time its SQL statement executes. Writes include the consent predicate in the same D1 statement as the insert/update, so a revocation committed before that statement prevents persistence. An operation already linearized before revocation may finish; the interface should invalidate stale in-flight UI syncs, and the system must not promise cancellation of data already returned to a client. This is stronger than checking D1 and then writing the payload to KV, but it is not a guarantee that a response already in flight can be recalled.

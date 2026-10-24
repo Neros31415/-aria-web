@@ -1,4 +1,5 @@
 import test from "node:test";
+import vm from "node:vm";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import worker from "../cloudflare/aria-brain-staging.mjs";
@@ -74,6 +75,17 @@ test("voice frontend sends preferences and explicit memory consent and applies s
   assert.match(app, /function applyIntentAction/);
   assert.match(app, /"finance"/);
   assert.match(app, /scientific_model/);
+});
+
+test("memory consent revocation aborts pending requests and ignores stale remote responses", () => {
+  assert.ok(app.includes("const activeMemoryControllers = new Set();"));
+  assert.ok(app.includes("memorySyncGeneration += 1;"));
+  assert.ok(app.includes("for (const controller of activeMemoryControllers) controller.abort();"));
+  assert.ok(app.includes("signal: controller.signal"));
+  assert.ok(app.includes("if (!isMemoryRequestCurrent(generation)) return"));
+  assert.ok(app.includes("if (previousMemoryConsent && !profile.memoryConsent)"));
+  assert.ok(app.includes("Requête mémoire interrompue : l’application ignore sa réponse."));
+  assert.ok(app.includes("L’état distant peut être incertain si le serveur avait déjà traité la requête"));
 });
 
 test("map, finance and science scenes use real external sources and disclose their limitations", () => {
@@ -227,4 +239,114 @@ test("map route guidance renders localized steps, distance, duration and a clear
   assert.match(visualEngine, /ITINÉRAIRE CALCULÉ/);
   assert.match(css, /aria-map-layout/);
   assert.match(css, /aria-route-panel/);
+});
+
+test("memory consent revocation ignores a late remote response at runtime", async () => {
+  const syncStart = app.indexOf("async function syncRemoteMemory()");
+  const syncEnd = app.indexOf("function closePanel(id)", syncStart);
+  assert.ok(syncStart >= 0 && syncEnd > syncStart, "memory sync functions must be present");
+  const memoryFunctions = app.slice(syncStart, syncEnd);
+
+  let resolveFetch;
+  const storageWrites = [];
+  const elements = { memoryStatus: { textContent: "" } };
+  const context = {
+    profile: { memoryConsent: true },
+    memories: [{ text: "local memory" }],
+    memorySyncGeneration: 0,
+    isMemoryRequestCurrent: (generation) => generation === context.memorySyncGeneration && context.profile.memoryConsent === true,
+    activeMemoryControllers: new Set(),
+    API_BASE: endpoint,
+    getApiToken: () => "test-token",
+    getClientId: () => clientId,
+    $: (id) => elements[id] || (elements[id] = { textContent: "" }),
+    localStorage: { setItem: (...args) => storageWrites.push(args) },
+    renderMemory: () => {},
+    fetch: (_url, options) => {
+      context.requestSignal = options.signal;
+      return new Promise((resolve) => { resolveFetch = resolve; });
+    },
+    AbortController,
+    encodeURIComponent,
+    console
+  };
+  vm.createContext(context);
+  vm.runInContext(memoryFunctions, context);
+
+  const syncPromise = vm.runInContext("syncRemoteMemory()", context);
+  assert.equal(context.activeMemoryControllers.size, 1);
+  const controllerSignal = context.requestSignal;
+  context.profile.memoryConsent = false;
+  context.memorySyncGeneration += 1;
+  for (const controller of context.activeMemoryControllers) controller.abort();
+  context.activeMemoryControllers.clear();
+  assert.equal(controllerSignal.aborted, true);
+
+  // Simulate a fetch implementation/network response that completes despite abort.
+  resolveFetch({
+    ok: true,
+    status: 200,
+    async json() { return { memories: [{ text: "stale remote memory" }] }; }
+  });
+  await syncPromise;
+
+  assert.deepEqual(context.memories, [{ text: "local memory" }]);
+  assert.equal(storageWrites.length, 0, "stale response must not write localStorage");
+  assert.equal(context.activeMemoryControllers.size, 0);
+});
+
+test("memory consent revocation ignores a late remote write response at runtime", async () => {
+  const syncStart = app.indexOf("async function syncRemoteMemory()");
+  const syncEnd = app.indexOf("function closePanel(id)", syncStart);
+  assert.ok(syncStart >= 0 && syncEnd > syncStart, "memory sync functions must be present");
+  const memoryFunctions = app.slice(syncStart, syncEnd);
+
+  let resolveFetch;
+  const storageWrites = [];
+  const elements = { memoryStatus: { textContent: "" } };
+  const context = {
+    profile: { memoryConsent: true },
+    memories: [{ text: "local memory after edit" }],
+    memorySyncGeneration: 0,
+    isMemoryRequestCurrent: (generation) => generation === context.memorySyncGeneration && context.profile.memoryConsent === true,
+    activeMemoryControllers: new Set(),
+    API_BASE: endpoint,
+    getApiToken: () => "test-token",
+    getClientId: () => clientId,
+    $: (id) => elements[id] || (elements[id] = { textContent: "" }),
+    localStorage: { setItem: (...args) => storageWrites.push(args) },
+    renderMemory: () => {},
+    fetch: (_url, options) => {
+      context.requestSignal = options.signal;
+      context.requestOptions = options;
+      return new Promise((resolve) => { resolveFetch = resolve; });
+    },
+    AbortController,
+    encodeURIComponent,
+    console
+  };
+  vm.createContext(context);
+  vm.runInContext(memoryFunctions, context);
+
+  const savePromise = vm.runInContext("saveRemoteMemory()", context);
+  assert.equal(context.activeMemoryControllers.size, 1);
+  assert.equal(context.requestOptions.method, "PUT");
+  const controllerSignal = context.requestSignal;
+  context.profile.memoryConsent = false;
+  context.memorySyncGeneration += 1;
+  for (const controller of context.activeMemoryControllers) controller.abort();
+  context.activeMemoryControllers.clear();
+  assert.equal(controllerSignal.aborted, true);
+
+  // Simulate a write request that was already received by the server before abort.
+  resolveFetch({
+    ok: true,
+    status: 200,
+    async json() { return { persisted: true, memories: [{ text: "stale remote write" }] }; }
+  });
+  assert.equal(await savePromise, false);
+
+  assert.deepEqual(context.memories, [{ text: "local memory after edit" }]);
+  assert.equal(storageWrites.length, 0, "stale write response must not overwrite localStorage");
+  assert.equal(context.activeMemoryControllers.size, 0);
 });

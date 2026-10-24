@@ -14,6 +14,16 @@ let requestInFlight = false;
 let turnInProgress = false;
 let turnGeneration = 0;
 let activeChatController = null;
+let memorySyncGeneration = 0;
+const activeMemoryControllers = new Set();
+function cancelRemoteMemoryRequests() {
+  memorySyncGeneration += 1;
+  for (const controller of activeMemoryControllers) controller.abort();
+  activeMemoryControllers.clear();
+}
+function isMemoryRequestCurrent(generation) {
+  return generation === memorySyncGeneration && profile.memoryConsent === true;
+}
 function getClientId() {
   let id = localStorage.getItem(KEYS.clientId);
   if (!id) {
@@ -29,6 +39,29 @@ function setApiToken(value) {
   const token = value.trim();
   if (token) sessionStorage.setItem(SESSION_TOKEN_KEY, token);
   else sessionStorage.removeItem(SESSION_TOKEN_KEY);
+}
+
+async function persistRemoteMemoryConsent(enabled) {
+  const token = getApiToken();
+  if (!token) return { ok: false, reason: "token_missing" };
+  try {
+    const response = await fetch(API_BASE + "/memory/consent", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled })
+    });
+    let data = null;
+    try { data = await response.json(); } catch {}
+    if (response.ok && data?.persisted === true && data.enabled === enabled) {
+      return { ok: true };
+    }
+    if (response.status === 409 && data?.error === "individual_auth_required") {
+      return { ok: false, reason: "alpha_unsupported" };
+    }
+    return { ok: false, reason: data?.error || "server_refused" };
+  } catch {
+    return { ok: false, reason: "network_error" };
+  }
 }
 
 // The user explicitly requested a fresh personal start. Remove legacy ARIA
@@ -221,15 +254,24 @@ function openPanel(id) {
   }
 }
 async function syncRemoteMemory() {
+  if (profile.memoryConsent !== true) {
+    $("memoryStatus").textContent = "Mémoire désactivée : aucune nouvelle lecture distante ne sera lancée. Les souvenirs affichés restent locaux.";
+    return;
+  }
   const token = getApiToken();
   if (!token) {
     $("memoryStatus").textContent = "Mémoire locale affichée. Configurez le jeton alpha pour synchroniser la mémoire distante.";
     return;
   }
+  const generation = memorySyncGeneration;
+  const controller = new AbortController();
+  activeMemoryControllers.add(controller);
   try {
     const response = await fetch(API_BASE + "/memory?clientId=" + encodeURIComponent(getClientId()), {
-      headers: { "Authorization": "Bearer " + token }
+      headers: { "Authorization": "Bearer " + token, "X-ARIA-Memory-Consent": "true" },
+      signal: controller.signal
     });
+    if (!isMemoryRequestCurrent(generation)) return;
     if (!response.ok) {
       $("memoryStatus").textContent = response.status === 401
         ? "Jeton refusé : la mémoire distante n'a pas été synchronisée."
@@ -237,30 +279,44 @@ async function syncRemoteMemory() {
       return;
     }
     const data = await response.json();
+    if (!isMemoryRequestCurrent(generation)) return;
     if (!Array.isArray(data.memories)) throw new Error("invalid memory response");
     memories = data.memories;
     localStorage.setItem(KEYS.memory, JSON.stringify(memories));
     renderMemory();
     $("memoryStatus").textContent = "Mémoire synchronisée avec le serveur.";
   } catch {
-    $("memoryStatus").textContent = "Synchronisation impossible. Les données affichées restent locales.";
+    if (isMemoryRequestCurrent(generation)) {
+      $("memoryStatus").textContent = "Synchronisation impossible. Les données affichées restent locales.";
+    }
+  } finally {
+    activeMemoryControllers.delete(controller);
   }
 }
 async function saveRemoteMemory() {
-  const token = getApiToken();
-  if (!token) {
-    $("memoryStatus").textContent = "Modification locale enregistrée. La suppression distante n’est pas confirmée : configurez un jeton alpha pour synchroniser.";
+  if (profile.memoryConsent !== true) {
+    $("memoryStatus").textContent = "Mémoire désactivée : aucune nouvelle écriture distante ne sera lancée. Les changements restent locaux.";
     return false;
   }
+  const token = getApiToken();
+  if (!token) {
+    $("memoryStatus").textContent = "Modification locale enregistrée. La suppression distante n’est pas confirmée : configurez le jeton alpha pour synchroniser.";
+    return false;
+  }
+  const generation = memorySyncGeneration;
+  const controller = new AbortController();
+  activeMemoryControllers.add(controller);
   try {
     const response = await fetch(API_BASE + "/memory", {
       method: "PUT",
-      headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
+      headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json", "X-ARIA-Memory-Consent": "true" },
       body: JSON.stringify({
         clientId: getClientId(),
         memories: memories.map(item => typeof item === "string" ? {text:item} : item)
-      })
+      }),
+      signal: controller.signal
     });
+    if (!isMemoryRequestCurrent(generation)) return false;
     if (!response.ok) {
       $("memoryStatus").textContent = response.status === 401
         ? "Modification locale enregistrée. Jeton refusé : la modification distante n’est pas confirmée."
@@ -268,6 +324,7 @@ async function saveRemoteMemory() {
       return false;
     }
     const data = await response.json();
+    if (!isMemoryRequestCurrent(generation)) return false;
     if (data.persisted !== true || !Array.isArray(data.memories)) {
       $("memoryStatus").textContent = "Modification locale enregistrée. Réponse serveur insuffisante : la modification distante n’est pas confirmée.";
       return false;
@@ -278,8 +335,14 @@ async function saveRemoteMemory() {
     $("memoryStatus").textContent = "Mémoire distante mise à jour et confirmée par le serveur.";
     return true;
   } catch {
-    $("memoryStatus").textContent = "Modification locale enregistrée. La synchronisation distante a échoué; l’état serveur reste incertain.";
+    if (isMemoryRequestCurrent(generation)) {
+      $("memoryStatus").textContent = "Modification locale enregistrée. La synchronisation distante a échoué; l’état serveur reste incertain.";
+    } else {
+      $("memoryStatus").textContent = "Requête mémoire interrompue : l’application ignore sa réponse. L’état distant peut être incertain si le serveur avait déjà traité la requête.";
+    }
     return false;
+  } finally {
+    activeMemoryControllers.delete(controller);
   }
 }
 function closePanel(id) { $(id).hidden = true; }
@@ -609,6 +672,15 @@ async function handleOnboardingAnswer(text) {
     profile.memoryConsent = affirmative;
   }
   saveProfile();
+  if (q.key === "memoryConsent") {
+    void persistRemoteMemoryConsent(profile.memoryConsent).then(result => {
+      if (!result.ok && $("memoryStatus")) {
+        $("memoryStatus").textContent = result.reason === "alpha_unsupported"
+          ? "Le consentement durable sera disponible après activation de l’authentification individuelle."
+          : "Le choix mémoire est enregistré localement ; sa persistance côté serveur n’a pas été confirmée.";
+      }
+    });
+  }
   onboardingStep += 1;
   if (onboardingStep < onboardingQuestions.length) {
     speak(onboardingQuestions[onboardingStep].prompt, {resume:true});
@@ -661,14 +733,34 @@ function finishSetupIfReturning() {
     $("voiceStart").textContent = "Commencer à parler";
   }
 }
-function saveSettingsFromDialog() {
+async function saveSettingsFromDialog() {
   setApiToken($("apiTokenSetting").value);
   profile.proactivity = $("proactivitySetting").value;
   profile.verbosity = $("verbositySetting").value;
   profile.humor = $("humorSetting").value;
+  const previousMemoryConsent = profile.memoryConsent === true;
   profile.memoryConsent = $("memoryConsentSetting").checked;
+  const consentChanged = previousMemoryConsent !== profile.memoryConsent;
+  if (previousMemoryConsent && !profile.memoryConsent) {
+    cancelRemoteMemoryRequests();
+    $("memoryStatus").textContent = "Révocation locale appliquée. Vérification de la révocation côté serveur…";
+  }
   saveProfile();
   $("settingsDialog").close();
+  if (consentChanged) {
+    const result = await persistRemoteMemoryConsent(profile.memoryConsent);
+    if (result.ok) {
+      $("memoryStatus").textContent = profile.memoryConsent
+        ? "Consentement mémoire enregistré côté serveur."
+        : "Consentement mémoire révoqué côté serveur.";
+    } else if (result.reason === "alpha_unsupported") {
+      $("memoryStatus").textContent = "Le registre de consentement durable exige une authentification individuelle. Le mode alpha actuel ne le prend pas encore en charge.";
+    } else {
+      $("memoryStatus").textContent = profile.memoryConsent
+        ? "Préférence locale enregistrée, mais le consentement serveur n’a pas été confirmé. La mémoire distante reste bloquée."
+        : "Révocation locale appliquée, mais la révocation serveur n’a pas été confirmée. État distant à vérifier.";
+    }
+  }
   speak(getApiToken() ? "Vos préférences sont enregistrées. Le jeton alpha est disponible pour cette session." : "Vos préférences sont enregistrées. Le moteur distant restera indisponible tant que le jeton alpha n'est pas configuré.", {resume:true});
 }
 function updateClock() {
@@ -757,6 +849,7 @@ $("onboardingSkip").addEventListener("click", () => {
 });
 $("resetMemoryBtn").addEventListener("click", async () => {
   if (!confirm("Effacer les données personnelles conservées localement par cette version d'ARIA ? Cette opération est irréversible sur cet appareil.")) return;
+  cancelRemoteMemoryRequests();
   const oldClientId = localStorage.getItem("aria.v07.memoryClientId");
   const currentClientId = localStorage.getItem(KEYS.clientId);
   const clientIdsToDelete = [...new Set([currentClientId, oldClientId].filter(Boolean))];

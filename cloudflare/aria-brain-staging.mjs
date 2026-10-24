@@ -29,6 +29,92 @@ async function readLimitedBody(request, maxBytes) {
 }
 
 
+const CANONICAL_ACCOUNT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+async function readServerMemoryConsent(env, ownerId) {
+  if (!CANONICAL_ACCOUNT_ID.test(ownerId || "")) return { ok: false, status: 503, error: "consent_store_unavailable" };
+  const db = env?.ARIA_AUTHZ_DB;
+  if (!db || typeof db.prepare !== "function") return { ok: false, status: 503, error: "consent_store_unavailable" };
+  try {
+    const row = await db.prepare(
+      "SELECT enabled, consent_version AS consentVersion, updated_at_ms AS updatedAt FROM aria_memory_consent WHERE owner_id = ? LIMIT 1"
+    ).bind(ownerId).first();
+    if (!row) return { ok: true, enabled: false };
+    if (![0, 1, true, false].includes(row.enabled) ||
+        typeof row.consentVersion !== "string" ||
+        !Number.isSafeInteger(row.updatedAt) || row.updatedAt < 0) {
+      return { ok: false, status: 503, error: "consent_store_unavailable" };
+    }
+    return { ok: true, enabled: row.enabled === 1 || row.enabled === true, consentVersion: row.consentVersion, updatedAt: row.updatedAt };
+  } catch {
+    return { ok: false, status: 503, error: "consent_store_unavailable" };
+  }
+}
+
+async function writeServerMemoryConsent(env, ownerId, enabled) {
+  if (!CANONICAL_ACCOUNT_ID.test(ownerId || "") || typeof enabled !== "boolean") {
+    return { ok: false, status: 400, error: "invalid_memory_consent" };
+  }
+  const db = env?.ARIA_AUTHZ_DB;
+  if (!db || typeof db.prepare !== "function") return { ok: false, status: 503, error: "consent_store_unavailable" };
+  try {
+    const now = Date.now();
+    const result = await db.prepare(
+      "INSERT INTO aria_memory_consent (owner_id, enabled, consent_version, updated_at_ms) VALUES (?, ?, 'memory-v1', ?) ON CONFLICT(owner_id) DO UPDATE SET enabled = excluded.enabled, consent_version = excluded.consent_version, updated_at_ms = excluded.updated_at_ms"
+    ).bind(ownerId, enabled ? 1 : 0, now).run();
+    if (result?.success === false) return { ok: false, status: 503, error: "consent_store_unavailable" };
+    return { ok: true, enabled, consentVersion: "memory-v1", updatedAt: now };
+  } catch {
+    return { ok: false, status: 503, error: "consent_store_unavailable" };
+  }
+}
+
+
+// Individual-account memory uses the same D1 database as the consent ledger.
+// The SQL predicates are intentional: a write is accepted only if consent is
+// still enabled in the statement that commits the memory document.
+async function readAccountMemory(env, ownerId) {
+  if (!CANONICAL_ACCOUNT_ID.test(ownerId || "")) throw new Error("invalid_memory_owner");
+  const db = env?.ARIA_AUTHZ_DB;
+  if (!db || typeof db.prepare !== "function") throw new Error("memory_storage_unavailable");
+  const row = await db.prepare(
+    "SELECT c.enabled AS consentEnabled, d.memories_json AS memoriesJson FROM aria_memory_consent c LEFT JOIN aria_memory_documents d ON d.owner_id = c.owner_id WHERE c.owner_id = ? LIMIT 1"
+  ).bind(ownerId).first();
+  if (!row || (row.consentEnabled !== 1 && row.consentEnabled !== true)) {
+    throw new Error("memory_consent_required");
+  }
+  if (row.memoriesJson === null || row.memoriesJson === undefined) return [];
+  if (typeof row.memoriesJson !== "string") throw new Error("invalid_memory_document");
+  const memories = JSON.parse(row.memoriesJson);
+  if (!Array.isArray(memories)) throw new Error("invalid_memory_document");
+  return memories;
+}
+
+async function writeAccountMemory(env, ownerId, memories, now = Date.now()) {
+  if (!CANONICAL_ACCOUNT_ID.test(ownerId || "") || !Array.isArray(memories) ||
+      !Number.isSafeInteger(now) || now < 0) return { ok: false, reason: "invalid_memory_document" };
+  const db = env?.ARIA_AUTHZ_DB;
+  if (!db || typeof db.prepare !== "function") return { ok: false, reason: "memory_storage_unavailable" };
+  const result = await db.prepare(
+    "INSERT INTO aria_memory_documents (owner_id, memories_json, updated_at_ms) SELECT ?, ?, ? WHERE EXISTS (SELECT 1 FROM aria_memory_consent WHERE owner_id = ? AND enabled = 1) ON CONFLICT(owner_id) DO UPDATE SET memories_json = excluded.memories_json, updated_at_ms = excluded.updated_at_ms WHERE EXISTS (SELECT 1 FROM aria_memory_consent WHERE owner_id = ? AND enabled = 1)"
+  ).bind(ownerId, JSON.stringify(memories), now, ownerId, ownerId).run();
+  if (result?.success === false) return { ok: false, reason: "memory_storage_unavailable" };
+  if (Number.isFinite(result?.meta?.changes) && result.meta.changes === 0) {
+    return { ok: false, reason: "memory_consent_required" };
+  }
+  return { ok: true };
+}
+
+async function deleteAccountMemory(env, ownerId) {
+  if (!CANONICAL_ACCOUNT_ID.test(ownerId || "")) throw new Error("invalid_memory_owner");
+  const db = env?.ARIA_AUTHZ_DB;
+  if (!db || typeof db.prepare !== "function") throw new Error("memory_storage_unavailable");
+  const result = await db.prepare(
+    "DELETE FROM aria_memory_documents WHERE owner_id = ?"
+  ).bind(ownerId).run();
+  if (result?.success === false) throw new Error("memory_storage_unavailable");
+}
+
 async function authorizeMemoryOperation(env, identity, permission) {
   const provisioned = await ensureDefaultUserRole({ identity, env });
   if (!provisioned.ok) {
@@ -164,7 +250,7 @@ export default {
     if (allowedOrigins.has(origin)) {
       headers["Access-Control-Allow-Origin"] = origin;
       headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS";
-      headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type";
+      headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type, X-ARIA-Memory-Consent";
     }
     const json = (data, status = 200) =>
       new Response(data === null ? null : JSON.stringify(data), { status, headers });
@@ -181,19 +267,40 @@ export default {
           : authMode === "legacy" && Boolean(env.ARIA_ACCESS_TOKEN);
       const individualMode = authMode === "individual" || authMode === "session_kv";
       const authorizationConfigured = !individualMode || Boolean(env.ARIA_AUTHZ_DB);
-      const memoryStorageConfigured = Boolean(env.ARIA_MEMORY);
-      const memoryAvailable = memoryStorageConfigured && authMode !== "session_kv";
+      const memoryStorageConfigured = authMode === "individual"
+        ? Boolean(env.ARIA_AUTHZ_DB && typeof env.ARIA_AUTHZ_DB.prepare === "function")
+        : Boolean(env.ARIA_MEMORY);
+      let memoryConsentStoreConfigured = null;
+      if (authMode === "individual" && env.ARIA_AUTHZ_DB && typeof env.ARIA_AUTHZ_DB.prepare === "function") {
+        try {
+          await env.ARIA_AUTHZ_DB.prepare(
+            "SELECT owner_id FROM aria_memory_consent WHERE owner_id = ? LIMIT 1"
+          ).bind("00000000-0000-4000-8000-000000000000").first();
+          await env.ARIA_AUTHZ_DB.prepare(
+            "SELECT owner_id FROM aria_memory_documents WHERE owner_id = ? LIMIT 1"
+          ).bind("00000000-0000-4000-8000-000000000000").first();
+          memoryConsentStoreConfigured = true;
+        } catch {
+          memoryConsentStoreConfigured = false;
+        }
+      }
+      const memoryAvailable = authMode === "individual"
+        ? memoryStorageConfigured && memoryConsentStoreConfigured === true
+        : memoryStorageConfigured && authMode !== "session_kv";
       const memoryStatus = !memoryStorageConfigured
         ? "storage_not_configured"
         : authMode === "session_kv"
           ? "identity_migration_required"
-          : "available";
+           : authMode === "individual" && memoryConsentStoreConfigured !== true
+            ? "consent_store_unavailable"
+            : "available";
       return json({
         status: "ok",
         service: "aria-api",
-        configured: Boolean(env.OPENAI_API_KEY && authConfigured && authorizationConfigured && (!individualMode || memoryStorageConfigured)),
+        configured: Boolean(env.OPENAI_API_KEY && authConfigured && authorizationConfigured && (!individualMode || memoryStorageConfigured) && (authMode !== "individual" || memoryConsentStoreConfigured === true)),
         authenticationMode: authMode,
         authorizationStore: Boolean(env.ARIA_AUTHZ_DB),
+        memoryConsentStoreConfigured,
         provider: "openai",
         model: "gpt-6-astra",
         persistentMemory: memoryAvailable,
@@ -201,10 +308,11 @@ export default {
         memoryStatus
       });
     }
-    if (url.pathname !== "/chat" && url.pathname !== "/memory") return json({ error: "not_found" }, 404);
+    if (url.pathname !== "/chat" && url.pathname !== "/memory" && url.pathname !== "/memory/consent") return json({ error: "not_found" }, 404);
     if (url.pathname === "/chat" && req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
     if (url.pathname === "/memory" && !["GET", "PUT", "DELETE"].includes(req.method)) return json({ error: "method_not_allowed" }, 405);
-    if (!env.OPENAI_API_KEY) return json({ error: "service_not_configured" }, 503);
+    if (url.pathname === "/memory/consent" && !["GET", "POST"].includes(req.method)) return json({ error: "method_not_allowed" }, 405);
+    if (url.pathname === "/chat" && !env.OPENAI_API_KEY) return json({ error: "service_not_configured" }, 503);
     const auth = await authenticateRequest(req, env);
     if (!auth.ok) return json({ error: auth.error }, auth.status);
     const individualAuth = auth.mode === "individual";
@@ -217,11 +325,35 @@ export default {
     const validClientId = (value) =>
       typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 
+    if (url.pathname === "/memory/consent") {
+      if (!individualAuth || !canonicalAccountIdentity || !ownerId) return json({ error: "individual_auth_required" }, 409);
+      if (req.method === "GET") {
+        const consent = await readServerMemoryConsent(env, ownerId);
+        if (!consent.ok) return json({ error: consent.error }, consent.status);
+        return json({ enabled: consent.enabled, persisted: true, consentVersion: consent.consentVersion || null, updatedAt: consent.updatedAt || null });
+      }
+      const boundedBody = await readLimitedBody(req, 2048);
+      if (boundedBody.tooLarge) return json({ error: "request_too_large" }, 413);
+      if (boundedBody.readError) return json({ error: "invalid_request_body" }, 400);
+      let consentBody;
+      try { consentBody = JSON.parse(boundedBody.text); }
+      catch { return json({ error: "invalid_json" }, 400); }
+      if (!consentBody || typeof consentBody.enabled !== "boolean") return json({ error: "invalid_memory_consent" }, 400);
+      // Revocation remains available to the authenticated owner even if their role is inactive.
+      if (consentBody.enabled) {
+        const permission = await authorizeMemoryOperation(env, ownerId, "memory:own:write");
+        if (!permission.ok) return json({ error: permission.error }, permission.status);
+      }
+      const saved = await writeServerMemoryConsent(env, ownerId, consentBody.enabled);
+      if (!saved.ok) return json({ error: saved.error }, saved.status);
+      return json({ enabled: saved.enabled, persisted: true, consentVersion: saved.consentVersion, updatedAt: saved.updatedAt });
+    }
+
     if (url.pathname === "/memory") {
       if (individualAuth && !canonicalAccountIdentity) {
         return json({ error: "identity_migration_required" }, 409);
       }
-      if (!env.ARIA_MEMORY) return json({ error: "memory_storage_unavailable" }, 503);
+      if (!individualAuth && !env.ARIA_MEMORY) return json({ error: "memory_storage_unavailable" }, 503);
       let clientId = url.searchParams.get("clientId");
       let body;
       if (req.method === "PUT") {
@@ -230,11 +362,8 @@ export default {
         const boundedBody = await readLimitedBody(req, 96_000);
         if (boundedBody.tooLarge) return json({ error: "request_too_large" }, 413);
         if (boundedBody.readError) return json({ error: "invalid_request_body" }, 400);
-        try {
-          body = JSON.parse(boundedBody.text);
-        } catch {
-          return json({ error: "invalid_json" }, 400);
-        }
+        try { body = JSON.parse(boundedBody.text); }
+        catch { return json({ error: "invalid_json" }, 400); }
         if (!body || typeof body !== "object" || Array.isArray(body)) {
           return json({ error: "invalid_memory_payload" }, 400);
         }
@@ -242,7 +371,18 @@ export default {
       }
       if (!individualAuth && !validClientId(clientId)) return json({ error: "invalid_client_id" }, 400);
       if (individualAuth && !ownerId) return json({ error: "unauthorized" }, 401);
-      const key = individualAuth ? "memory:v2:" + ownerId : "memory:v1:" + clientId;
+      if (req.method !== "GET" && req.method !== "PUT" && req.method !== "DELETE") {
+        return json({ error: "method_not_allowed" }, 405);
+      }
+      if (req.method !== "DELETE") {
+        if (individualAuth) {
+          const consent = await readServerMemoryConsent(env, ownerId);
+          if (!consent.ok) return json({ error: consent.error }, consent.status);
+          if (!consent.enabled) return json({ error: "memory_consent_required" }, 403);
+        } else if (req.headers.get("X-ARIA-Memory-Consent") !== "true") {
+          return json({ error: "memory_consent_required" }, 403);
+        }
+      }
       if (individualAuth) {
         const permission = req.method === "GET"
           ? "memory:own:read"
@@ -254,11 +394,21 @@ export default {
       }
       try {
         if (req.method === "GET") {
-          const saved = await env.ARIA_MEMORY.get(key, "json");
+          if (individualAuth) {
+            try {
+              const memories = await readAccountMemory(env, ownerId);
+              return json({ memories, persisted: true });
+            } catch (error) {
+              if (error?.message === "memory_consent_required") return json({ error: "memory_consent_required" }, 403);
+              throw error;
+            }
+          }
+          const saved = await env.ARIA_MEMORY.get("memory:v1:" + clientId, "json");
           return json({ memories: Array.isArray(saved) ? saved : [], persisted: true });
         }
         if (req.method === "DELETE") {
-          await env.ARIA_MEMORY.delete(key);
+          if (individualAuth) await deleteAccountMemory(env, ownerId);
+          else await env.ARIA_MEMORY.delete("memory:v1:" + clientId);
           return json({ deleted: true, persisted: true });
         }
         if (!Array.isArray(body.memories) || body.memories.length > 100) {
@@ -274,9 +424,17 @@ export default {
             createdAt: Number.isFinite(item.createdAt) ? item.createdAt : now,
             updatedAt: now
           }));
-        await env.ARIA_MEMORY.put(key, JSON.stringify(memories), {
-          metadata: { schema: 1, count: memories.length, updatedAt: now }
-        });
+        if (individualAuth) {
+          const saved = await writeAccountMemory(env, ownerId, memories, now);
+          if (!saved.ok) {
+            const consentRequired = saved.reason === "memory_consent_required";
+            return json({ error: consentRequired ? "memory_consent_required" : "memory_storage_failed" }, consentRequired ? 403 : 503);
+          }
+        } else {
+          await env.ARIA_MEMORY.put("memory:v1:" + clientId, JSON.stringify(memories), {
+            metadata: { schema: 1, count: memories.length, updatedAt: now }
+          });
+        }
         return json({ memories, persisted: true });
       } catch {
         return json({ error: "memory_storage_failed" }, 503);
@@ -341,7 +499,18 @@ export default {
     const lastUserMessage = messages.filter((item) => item.role === "user").at(-1)?.content.trim() || "";
     const rememberMatch = lastUserMessage.match(/^(?:Aria[,\s]+)?(?:retiens(?:\s+bien)?\s+que|mémorise(?:\s+que)?|souviens-toi\s+que|n'oublie pas que)\s+(.+)$/i);
     const requestedMemoryConsent = body.memoryConsent === true;
-    const memoryConsent = requestedMemoryConsent && canonicalAccountIdentity;
+    let memoryConsent = false;
+    if (individualAuth && canonicalAccountIdentity && requestedMemoryConsent) {
+      const consent = await readServerMemoryConsent(env, ownerId);
+      memoryConsent = consent.ok && consent.enabled;
+      if (!consent.ok) {
+        memoryWriteStatus = "Le consentement mémoire côté serveur ne peut pas être vérifié. Aucune mémoire persistante n’a été lue ni modifiée.";
+      } else if (!consent.enabled && rememberMatch) {
+        memoryWriteStatus = "Consentement mémoire désactivé côté serveur : aucune information n’a été enregistrée.";
+      }
+    } else if (!individualAuth) {
+      memoryConsent = requestedMemoryConsent && Boolean(memoryOwnerKey);
+    }
     if (individualAuth && memoryConsent) {
       const readDecision = await authorizeMemoryOperation(env, ownerId, "memory:own:read");
       if (!readDecision.ok) return json({ error: readDecision.error }, readDecision.status);
@@ -353,41 +522,88 @@ export default {
     if (rememberMatch && requestedMemoryConsent && !canonicalAccountIdentity && individualAuth) {
       memoryWriteStatus = "La mémoire persistante est indisponible pour cette session alpha tant que l’identité de compte canonique n’a pas été migrée. Aucune donnée n’a été lue ni enregistrée.";
     } else if (rememberMatch && !memoryConsent) {
-      memoryWriteStatus = "Mémoire désactivée par l’utilisateur : aucune information n’a été enregistrée.";
+      if (!memoryWriteStatus) memoryWriteStatus = "Mémoire désactivée par l’utilisateur : aucune information n’a été enregistrée.";
     } else if (rememberMatch) {
       if (!env.ARIA_MEMORY || !memoryOwnerKey) {
         memoryWriteStatus = "Échec : le stockage persistant n’est pas disponible. Ne prétends pas que l’information a été mémorisée.";
       } else {
         try {
-          const key = memoryOwnerKey;
-          const saved = await env.ARIA_MEMORY.get(key, "json");
-          const memories = Array.isArray(saved) ? saved : [];
-          const text = rememberMatch[1].trim().slice(0, 300);
-          const existing = memories.find((item) => typeof item.text === "string" && item.text.trim().toLocaleLowerCase("fr") === text.toLocaleLowerCase("fr"));
-          const now = Date.now();
-          if (existing) {
-            existing.text = text;
-            existing.updatedAt = now;
+          if (individualAuth) {
+            const latestConsent = await readServerMemoryConsent(env, ownerId);
+            if (!latestConsent.ok || !latestConsent.enabled) {
+              memoryWriteStatus = latestConsent.ok
+                ? "Consentement mémoire révoqué avant l’écriture : aucune information n’a été enregistrée."
+                : "Le consentement mémoire ne peut plus être vérifié : aucune information n’a été enregistrée.";
+            } else {
+              const key = memoryOwnerKey;
+              const saved = await readAccountMemory(env, ownerId);
+              const memories = Array.isArray(saved) ? saved : [];
+              const text = rememberMatch[1].trim().slice(0, 300);
+              const existing = memories.find((item) => typeof item.text === "string" && item.text.trim().toLocaleLowerCase("fr") === text.toLocaleLowerCase("fr"));
+              const now = Date.now();
+              if (existing) {
+                existing.text = text;
+                existing.updatedAt = now;
+              } else {
+                memories.push({id: crypto.randomUUID(), text, createdAt: now, updatedAt: now});
+              }
+              const bounded = memories.slice(-100);
+              const finalConsent = await readServerMemoryConsent(env, ownerId);
+              if (!finalConsent.ok || !finalConsent.enabled) {
+                memoryWriteStatus = finalConsent.ok
+                  ? "Consentement mémoire révoqué avant la validation de l’écriture : aucune information n’a été enregistrée."
+                  : "Le consentement mémoire ne peut plus être vérifié : aucune information n’a été enregistrée.";
+              } else {
+                const persisted = await writeAccountMemory(env, ownerId, bounded, now);
+                if (!persisted.ok) {
+                  memoryWriteStatus = persisted.reason === "memory_consent_required"
+                    ? "Consentement mémoire révoqué avant la validation de l’écriture : aucune information n’a été enregistrée."
+                    : "La mémoire persistante est indisponible. Aucune information n’a été enregistrée.";
+                } else {
+                  memoryWriteStatus = "Succès : l’information a été enregistrée dans la mémoire persistante.";
+                }
+              }
+            }
           } else {
-            memories.push({id: crypto.randomUUID(), text, createdAt: now, updatedAt: now});
+            const key = memoryOwnerKey;
+            const saved = await env.ARIA_MEMORY.get(key, "json");
+            const memories = Array.isArray(saved) ? saved : [];
+            const text = rememberMatch[1].trim().slice(0, 300);
+            const existing = memories.find((item) => typeof item.text === "string" && item.text.trim().toLocaleLowerCase("fr") === text.toLocaleLowerCase("fr"));
+            const now = Date.now();
+            if (existing) {
+              existing.text = text;
+              existing.updatedAt = now;
+            } else {
+              memories.push({id: crypto.randomUUID(), text, createdAt: now, updatedAt: now});
+            }
+            const bounded = memories.slice(-100);
+            await env.ARIA_MEMORY.put(key, JSON.stringify(bounded), {
+              metadata: {schema: 1, count: bounded.length, updatedAt: now}
+            });
+            memoryWriteStatus = "Succès : l’information a été enregistrée dans la mémoire persistante.";
           }
-          const bounded = memories.slice(-100);
-          await env.ARIA_MEMORY.put(key, JSON.stringify(bounded), {
-            metadata: {schema: 1, count: bounded.length, updatedAt: now}
-          });
-          memoryWriteStatus = "Succès : l’information a été enregistrée dans la mémoire persistante.";
         } catch {
           memoryWriteStatus = "Échec : le serveur n’a pas pu enregistrer l’information. Ne prétends pas qu’elle a été mémorisée.";
         }
       }
     }
 
+    if (individualAuth && memoryConsent) {
+      const latestConsent = await readServerMemoryConsent(env, ownerId);
+      if (!latestConsent.ok || !latestConsent.enabled) {
+        memoryConsent = false;
+        if (!latestConsent.ok) memoryWriteStatus = "Le consentement mémoire ne peut pas être vérifié ; aucun souvenir persistant ne sera utilisé.";
+      }
+    }
     let memoryContext = memoryConsent
       ? "Aucune mémoire persistante enregistrée pour ce compte."
-      : "Mémoire personnelle désactivée par l’utilisateur. N’utilise aucun souvenir persistant et n’enregistre rien.";
-    if (memoryConsent && env.ARIA_MEMORY && memoryOwnerKey) {
+      : "Mémoire personnelle désactivée ou non autorisée côté serveur. N’utilise aucun souvenir persistant et n’enregistre rien.";
+    if (memoryConsent && memoryOwnerKey) {
       try {
-        const saved = await env.ARIA_MEMORY.get(memoryOwnerKey, "json");
+        const saved = individualAuth
+          ? await readAccountMemory(env, ownerId)
+          : (env.ARIA_MEMORY ? await env.ARIA_MEMORY.get(memoryOwnerKey, "json") : null);
         if (Array.isArray(saved) && saved.length) {
           memoryContext = saved.map((item) => "- " + item.text).join("\n");
         }
