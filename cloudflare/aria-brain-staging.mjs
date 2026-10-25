@@ -524,7 +524,10 @@ export default {
     } else if (rememberMatch && !memoryConsent) {
       if (!memoryWriteStatus) memoryWriteStatus = "Mémoire désactivée par l’utilisateur : aucune information n’a été enregistrée.";
     } else if (rememberMatch) {
-      if (!env.ARIA_MEMORY || !memoryOwnerKey) {
+      const memoryStorageAvailable = individualAuth
+        ? Boolean(env.ARIA_AUTHZ_DB && typeof env.ARIA_AUTHZ_DB.prepare === "function")
+        : Boolean(env.ARIA_MEMORY);
+      if (!memoryStorageAvailable || !memoryOwnerKey) {
         memoryWriteStatus = "Échec : le stockage persistant n’est pas disponible. Ne prétends pas que l’information a été mémorisée.";
       } else {
         try {
