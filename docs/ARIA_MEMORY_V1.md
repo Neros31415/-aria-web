@@ -66,3 +66,21 @@ The individual-account path uses the authenticated canonical Supabase UUID and t
 **Release limitation:** migrations 0002 and 0003 are versioned in this pull request but have not been applied to the actual D1 database. Individual-account persistent memory must remain unavailable in any environment where the D1 schema is absent; requests fail closed. The legacy alpha compatibility path remains separate and does not provide account-level durable consent.
 
 **Concurrency semantics:** a D1 read is authorized at the time its SQL statement executes. Writes include the consent predicate in the same D1 statement as the insert/update, so a revocation committed before that statement prevents persistence. An operation already linearized before revocation may finish; the interface should invalidate stale in-flight UI syncs, and the system must not promise cancellation of data already returned to a client. This is stronger than checking D1 and then writing the payload to KV, but it is not a guarantee that a response already in flight can be recalled.
+
+## Vérification réelle du schéma staging — 25 octobre 2026
+
+Contrôle en lecture seule du D1 `aria-authz-staging` lié au Worker `aria-brain-staging` :
+
+- La liaison `ARIA_AUTHZ_DB` pointe vers cette base D1 ; le binding historique `ARIA_MEMORY` (KV) est encore présent pour la compatibilité alpha.
+- `sqlite_master` contient les tables d'autorisation historiques (`aria_user_roles`, `aria_entitlements`, `aria_authorization_audit`), mais **ne contient pas** `aria_memory_consent` ni `aria_memory_documents`.
+- Par conséquent, les migrations `0002_aria_memory_consent.sql` et `0003_aria_memory_documents.sql` ne sont pas appliquées dans cette base au moment du contrôle. Le chemin mémoire individuel basé sur D1 n'est pas prêt à être validé en staging et doit rester en échec fermé.
+- Les instructions SQL de lecture jointe et d'écriture conditionnelle ont été exécutées contre SQLite 3.46.1 en base éphémère : écriture avec consentement actif réussie, écriture après révocation refusée sans altérer le document existant, suppression en cascade vérifiée. Ceci valide la syntaxe et la sémantique SQLite de base, **pas** le runtime D1 réel ni l'intégration de bout en bout.
+- Aucun schéma réel n'a été modifié ; aucune migration, écriture de données métier, fusion ou déploiement n'a été exécuté pendant ce contrôle.
+
+### Porte de validation avant activation
+
+1. Confirmer explicitement la base D1 cible et obtenir l'autorisation de modifier son schéma.
+2. Vérifier une sauvegarde/possibilité de restauration et l'état de la migration `0001`.
+3. Appliquer `0002` puis `0003` uniquement après autorisation, puis relire `sqlite_master` et les contraintes.
+4. Déployer le Worker de staging séparément après revue/autorisation et exécuter les parcours réels avec deux comptes distincts : consentement, lecture, écriture, révocation, suppression et isolation.
+5. Ne pas migrer automatiquement les notes KV historiques : aucune correspondance canonique compte/profil n'est démontrée.
