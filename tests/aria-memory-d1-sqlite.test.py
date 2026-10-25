@@ -61,6 +61,7 @@ class AriaMemoryD1SqliteTests(unittest.TestCase):
         }
         self.assertIn("aria_memory_consent", names)
         self.assertIn("aria_memory_documents", names)
+        self.enable_consent(self.owner_a)
         with self.assertRaises(sqlite3.IntegrityError):
             self.db.execute(
                 "INSERT INTO aria_memory_documents VALUES (?, ?, ?)",
