@@ -433,6 +433,52 @@ test("chat cannot read or write persistent memory when durable consent is absent
 });
 
 
+test("individual-auth chat persists memories in D1 without requiring the legacy KV binding", async (t) => {
+  const ownerId = "123e4567-e89b-42d3-a456-426614174000";
+  const db = individualMemoryDb({
+    consent: { [ownerId]: { enabled: 1, consentVersion: "memory-v1", updatedAt: 1 } }
+  });
+  let providerBody;
+  const individualEnv = {
+    ARIA_AUTH_MODE: "individual",
+    ARIA_AUTHZ_DB: db,
+    SUPABASE_URL: "https://project.supabase.co",
+    SUPABASE_ANON_KEY: "test-anon-key",
+    OPENAI_API_KEY: "test-provider-key"
+    // Deliberately no ARIA_MEMORY: individual accounts use D1, not legacy KV.
+  };
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    if (String(url).endsWith("/auth/v1/user")) {
+      return new Response(JSON.stringify({ id: ownerId }), {
+        status: 200, headers: { "Content-Type": "application/json" }
+      });
+    }
+    providerBody = JSON.parse(options.body);
+    return new Response(JSON.stringify({
+      model: "test-model",
+      output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify({
+        reply: "Je l’ai enregistrée.",
+        action: "none",
+        scene: "none"
+      }) }] }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  });
+
+  const response = await worker.fetch(new Request("https://aria-staging.test/chat", {
+    method: "POST",
+    headers: { Authorization: "Bearer account-token", "Content-Type": "application/json" },
+    body: JSON.stringify({
+      memoryConsent: true,
+      messages: [{ role: "user", content: "Retiens que mon projet s’appelle ARIA." }]
+    })
+  }), individualEnv);
+
+  assert.equal(response.status, 200);
+  assert.equal(JSON.parse(db.memories.get(ownerId))[0].text, "mon projet s’appelle ARIA.");
+  assert.match(providerBody.instructions, /Succès : l’information a été enregistrée dans la mémoire persistante/);
+});
+
+
 test("durable memory consent is isolated between authenticated accounts", async (t) => {
   const accountA = "123e4567-e89b-42d3-a456-426614174000";
   const accountB = "123e4567-e89b-42d3-a456-426614174001";
