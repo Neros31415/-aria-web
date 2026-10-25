@@ -12,6 +12,9 @@ on:
       - "tests/aria-brain-staging.test.mjs"
       - "tests/aria-authorization.test.mjs"
       - "tests/aria-authorization-d1.test.mjs"
+      - "tests/aria-memory-d1-sqlite.test.py"
+      - "migrations/0002_aria_memory_consent.sql"
+      - "migrations/0003_aria_memory_documents.sql"
       - ".github/workflows/staging-worker-tests.yml"
   pull_request:
     branches:
@@ -41,3 +44,5 @@ jobs:
           node-version: 22
       - name: Run staging worker tests
         run: node --test tests/aria-brain-staging.test.mjs tests/aria-authorization.test.mjs tests/aria-authorization-d1.test.mjs
+      - name: Execute memory migrations and Worker SQL against SQLite
+        run: python3 tests/aria-memory-d1-sqlite.test.py
