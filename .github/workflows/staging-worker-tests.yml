@@ -5,6 +5,7 @@ on:
     branches:
       - fix/staging-worker-input-security
       - feat/aria-authenticated-memory
+      - fix/memory-consent-revocation-race
     paths:
       - "cloudflare/aria-brain-staging.mjs"
       - "cloudflare/aria-authorization.mjs"
@@ -27,6 +28,9 @@ on:
       - "tests/aria-brain-staging.test.mjs"
       - "tests/aria-authorization.test.mjs"
       - "tests/aria-authorization-d1.test.mjs"
+      - "tests/aria-memory-d1-sqlite.test.py"
+      - "migrations/0002_aria_memory_consent.sql"
+      - "migrations/0003_aria_memory_documents.sql"
       - ".github/workflows/staging-worker-tests.yml"
 
 permissions:
