@@ -63,24 +63,25 @@ The individual-account path uses the authenticated canonical Supabase UUID and t
 - A client-supplied `X-ARIA-Memory-Consent` header cannot grant or restore individual-account consent. The legacy single-user alpha still uses KV and the header guard.
 - `DELETE /memory` remains available after consent revocation, but still requires authenticated ownership and authorization.
 
-**Release limitation:** migrations 0002 and 0003 are versioned in this pull request but have not been applied to the actual D1 database. Individual-account persistent memory must remain unavailable in any environment where the D1 schema is absent; requests fail closed. The legacy alpha compatibility path remains separate and does not provide account-level durable consent.
+**Release limitation (updated 27 October 2026):** migrations 0002 and 0003 have now been applied to the staging D1 `aria-authz-staging` only. The staging schema exists, but the Worker version currently deployed to Cloudflare has not been confirmed against this branch, and the authenticated HTTP end-to-end flow has not yet been validated. Do not treat individual-account memory as release-ready until the staging Worker is reviewed/deployed separately and two real test accounts pass the full HTTP flow. Production has not been modified. The legacy alpha compatibility path remains separate and does not provide account-level durable consent.
 
 **Concurrency semantics:** a D1 read is authorized at the time its SQL statement executes. Writes include the consent predicate in the same D1 statement as the insert/update, so a revocation committed before that statement prevents persistence. An operation already linearized before revocation may finish; the interface should invalidate stale in-flight UI syncs, and the system must not promise cancellation of data already returned to a client. This is stronger than checking D1 and then writing the payload to KV, but it is not a guarantee that a response already in flight can be recalled.
 
-## Vérification réelle du schéma staging — 25 octobre 2026
+## Vérification réelle du schéma staging — 27 octobre 2026
 
-Contrôle en lecture seule du D1 `aria-authz-staging` lié au Worker `aria-brain-staging` :
+Contrôle de la base D1 `aria-authz-staging` (UUID `564c348b-aaea-4cba-aab2-a071b5dd9635`, région UE), liée historiquement au Worker `aria-brain-staging` :
 
-- La liaison `ARIA_AUTHZ_DB` pointe vers cette base D1 ; le binding historique `ARIA_MEMORY` (KV) est encore présent pour la compatibilité alpha.
-- `sqlite_master` contient les tables d'autorisation historiques (`aria_user_roles`, `aria_entitlements`, `aria_authorization_audit`), mais **ne contient pas** `aria_memory_consent` ni `aria_memory_documents`.
-- Par conséquent, les migrations `0002_aria_memory_consent.sql` et `0003_aria_memory_documents.sql` ne sont pas appliquées dans cette base au moment du contrôle. Le chemin mémoire individuel basé sur D1 n'est pas prêt à être validé en staging et doit rester en échec fermé.
-- Les instructions SQL de lecture jointe et d'écriture conditionnelle ont été exécutées contre SQLite 3.46.1 en base éphémère : écriture avec consentement actif réussie, écriture après révocation refusée sans altérer le document existant, suppression en cascade vérifiée. Ceci valide la syntaxe et la sémantique SQLite de base, **pas** le runtime D1 réel ni l'intégration de bout en bout.
-- Aucun schéma réel n'a été modifié ; aucune migration, écriture de données métier, fusion ou déploiement n'a été exécuté pendant ce contrôle.
+- Avant migration, `sqlite_master` contenait les tables d'autorisation historiques mais pas `aria_memory_consent` ni `aria_memory_documents`. La migration `0001` était déjà représentée par les tables d'autorisation existantes ; aucune réapplication de `0001` n'a été tentée.
+- Le 27 octobre, les instructions DDL de `0002_aria_memory_consent.sql` puis `0003_aria_memory_documents.sql` ont été appliquées via l'API D1. Les deux tables et la clé étrangère `ON DELETE CASCADE` sont confirmées dans `sqlite_master`, ainsi que la contrainte JSON et l'index `idx_aria_memory_documents_updated`.
+- Une exportation D1 complète a répondu `status: complete` avant migration. Son URL de téléchargement signée était temporaire et n'a pas pu être téléchargée dans l'environnement d'exécution ; cette exportation n'est donc **pas considérée comme une sauvegarde locale restaurable vérifiée**. Le changement réalisé est additif : il n'a modifié aucune table ni donnée préexistante. Retour arrière ciblé possible en supprimant d'abord `idx_aria_memory_documents_updated`, puis `aria_memory_documents`, puis `aria_memory_consent`, uniquement si les nouvelles tables ne contiennent aucune donnée utile.
+- Tests directs sur le véritable runtime D1, avec deux UUID de test temporaires et sans donnée personnelle : création de deux consentements, écriture conditionnelle de deux documents (1 ligne modifiée par compte), révocation du premier consentement, tentative d'écriture suivante refusée (`changes = 0)), puis suppression de chaque consentement avec suppression en cascade du document associé (`changes = 2)). Les données de test ont été supprimées. Aucun parcours HTTP authentifié n'a été exécuté.
+- La requête de métadonnées Cloudflare continue de renvoyer `num_tables: 0` malgré les tables visibles dans `sqlite_master`; cette métrique est incohérente et ne doit pas servir de preuve de schéma. La lecture des lignes de tables d'autorisation via l'API de requête a aussi renvoyé `SQLITE_AUTH`; aucune tentative de contournement n'a été faite.
+- Aucun code Worker n'a été déployé, aucune fusion n'a été réalisée et aucune base de production n'a été modifiée.
 
-### Porte de validation avant activation
+### Porte de validation restante avant activation
 
-1. Confirmer explicitement la base D1 cible et obtenir l'autorisation de modifier son schéma.
-2. Vérifier une sauvegarde/possibilité de restauration et l'état de la migration `0001`.
-3. Appliquer `0002` puis `0003` uniquement après autorisation, puis relire `sqlite_master` et les contraintes.
-4. Déployer le Worker de staging séparément après revue/autorisation et exécuter les parcours réels avec deux comptes distincts : consentement, lecture, écriture, révocation, suppression et isolation.
+1. Vérifier le code et la configuration réellement déployés sur le Worker de staging, sans exposer de secrets.
+2. Préparer et autoriser séparément un déploiement de staging depuis le commit validé de la PR #43.
+3. Exécuter les parcours HTTP avec deux comptes de test distincts : consentement, lecture, écriture, révocation, suppression, refus d'accès et isolation.
+4. Vérifier les réponses d'état/readiness et la CI après déploiement.
 5. Ne pas migrer automatiquement les notes KV historiques : aucune correspondance canonique compte/profil n'est démontrée.
