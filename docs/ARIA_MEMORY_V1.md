@@ -74,7 +74,7 @@ Contrôle de la base D1 `aria-authz-staging` (UUID `564c348b-aaea-4cba-aab2-a071
 - Avant migration, `sqlite_master` contenait les tables d'autorisation historiques mais pas `aria_memory_consent` ni `aria_memory_documents`. La migration `0001` était déjà représentée par les tables d'autorisation existantes ; aucune réapplication de `0001` n'a été tentée.
 - Le 27 octobre, les instructions DDL de `0002_aria_memory_consent.sql` puis `0003_aria_memory_documents.sql` ont été appliquées via l'API D1. Les deux tables et la clé étrangère `ON DELETE CASCADE` sont confirmées dans `sqlite_master`, ainsi que la contrainte JSON et l'index `idx_aria_memory_documents_updated`.
 - Une exportation D1 complète a répondu `status: complete` avant migration. Son URL de téléchargement signée était temporaire et n'a pas pu être téléchargée dans l'environnement d'exécution ; cette exportation n'est donc **pas considérée comme une sauvegarde locale restaurable vérifiée**. Le changement réalisé est additif : il n'a modifié aucune table ni donnée préexistante. Retour arrière ciblé possible en supprimant d'abord `idx_aria_memory_documents_updated`, puis `aria_memory_documents`, puis `aria_memory_consent`, uniquement si les nouvelles tables ne contiennent aucune donnée utile.
-- - Tests directs sur le véritable runtime D1, avec deux UUID de test temporaires et sans donnée personnelle : création de deux consentements, écriture conditionnelle de deux documents (1 ligne modifiée par compte), révocation du premier consentement, tentative d'écriture suivante refusée (`changes = 0`), suppression en cascade du document associé (`changes = 2`) et rejet d'un document JSON invalide par la contrainte `CHECK` (`SQLITE_CONSTRAINT_CHECK`). Des requêtes finales confirment qu'aucune ligne des UUID de test ne reste dans les deux tables. Aucun parcours HTTP authentifié n'a été exécuté.
+- Tests directs sur le véritable runtime D1, avec deux UUID de test temporaires et sans donnée personnelle : création de deux consentements, écriture conditionnelle de deux documents (1 ligne modifiée par compte), révocation du premier consentement, tentative d'écriture suivante refusée (`changes = 0`), suppression en cascade du document associé (`changes = 2`) et rejet d'un document JSON invalide par la contrainte `CHECK` (`SQLITE_CONSTRAINT_CHECK`). Des requêtes finales confirment qu'aucune ligne des UUID de test ne reste dans les deux tables. Aucun parcours HTTP authentifié n'a été exécuté.
 - La requête de métadonnées Cloudflare continue de renvoyer `num_tables: 0` malgré les tables visibles dans `sqlite_master`; cette métrique est incohérente et ne doit pas servir de preuve de schéma. La lecture des lignes de tables d'autorisation via l'API de requête a aussi renvoyé `SQLITE_AUTH`; aucune tentative de contournement n'a été faite.
 - Aucun code Worker n'a été déployé, aucune fusion n'a été réalisée et aucune base de production n'a été modifiée.
 
@@ -85,3 +85,22 @@ Contrôle de la base D1 `aria-authz-staging` (UUID `564c348b-aaea-4cba-aab2-a071
 3. Exécuter les parcours HTTP avec deux comptes de test distincts : consentement, lecture, écriture, révocation, suppression, refus d'accès et isolation.
 4. Vérifier les réponses d'état/readiness et la CI après déploiement.
 5. Ne pas migrer automatiquement les notes KV historiques : aucune correspondance canonique compte/profil n'est démontrée.
+
+
+## Écart de parité avec le Worker staging réellement déployé — 28 octobre 2026
+
+Inspection en lecture seule de l'API Cloudflare pour `aria-brain-staging` :
+
+- La version active est la version **26**, identifiant `c1387164-ffdd-48ea-9dbe-7034b98bb781`, déployée à 100 % depuis le 22 octobre 2026. Le message d'annotation indique « Health endpoint reports D1 authorization readiness; CI 57/57 passed » ; cette annotation décrit le déploiement historique, elle ne prouve pas la parité avec la branche actuelle.
+- Les paramètres actuellement exposés déclarent `ARIA_AUTH_MODE=session_kv` et `ARIA_REQUIRE_INDIVIDUAL_AUTH=true`, avec le binding D1 `ARIA_AUTHZ_DB` pointant vers `aria-authz-staging`. Les secrets ne sont ni lus ni reproduits dans ce rapport.
+- Le code réellement déployé expose `/health`, `/chat` et `/memory`. L'inspection du bundle déployé n'a trouvé ni route `/memory/consent`, ni `readServerMemoryConsent`, ni référence SQL à `aria_memory_consent`. La route mémoire déployée utilise encore le binding KV `ARIA_MEMORY`.
+- Le code de la branche de la PR #43 contient au contraire la logique de consentement durable D1 et les routes associées. **Le Worker actif n'est donc pas à parité avec le code de la PR #43.** Le fait que le schéma D1 soit migré ne signifie pas que le Worker l'utilise.
+- Conséquence : aucun test HTTP de consentement D1 ne peut être considéré comme réussi sur le Worker actuellement déployé. Un déploiement de staging ne doit être tenté qu'après comparaison complète du bundle de la PR, vérification des bindings et de la compatibilité du mode d'authentification, puis plan de retour arrière. La configuration actuelle `session_kv` ne constitue pas une identité de compte canonique et ne permet pas d'activer la mémoire individuelle en contournant la porte de migration.
+- Contrôles réalisés : lecture des paramètres, des bindings (noms/types/IDs uniquement), de l'historique des versions/déploiements et du bundle actif. Aucun secret n'a été affiché, aucune configuration n'a été modifiée, aucun Worker n'a été déployé et aucune donnée de production n'a été touchée.
+
+### Porte de sortie avant déploiement staging
+
+1. Comparer le code complet du Worker de la branche candidate avec le bundle actif et la configuration `session_kv`.
+2. Déterminer si le mode d'authentification staging doit rester `session_kv` (mémoire individuelle alors bloquée) ou passer à `individual` avec les paramètres Supabase nécessaires ; ne pas changer ce choix implicitement.
+3. Déployer uniquement après vérification de tous les bindings hérités, des secrets requis, de la readiness et du retour arrière.
+4. Exécuter les tests HTTP authentifiés à deux comptes canoniques distincts sur le Worker déployé, puis revérifier sa version active et les contrôles CI.
