@@ -54,3 +54,38 @@ Choisir et consigner **une seule** stratégie cible avant toute migration ou ouv
 ## 5. État de livraison
 
 Ce document formalise les conditions de décision et de sortie. Il ne constitue ni une implémentation d'authentification, ni une migration, ni une preuve de disponibilité HTTP, ni une autorisation de déploiement.
+
+
+---
+
+## 6. Revalidation du gate P0 — 29 octobre 2026
+
+Cette section remplace toute hypothèse de statut fondée sur les anciens commits de la PR #43. Les sections précédentes sont conservées comme historique.
+
+### État vérifié
+- Le Worker Cloudflare `aria-brain-staging` est toujours sur la version active 26, avec `ARIA_AUTH_MODE=session_kv`, `ARIA_AUTHZ_DB`, `ARIA_USERS` et `ARIA_MEMORY`. Les secrets ne sont pas lus.
+- La configuration observée ne comprend pas de bindings `SUPABASE_URL` et `SUPABASE_ANON_KEY`. Le mode Supabase individuel ne doit donc pas être considéré comme configuré.
+- La version active du Worker ne contient pas la route `/memory/consent) ni le stockage D1 du consentement/documents de la PR #43.
+- La PR #43 est ouverte et non fusionnée, base `feat/aria-brain-staging-integration), tête `97451097f0e265fd67a766908a67cfb1c1e9086a). Ses workflows `Staging Worker Tests` et `ARIA secure UI integration checks` sont tous deux terminés avec succès sur ce commit.
+- Cette PR #43 a évolué depuis la version décrite plus haut dans ce document : elle ajoute un registre de consentement D1, des documents mémoire D1 et des écritures conditionnelles contrôlées côté serveur. Ce progrès est validé par la CI, mais il n'est pas actif dans le Worker déployé.
+- Les migrations 0002/0003 ont été rapportées comme appliquées à la base D1 staging et les requêtes SQL ont été vérifiées ; cela ne prouve ni le déploiement du Worker candidat ni le parcours HTTP authentifié de bout en bout.
+
+### Décision toujours requise
+Le propriétaire doit confirmer explicitement l'option d'identité cible :
+- **Option A — Supabase Auth individuel :** choix recommandé pour le produit multi-utilisateur si le propriétaire confirme le fournisseur/projet et autorise sa configuration dans le staging.
+- **Option B — sessions alpha KV temporaires :** acceptable pour maintenir le chat alpha ; les identités opaques non migrées ne peuvent pas accéder à la mémoire individuelle persistante, aux rôles commerciaux ou aux clés premium.
+
+Aucune option ne doit être activée par simple hypothèse. La variable `ARIA_REQUIRE_INDIVIDUAL_AUTH=true` ne constitue pas une protection effective si le code déployé ne la lit pas ; la politique d'authentification effective est déterminée par le code actif et ses bindings.
+
+### Critères mis à jour avant toute release staging
+- [ ] Le propriétaire confirme l'option d'identité et le fournisseur/projet, si option A.
+- [ ] Les bindings requis correspondent au mode choisi ; aucun secret n'est exposé dans Git, les tickets ou les journaux.
+- [ ] La version candidate est comparée au Worker actif et à la branche d'intégration.
+- [ ] Les tests négatifs couvrent jeton invalide/expiré, mauvaise identité, session alpha non liée, consentement désactivé/révoqué, erreur D1 et isolation de deux comptes canoniques.
+- [ ] Le consentement est lu et écrit côté serveur ; un en-tête client ne suffit pas comme source de vérité.
+- [ ] Les migrations, bindings et tables requis sont vérifiés dans le staging ciblé.
+- [ ] Les deux workflows CI sont verts sur le commit exact à promouvoir.
+- [ ] Après approbation explicite du déploiement staging, le test HTTP vérifie `/health`, `/chat`, `/memory` et `/memory/consent` avec des comptes de test distincts.
+- [ ] La version active et le comportement réel sont re-vérifiés après déploiement ; un plan de retour arrière est prêt.
+
+**Statut : P0 ouvert.** La CI de la PR #43 est verte, mais l'identité cible n'est pas confirmée, le Worker actif n'est pas aligné avec ce code, et le parcours HTTP multi-compte n'est pas encore démontré. Cette mise à jour documentaire n'autorise aucune modification Cloudflare, migration supplémentaire ou déploiement.
