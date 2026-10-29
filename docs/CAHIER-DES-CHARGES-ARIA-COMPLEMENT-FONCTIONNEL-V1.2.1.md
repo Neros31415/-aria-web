@@ -155,3 +155,37 @@ Un statut supérieur ne peut être attribué que sur la base d'une preuve adapt�
 - [ ] Les fonctions avancées différées sont distinguées des objectifs immédiats.
 - [ ] Les exigences n'affirment pas que les fonctions sont déjà implémentées.
 - [ ] Aucun changement n'est fait à `main` et aucun déploiement n'est déclenché par cette annexe.
+
+
+---
+
+## 8. Vision cible ARIA V1.3 — exigences fonctionnelles étendues
+
+Ces exigences décrivent une cible et ne signifient pas que les fonctions sont déjà disponibles.
+
+- **F-ENV-01 — Découverte de l'environnement :** interroger les connecteurs autorisés pour identifier capacités, état, permissions, limites et fraîcheur. Tester connecteur absent, permission refusée, état périmé et panne.
+- **F-HOME-01 — Domotique :** lire/piloter les appareils compatibles, vérifier l'état après action, refuser les appareils non autorisés et tester d'abord en environnement contrôlé.
+- **F-ADMIN-01 — Administration :** organiser documents et échéances, préparer les démarches, fournir la provenance et détecter pièces manquantes. Distinguer un brouillon d'une soumission réellement envoyée.
+- **F-FIN-01 — Finances/portefeuille :** commencer en lecture seule, fournir des calculs reproductibles, données horodatées, risques et frais. Toute transaction exige confirmation explicite juste avant exécution ; aucun rendement garanti.
+- **F-3D-01 — Modélisation/simulation :** orchestrer les moteurs existants, formaliser contraintes et unités, comparer les versions et distinguer rendu visuel, calcul de solveur et validation indépendante. Revue qualifiée pour les usages critiques.
+- **F-COMM-01 — Appels :** intégrer uniquement un fournisseur compatible et autorisé ; contrôler consentement, motif, données partagées, annulation et solution de repli.
+- **F-AUTO-01 — Autonomie :** définir les niveaux de risque et budgets ; replanifier après imprévu ; demander validation au-delà des seuils ; tester panne, interruption, résultat incertain et doublon.
+- **F-PROJECT-01 — Projets :** persister objectifs, tâches, dépendances, échéances, risques, décisions, critères de réussite et prochaine action ; tester reprise et replanification.
+- **F-IMM-01 — Espace immersif :** conserver voix prioritaire et HUD discret ; permettre une transition vers cartes/3D/simulations et un retour sans perte de contexte ; avatar facultatif.
+
+### ARCH-03 — Contrat commun des connecteurs
+Chaque connecteur expose capacités, schémas d'entrée/sortie, permissions, coûts, limites, risques, délais, idempotence, stratégie d'annulation et preuve de résultat. Il doit être remplaçable sans réécrire le noyau de planification.
+
+### SEC-02 — Confirmation selon le risque
+- Niveau A : lecture et organisation réversible dans le périmètre consenti.
+- Niveau B : action réversible sur un appareil ou document selon les règles définies.
+- Niveau C : action externe, publication, communication, dépense, changement d'accès ou partage de données : confirmation explicite au moment de l'action.
+- Niveau D : transaction, signature, suppression irréversible, décision réglementée ou action présentant un risque physique : confirmation renforcée, contrôle supplémentaire ou intervention d'une personne qualifiée.
+Ces niveaux doivent être validés par domaine et ne contournent jamais la loi ni les permissions des fournisseurs.
+
+### Ordre d'implémentation
+1. Identité, permissions, isolation mémoire, contrats d'outils et vérification.
+2. Tâches persistantes, planification, reprise et replanification.
+3. Connecteurs testables pour appareils/domotique, fichiers/démarches et finances en lecture seule.
+4. Visualisation 3D puis solveurs spécialisés.
+5. Autonomie élargie après preuves de fiabilité et revue de sécurité.
