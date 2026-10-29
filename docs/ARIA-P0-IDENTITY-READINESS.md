@@ -65,7 +65,7 @@ Cette section remplace toute hypothèse de statut fondée sur les anciens commit
 ### État vérifié
 - Le Worker Cloudflare `aria-brain-staging` est toujours sur la version active 26, avec `ARIA_AUTH_MODE=session_kv`, `ARIA_AUTHZ_DB`, `ARIA_USERS` et `ARIA_MEMORY`. Les secrets ne sont pas lus.
 - La configuration observée ne comprend pas de bindings `SUPABASE_URL` et `SUPABASE_ANON_KEY`. Le mode Supabase individuel ne doit donc pas être considéré comme configuré.
-- La version active du Worker ne contient pas la route `/memory/consent) ni le stockage D1 du consentement/documents de la PR #43.
+- La version active du Worker ne contient pas la route `/memory/consent` ni le stockage D1 du consentement/documents de la PR #43.
 - La PR #43 est ouverte et non fusionnée, base `feat/aria-brain-staging-integration), tête `97451097f0e265fd67a766908a67cfb1c1e9086a). Ses workflows `Staging Worker Tests` et `ARIA secure UI integration checks` sont tous deux terminés avec succès sur ce commit.
 - Cette PR #43 a évolué depuis la version décrite plus haut dans ce document : elle ajoute un registre de consentement D1, des documents mémoire D1 et des écritures conditionnelles contrôlées côté serveur. Ce progrès est validé par la CI, mais il n'est pas actif dans le Worker déployé.
 - Les migrations 0002/0003 ont été rapportées comme appliquées à la base D1 staging et les requêtes SQL ont été vérifiées ; cela ne prouve ni le déploiement du Worker candidat ni le parcours HTTP authentifié de bout en bout.
