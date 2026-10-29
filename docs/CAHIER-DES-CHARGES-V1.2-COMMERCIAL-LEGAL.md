@@ -150,3 +150,59 @@ Ne pas ouvrir les comptes ou abonnements au public avant :
 - Prix définitifs, quotas, fonctionnalités livrées et politique de remboursement.
 - Âge minimum et parcours applicables aux mineurs.
 - URL de production et coordonnées du support.
+
+
+---
+
+## 14. Vision cible V1.3 — Assistant personnel universel et orchestrateur
+
+**Statut :** vision cible progressive ; ce document ne certifie aucune implémentation.
+
+ARIA doit devenir une intelligence personnelle multimodale qui comprend un objectif, mobilise les outils et appareils autorisés, planifie, exécute, vérifie et s'adapte aux imprévus. L'expérience principale reste vocale et contextuelle : l'utilisateur explore et manipule des espaces numériques tandis qu'ARIA coordonne les capacités spécialisées.
+
+### 14.1 Matériels et environnement
+- Découvrir via des connecteurs autorisés les appareils, applications, services, capteurs et capacités disponibles, leur état, leurs permissions et leurs limites.
+- S'adapter à l'iPhone, l'ordinateur, le navigateur et aux appareils compatibles sans supposer une intégration ou permission inexistante.
+- Séparer découverte, lecture, préparation et exécution ; arrêter les actions risquées si l'état est inconnu ou périmé.
+- Utiliser des connecteurs modulaires, documentés, remplaçables et fondés sur des interfaces officiellement prises en charge.
+
+### 14.2 Domotique
+- À terme, consulter et piloter les appareils compatibles : éclairage, température, prises, capteurs, scènes et autres équipements autorisés.
+- Vérifier l'état après exécution, fournir un historique compréhensible et une annulation lorsque possible.
+- Ne jamais prétendre contrôler un appareil non connecté ou non vérifié ; appliquer des confirmations adaptées au risque physique.
+
+### 14.3 Administration et finances
+- Organiser documents, formulaires, échéances, rendez-vous et démarches ; préparer des dossiers et brouillons ; vérifier pièces et dates avec provenance des informations.
+- Analyser revenus/dépenses et suivre un portefeuille via des sources autorisées, en affichant date, frais, risques et incertitudes.
+- Commencer par la lecture et la préparation. Toute transaction, transfert, ordre d'investissement, signature, soumission officielle ou engagement juridiquement contraignant exige une confirmation explicite juste avant exécution.
+- Ne jamais garantir de rendement ou de résultat administratif ; protéger strictement identifiants bancaires, documents d'identité et données fiscales.
+
+### 14.4 Modélisation 3D et simulation
+- Orchestrer des outils spécialisés pour créer, inspecter, convertir et modifier des modèles 3D.
+- Représenter les contraintes pertinentes : géométrie, dimensions, matériaux, masse, résistance, mouvement, tolérances, thermique, électricité, énergie, environnement, coût, fabrication, accessibilité et normes applicables.
+- Rendre explicites unités, hypothèses, données manquantes et compromis ; utiliser un solveur adapté et distinguer une animation illustrative d'une simulation validée.
+- Toute conception critique doit faire l'objet d'une validation qualifiée avant usage réel.
+
+### 14.5 Appels et communications
+- Permettre à terme des appels ou communications via des fournisseurs compatibles, lorsque les permissions et règles applicables le permettent.
+- Contrôler le motif, l'identité d'ARIA, les informations partagées, le consentement et les règles d'enregistrement.
+- Demander confirmation avant un appel engageant ou susceptible de divulguer des données sensibles ; proposer une alternative honnête si l'appel n'est pas disponible.
+
+### 14.6 Autonomie et gestion de projets
+- Transformer un objectif en plan comprenant dépendances, ressources, échéances, budget, risques et critères de réussite.
+- Exécuter les étapes à faible risque dans un périmètre préautorisé, vérifier le résultat, reprendre après interruption et réordonner le plan si les conditions changent.
+- Détecter blocages et imprévus, rechercher des alternatives, respecter des budgets de temps/coût/appels d'outils et demander une décision lorsque le risque ou l'incertitude dépasse le seuil défini.
+- Conserver l'état des tâches, décisions, résultats vérifiés et prochaine étape ; éviter les doublons et reprises aveugles lorsque le résultat précédent est incertain.
+
+### 14.7 Présence et espace interactif
+- Garder un HUD discret, cohérent et non surchargé, la voix prioritaire et une présence visuelle facultative.
+- Passer contextuellement de la conversation à des cartes, schémas, modèles 3D, visualisations scientifiques et simulations ; permettre de sélectionner, déplacer, isoler, annoter et modifier les paramètres sans perdre le contexte.
+- La transition immersive par le symbole A est une direction UX à valider, pas une fonction acquise.
+- Adapter l'expérience aux limites matérielles, réseau, accessibilité et autonomie.
+
+### 14.8 Architecture, sécurité et critères
+Chaque connecteur déclare ses capacités, schémas, permissions, coûts, limites, risques, délais, idempotence, annulation et méthode de vérification. Les permissions sont appliquées côté serveur ; comptes et mémoires sont isolés. Les contenus externes sont des données non fiables. Les actions sensibles, externes, financières, publiques, irréversibles ou juridiquement engageantes exigent confirmation appropriée. Les états d'action doivent distinguer planifié, en cours, réussi et vérifié, échoué, bloqué et incertain.
+
+Critères d'acceptation : tests de refus des actions non autorisées et d'isolation inter-comptes ; reprise d'une tâche sans duplication ; replanification après imprévu simulé ; confirmation des actions sensibles ; distinction explicite entre rendu, résultat de solveur et validation indépendante ; test en environnement contrôlé avant activation domotique ou appels réels ; aucune capacité non connectée présentée comme opérationnelle.
+
+**Limite explicite :** ARIA ne peut garantir la compatibilité avec tous les matériels, contraintes physiques, démarches ou imprévus. Elle doit exposer ses limites et demander une validation humaine lorsque nécessaire.
