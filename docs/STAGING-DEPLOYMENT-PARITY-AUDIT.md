@@ -138,3 +138,18 @@ P0 ne peut être marqué comme terminé que lorsque :
 8. Aucun déploiement de production n'a lieu sans autorisation explicite.
 
 **Statut à cette date : P0 non terminé.** Les tests CI de la PR #43 sont verts, mais la parité du Worker et le test HTTP multi-compte restent à démontrer.
+
+
+### 7. Contrôle de cohérence entre PR #41 et PR #43
+
+La lecture de `docs/ARIA-P0-IDENTITY-READINESS.md` sur la branche de la PR #41 révèle une divergence de version documentaire :
+
+- Le document de la PR #41 décrit une version antérieure de la PR #43 où `X-ARIA-Memory-Consent: true` est fourni par le client et indique explicitement que le registre durable de consentement reste à concevoir.
+- La PR #43 actuelle, commit `97451097f0e265fd67a766908a67cfb1c1e9086a`, a depuis évolué : elle ajoute les tables D1 `aria_memory_consent` et `aria_memory_documents`, la route authentifiée `/memory/consent` et des écritures conditionnelles sur le consentement serveur.
+- Les deux workflows CI de ce commit sont réussis, mais le Worker staging actif est toujours sur la version 26 et ne contient pas ces changements.
+
+**Conséquence :** la PR #41 doit être actualisée avant d'être utilisée comme décision de release. La décision de fournisseur d'identité reste nécessaire, mais son analyse doit tenir compte de la conception D1 la plus récente. Ne pas traiter l'ancien en-tête client comme l'implémentation actuelle du consentement, et ne pas traiter la nouvelle implémentation D1 comme déployée.
+
+### 8. Prochaine action unique recommandée
+
+Mettre à jour la décision P0 dans la branche documentaire de la PR #41 pour comparer les options d'identité à la version actuelle de la PR #43, confirmer les critères de sortie et identifier les paramètres de staging manquants. Ne modifier aucune configuration Cloudflare et ne déployer aucun Worker pendant cette étape documentaire. Une fois la décision technique relue et explicitement validée, préparer séparément le plan de release staging.
