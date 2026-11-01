@@ -71,6 +71,16 @@ test("voice-first HUD loads the scene engine and responsive styles without a per
 
 test("voice frontend sends preferences and explicit memory consent and applies structured actions", () => {
   assert.match(app, /memoryConsent: profile\.memoryConsent === true/);
+  assert.match(html, /@supabase\/supabase-js@2/);
+  assert.match(html, /id="authSignIn"/);
+  assert.match(html, /id="authSignUp"/);
+  assert.match(html, /id="authReset"/);
+  assert.match(app, /signInWithPassword/);
+  assert.match(app, /auth\.signUp/);
+  assert.match(app, /resetPasswordForEmail/);
+  assert.match(app, /autoRefreshToken: true/);
+  assert.doesNotMatch(html, /apiTokenSetting|Jeton d’accès alpha/);
+  assert.match(sw, /supabase-config\.js/);
   assert.match(app, /preferences: \{/);
   assert.match(app, /function applyIntentAction/);
   assert.match(app, /"finance"/);
@@ -186,6 +196,34 @@ test("async scene guards prevent stale map, finance or NASA responses from repla
   assert.match(visualEngine, /sceneId === sceneEpoch && viewport\.dataset\.scene === "finance"/);
   assert.match(visualEngine, /function close\(\) \{\s*sceneEpoch\+\+/);
   assert.match(visualEngine, /script\.onerror = \(\) => \{ script\.remove\(\); reject\(/);
+});
+
+test("individual auth accepts the publishable API key without requiring a legacy anon key", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, options) => {
+    assert.match(String(url), /\/auth\/v1\/user$/);
+    assert.equal(options.headers.apikey, "sb_publishable_test");
+    assert.equal(options.headers.Authorization, "Bearer valid-user-token");
+    return new Response(JSON.stringify({ id: "123e4567-e89b-42d3-a456-426614174000" }), { status: 200 });
+  };
+  try {
+    const env = {
+      ARIA_AUTH_MODE: "individual",
+      SUPABASE_URL: "https://project.supabase.co",
+      SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test",
+      ARIA_AUTHZ_DB: { async prepare() { return { bind() { return this; }, async first() { return { userId:"123e4567-e89b-42d3-a456-426614174000", role:"user", active:1 }; } }; } },
+      OPENAI_API_KEY: "test-key"
+    };
+    const response = await worker.fetch(new Request(endpoint + "/chat", {
+      method:"POST",
+      headers:{ Authorization:"Bearer valid-user-token", "Content-Type":"application/json" },
+      body:JSON.stringify({messages:[{role:"user",content:"Bonjour"}],memoryConsent:false})
+    }), env);
+    assert.notEqual(response.status, 503);
+    assert.notEqual(response.status, 401);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("latest secure Worker retains D1 authorization and hashed session-token lookup", () => {
