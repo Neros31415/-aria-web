@@ -473,7 +473,8 @@ Dépôt : https://github.com/Neros31415/-aria-web
 - PR #50 : correction de la récupération de session Supabase après échec réseau temporaire ; CI push et pull_request réussies.
 - PR #51 : protection contre l'écrasement d'une session récente par un instantané `getSession()` obsolète ; CI push et pull_request réussies.
 - PR #52 : isolation locale des préférences, de l'onboarding et du reset par compte ; CI push et pull_request réussies.
-- Les PR sont empilées sur la pile d'authentification/mémoire (#43 → #46 → #48 → #50, avec #51 en correctif complémentaire de #50, puis #52 sur la base de #50). Elles ne sont pas fusionnées.
+- PR #53 : harnais HTTP manuel à deux comptes, strictement limité aux origines staging, avec garde-fous de readiness, isolation, révocation et nettoyage ; CI push et pull_request réussies. Le harnais n'a pas été exécuté contre les services réels.
+- Les PR sont empilées sur la pile d'authentification/mémoire (#43 → #46 → #48 → #50, avec #51 en correctif complémentaire de #50, puis #52 et #53 sur la chaîne UI/auth). Elles ne sont pas fusionnées.
 - PR #49 contient le présent registre de spécification, uniquement documentaire et également non fusionné.
 - Aucun test de bout en bout sur le vrai projet Supabase, aucun test HTTP multi-comptes, aucun test sur iPhone physique et aucun déploiement du Worker individuel n'ont été réalisés dans ce cycle. Les migrations D1 0002/0003 sont appliquées au schéma staging et ont été vérifiées en lecture seule ; le Worker actif ne les utilise pas encore.
 
@@ -529,6 +530,10 @@ Une fonctionnalité non livrée ou non vérifiée ne doit pas être annoncée co
 - PR consentement mémoire #43 : https://github.com/Neros31415/-aria-web/pull/43
 - PR identité Supabase #46 : https://github.com/Neros31415/-aria-web/pull/46
 - PR robustesse Auth #48 : https://github.com/Neros31415/-aria-web/pull/48
+- PR reprise de session #50 : https://github.com/Neros31415/-aria-web/pull/50
+- PR anti-course de session #51 : https://github.com/Neros31415/-aria-web/pull/51
+- PR isolation multi-comptes #52 : https://github.com/Neros31415/-aria-web/pull/52
+- PR harnais HTTP staging #53 : https://github.com/Neros31415/-aria-web/pull/53
 
 ---
 
