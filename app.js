@@ -415,10 +415,20 @@ function updateTranscript(text, role = "ARIA") {
 }
 function speak(text, options = {}) {
   if (options.resume === true && recognition) shouldResumeListening = true;
-  if (!("speechSynthesis" in window)) {
-    announceVisual("La synthèse vocale n'est pas disponible dans ce navigateur.");
+  if (!window.speechSynthesis || typeof SpeechSynthesisUtterance !== "function") {
+    updateTranscript(text, "ARIA");
+    announceVisual("La synthèse vocale n'est pas disponible dans ce navigateur. La réponse reste consultable dans la transcription.");
     speaking = false;
-    if (typeof options.onEnd === "function") options.onEnd();
+    setState("presence", "Je suis là.", "La réponse est disponible dans la transcription.");
+    if (typeof options.onEnd === "function") {
+      shouldResumeListening = false;
+      options.onEnd();
+      return;
+    }
+    if (shouldResumeListening) {
+      shouldResumeListening = false;
+      window.setTimeout(startListening, 300);
+    }
     return;
   }
   window.speechSynthesis.cancel();
