@@ -12,6 +12,8 @@ const SESSION_TOKEN_KEY = "aria.voice.alphaToken"; // legacy cleanup only; never
 let supabaseClient = null;
 let supabaseAccessToken = "";
 let authReady = false;
+let authStateGeneration = 0;
+let authScopeInitialized = false;
 let activeAuthUserId = null;
 let memoryStorageKey = KEYS.memory;
 let profileStorageKey = KEYS.profile;
@@ -76,20 +78,21 @@ async function initializeSupabaseAuth() {
       supabaseClient = null;
       supabaseAccessToken = "";
       updateAuthUi(null);
-      setAuthStatus("Authentification indisponible : configuration publique Supabase absente.");
+      activateUserMemoryScope(null);
+      setAuthStatus("Authentification indisponible : configuration publique Supabase absente. Le profil local anonyme est actif.");
       return;
     }
     supabaseClient = window.supabase.createClient(config.url, config.publishableKey, {
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
     });
 
-    // Subscribe before restoring the session. If getSession() fails because the
-    // network is temporarily unavailable, later sign-in/recovery events must
-    // still update the token and the account-scoped memory state.
+    // Subscribe before restoring the session. Auth events are authoritative and
+    // must win over any older getSession() snapshot that resolves afterwards.
     supabaseClient.auth.onAuthStateChange((event, session) => {
+      authStateGeneration += 1;
       supabaseAccessToken = session?.access_token || "";
       const nextUserId = session?.user?.id || null;
-      if (nextUserId !== activeAuthUserId) {
+      if (nextUserId !== activeAuthUserId || !authScopeInitialized) {
         activateUserMemoryScope(nextUserId);
         conversation = [];
         if (nextUserId) void refreshRemoteMemoryConsent();
@@ -106,21 +109,26 @@ async function initializeSupabaseAuth() {
       updateAuthUi(session || null);
     });
 
+    const restoreGeneration = authStateGeneration;
     const { data, error } = await supabaseClient.auth.getSession();
     if (error) throw error;
-    supabaseAccessToken = data?.session?.access_token || "";
-    updateAuthUi(data?.session || null);
-    const initialUserId = data?.session?.user?.id || null;
-    if (initialUserId !== activeAuthUserId) {
-      activateUserMemoryScope(initialUserId);
-      if (initialUserId) void refreshRemoteMemoryConsent();
+    if (restoreGeneration !== authStateGeneration) return;
+
+    const restoredSession = data?.session || null;
+    supabaseAccessToken = restoredSession?.access_token || "";
+    updateAuthUi(restoredSession);
+    const restoredUserId = restoredSession?.user?.id || null;
+    if (restoredUserId !== activeAuthUserId || !authScopeInitialized) {
+      activateUserMemoryScope(restoredUserId);
+      if (restoredUserId) void refreshRemoteMemoryConsent();
     }
   } catch (error) {
-    // Keep a successfully-created Supabase client and its auth listener. A
-    // transient session-restore failure must not disable the sign-in retry.
+    // Keep a successfully-created client/listener so the user can sign in again.
+    // Until an identity is restored, keep personal UI and account data locked.
     if (!supabaseClient) {
       supabaseAccessToken = "";
       updateAuthUi(null);
+      activateUserMemoryScope(null);
     }
     setAuthStatus(authFailureMessage(error) + " La session n’a pas pu être restaurée. Vous pouvez réessayer.");
   } finally {
@@ -139,6 +147,7 @@ function activateUserMemoryScope(userId) {
   // Server consent remains authoritative; fail closed until it is reloaded.
   profile.memoryConsent = false;
   saveProfile();
+  authScopeInitialized = true;
   renderMemory();
   if (!onboarding) finishSetupIfReturning();
 }
@@ -340,8 +349,9 @@ let speaking = false;
 let shouldResumeListening = false;
 let onboarding = false;
 let onboardingStep = 0;
-let profile = safeRead(profileStorageKey, defaultProfile());
-let memories = safeRead(KEYS.memory, []);
+// Keep personal data out of the UI until the persisted account scope is restored.
+let profile = defaultProfile();
+let memories = [];
 let transcriptVisible = false;
 let visualizationOpen = false;
 let transitionTimer = null;
@@ -486,6 +496,10 @@ function stopListening() {
   $("voiceStart").textContent = "Reprendre l'écoute";
 }
 function openPanel(id) {
+  if (id === "memoryPanel" && !authScopeInitialized) {
+    $("memoryStatus").textContent = "Votre session n'est pas encore restaurée. Connectez-vous ou réessayez avant d'ouvrir la mémoire personnelle.";
+    return;
+  }
   $(id).hidden = false;
   if (id === "memoryPanel") {
     renderMemory();
@@ -1047,11 +1061,23 @@ if (SpeechRecognition) {
   };
 }
 $("voiceStart").addEventListener("click", () => {
+  if (!authScopeInitialized) {
+    openAuthDialog();
+    announceVisual("Je termine de restaurer votre session. Connectez-vous pour accéder à votre profil personnel.");
+    return;
+  }
   if (!localStorage.getItem(onboardedStorageKey)) beginOnboarding();
   else startListening();
 });
 $("voiceStop").addEventListener("click", stopListening);
-$("pauseToggle").addEventListener("click", () => listening || speaking ? stopListening() : startListening());
+$("pauseToggle").addEventListener("click", () => {
+  if (!authScopeInitialized) {
+    openAuthDialog();
+    announceVisual("Votre session personnelle n'est pas encore restaurée.");
+    return;
+  }
+  listening || speaking ? stopListening() : startListening();
+});
 $("transcriptToggle").addEventListener("click", () => {
   transcriptVisible = !transcriptVisible;
   $("transcriptWidget").hidden = !transcriptVisible;
@@ -1065,6 +1091,11 @@ $("visualizationBack").addEventListener("click", closeVisualization);
 $("memoryToggle").addEventListener("click", () => openPanel("memoryPanel"));
 $("memoryClose").addEventListener("click", () => closePanel("memoryPanel"));
 $("settingsBtn").addEventListener("click", () => {
+  if (!authScopeInitialized) {
+    openAuthDialog();
+    announceVisual("Je dois d'abord restaurer votre session pour charger vos préférences personnelles.");
+    return;
+  }
   $("authAccountStatus").textContent = getApiToken() ? "Session ARIA active" : "Non connecté";
   $("proactivitySetting").value = profile.proactivity;
   $("verbositySetting").value = profile.verbosity;
@@ -1102,6 +1133,7 @@ $("authLogout").addEventListener("click", async () => {
 });
 initializeSupabaseAuth();
 $("restartOnboarding").addEventListener("click", () => {
+  if (!authScopeInitialized) { openAuthDialog(); return; }
   $("settingsDialog").close();
   localStorage.removeItem(onboardedStorageKey);
   $("onboardingDialog").showModal();
@@ -1224,4 +1256,3 @@ remoteResetPromise.then(deleted => {
       : "Les anciennes données locales ont été effacées. La suppression distante n'a pas pu être confirmée; l'identifiant et la session sont conservés temporairement pour permettre une nouvelle tentative.";
   }
 });
-finishSetupIfReturning();
