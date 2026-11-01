@@ -577,9 +577,52 @@ test("account preferences and onboarding progress are isolated per authenticated
 });
 
 test("clearing one signed-in account's local ARIA data preserves other accounts", () => {
-  assert.match(app, /function clearLocalAccountData\(\)/);
-  assert.match(app, /const currentAccountKeys = new Set\(\[memoryStorageKey, profileStorageKey, onboardedStorageKey\]\)/);
-  assert.match(app, /const isLegacyAnonymousData = !activeAuthUserId/);
-  assert.match(app, /if \(!activeAuthUserId\) \{[\s\S]*?for \(const key of Object\.keys\(sessionStorage\)\)/);
-  assert.match(app, /const legacyClientIds = activeAuthUserId \? \[\] :/);
+  const start = app.indexOf("function clearLocalAccountData()");
+  const end = app.indexOf("function updateAuthUi", start);
+  assert.ok(start >= 0 && end > start);
+  const storage = (initial = {}) => {
+    const target = { ...initial };
+    Object.defineProperties(target, {
+      getItem: { value(key) { return Object.prototype.hasOwnProperty.call(this, key) ? this[key] : null; } },
+      setItem: { value(key, value) { this[key] = String(value); } },
+      removeItem: { value(key) { delete this[key]; } }
+    });
+    return target;
+  };
+  const localStorage = storage({
+    "aria.memory.user.account-A": "[{\"text\":\"A\"}]",
+    "aria.profile.user.account-A": "{\"proactivity\":\"proactive\"}",
+    "aria.onboarded.user.account-A": "done",
+    "aria.memory.user.account-B": "[{\"text\":\"B\"}]",
+    "aria.profile.user.account-B": "{\"proactivity\":\"discrete\"}",
+    "aria.onboarded.user.account-B": "done",
+    "aria.v07.memoryClientId": "legacy-client"
+  });
+  const sessionStorage = storage({ "aria.session.accessToken": "legacy-token", "aria.voice.alphaToken": "legacy-alpha" });
+  const context = {
+    memoryStorageKey: "aria.memory.user.account-A",
+    profileStorageKey: "aria.profile.user.account-A",
+    onboardedStorageKey: "aria.onboarded.user.account-A",
+    activeAuthUserId: "account-A",
+    profile: { proactivity: "balanced", verbosity: "balanced", humor: "balanced", memoryConsent: false },
+    memory: "unused",
+    memories: [],
+    KEYS: { reset: "aria.reset" },
+    SESSION_TOKEN_KEY: "aria.voice.alphaToken",
+    localStorage,
+    sessionStorage
+  };
+  vm.createContext(context);
+  vm.runInContext(app.slice(start, end), context);
+  vm.runInContext("clearLocalAccountData()", context);
+
+  assert.equal(localStorage.getItem("aria.memory.user.account-A"), "[]");
+  assert.equal(JSON.parse(localStorage.getItem("aria.profile.user.account-A")).memoryConsent, false);
+  assert.equal(localStorage.getItem("aria.onboarded.user.account-A"), null);
+  assert.equal(localStorage.getItem("aria.memory.user.account-B"), "[{\"text\":\"B\"}]");
+  assert.equal(localStorage.getItem("aria.profile.user.account-B"), "{\"proactivity\":\"discrete\"}");
+  assert.equal(localStorage.getItem("aria.onboarded.user.account-B"), "done");
+  assert.equal(localStorage.getItem("aria.v07.memoryClientId"), "legacy-client");
+  assert.equal(sessionStorage.getItem("aria.session.accessToken"), "legacy-token");
+  assert.equal(sessionStorage.getItem("aria.voice.alphaToken"), "legacy-alpha");
 });
