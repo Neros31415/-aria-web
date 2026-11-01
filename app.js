@@ -64,10 +64,8 @@ async function initializeSupabaseAuth() {
   authReady = true;
   updateAuthUi(data?.session || null);
   const initialUserId = data?.session?.user?.id || null;
-  if (initialUserId) {
-    activateUserMemoryScope(initialUserId);
-    void refreshRemoteMemoryConsent();
-  }
+  activateUserMemoryScope(initialUserId);
+  if (initialUserId) void refreshRemoteMemoryConsent();
   supabaseClient.auth.onAuthStateChange((event, session) => {
     supabaseAccessToken = session?.access_token || "";
     const nextUserId = session?.user?.id || null;
@@ -90,7 +88,7 @@ async function initializeSupabaseAuth() {
 function activateUserMemoryScope(userId) {
   cancelRemoteMemoryRequests();
   activeAuthUserId = userId || null;
-  memoryStorageKey = userId ? KEYS.memory + ".user." + userId : KEYS.memory;
+  memoryStorageKey = userId ? KEYS.memory + ".user." + userId : KEYS.memory + ".anonymous";
   memories = safeRead(memoryStorageKey, []);
   profile.memoryConsent = false;
   saveProfile();
