@@ -443,17 +443,18 @@ Dépôt : https://github.com/Neros31415/-aria-web
 
 ### 21.3 Backend et identité
 - Une branche d'intégration backend Cloudflare existe, avec contrôles d'autorisation D1 et Worker staging.
-- L'audit historique documente un Worker staging version 26 en mode session_kv et une base D1 d'autorisation.
-- Le test HTTP réel de santé et le parcours authentifié de bout en bout n'ont pas été confirmés par l'audit de parité consulté.
-- La mémoire persistante multi-utilisateur doit rester bloquée tant que l'identité canonique, le consentement et les migrations réelles ne sont pas vérifiés.
-- Supabase Auth individuel par e-mail/mot de passe est la cible du chantier de staging.
+- **Vérification Cloudflare en lecture seule du 1er novembre 2026 :** le Worker `aria-brain-staging` est toujours sur la version active `c1387164-ffdd-48ea-9dbe-7034b98bb781`, déployée à 100 % le 22 octobre 2026. Les réglages exposent `ARIA_AUTH_MODE=session_kv`, `ARIA_REQUIRE_INDIVIDUAL_AUTH=true`, le binding D1 `ARIA_AUTHZ_DB` et les KV historiques. Aucun binding `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` ou `SUPABASE_ANON_KEY` n'est présent. Les valeurs des secrets n'ont pas été consultées.
+- La base D1 staging `aria-authz-staging` contient actuellement `aria_authorization_audit`, `aria_entitlements`, `aria_memory_consent`, `aria_memory_documents` et `aria_user_roles`. Une requête en lecture seule sur `sqlite_master` confirme les tables et les définitions SQL des migrations 0002/0003. Le champ de métadonnées `num_tables` renvoyé par la liste D1 vaut pourtant 0 ; cette valeur est incohérente avec `sqlite_master` et ne doit pas être utilisée comme preuve d'absence du schéma.
+- Les migrations D1 0002/0003 ont donc bien été appliquées à la base staging et leur schéma a été vérifié. Cela ne signifie pas que le Worker actif utilise ce schéma : la version déployée reste en `session_kv`, sans les bindings Supabase individuels. Le code D1 de la PR #43 n'est pas encore promu dans le Worker actif.
+- Aucun parcours HTTP authentifié de bout en bout avec deux comptes canoniques distincts n'est attesté. La mémoire persistante multi-utilisateur reste bloquée tant que le Worker individuel correspondant n'est pas configuré/déployé en staging et vérifié par tests HTTP.
+- Supabase Auth individuel par e-mail/mot de passe est la cible retenue pour le staging. Le projet Supabase staging `aria-staging` est créé et sain ; l'URL et la clé publishable sont présentes dans la branche candidate, sans clé secrète/service_role.
+- Les réglages du fournisseur Email, la confirmation d'adresse, les URL de redirection et les bindings Cloudflare Supabase ne sont pas encore configurés/validés. Le Worker actuellement actif ne possède pas ces bindings.
 - PR #46 prépare ce parcours ; PR #48 ajoute la gestion des erreurs réseau, états occupés et doubles soumissions.
 - PR #50 corrige un cas de panne réseau pendant la restauration de session : le client Auth et son listener sont conservés afin de permettre une reconnexion sans rechargement. Un test comportemental couvre l'échec de restauration puis une connexion réussie.
 - PR #51 corrige une course concurrente : un instantané `getSession()` ancien ne peut plus écraser un événement d'authentification plus récent (connexion, déconnexion ou renouvellement de jeton). Un test de régression vérifie la priorité de l'événement récent.
 - PR #52 isole les préférences et l'onboarding par compte et corrige la remise à zéro locale afin qu'elle ne supprime pas les données des autres comptes du même appareil.
-- PR #46, #48, #50, #51 et #52 sont ouvertes en brouillon et non fusionnées. Les CI des PR #50 et #52 sont vertes sur les commits vérifiés, mais le projet Supabase et ses réglages Auth n'ont pas été configurés par ces PR ; aucun test HTTP réel à deux comptes ni déploiement n'est attesté.
-- PR #43 contient des protections avancées de consentement mémoire et des migrations D1 0002/0003, mais les migrations n'étaient pas appliquées à la base réelle selon la description de la PR. Elle est ouverte et non fusionnée.
-- Aucune production ne doit être modifiée sur la base de ces travaux sans autorisation explicite.
+- PR #43, #46, #48, #50, #51 et #52 sont ouvertes et non fusionnées. Les CI des PR #50, #51 et #52 sont vertes sur les commits vérifiés. Aucun test HTTP réel multi-comptes ni déploiement du Worker individuel n'est attesté.
+- Aucune production n'a été modifiée ; aucune configuration Cloudflare ou Supabase n'a été changée pendant cet audit en lecture seule.
 
 ### 21.4 Cartographie, finance et science
 - Les PR #31 à #34 documentent des scènes carte, finance et science intégrées dans la branche backend.
@@ -474,7 +475,7 @@ Dépôt : https://github.com/Neros31415/-aria-web
 - PR #52 : isolation locale des préférences, de l'onboarding et du reset par compte ; CI push et pull_request réussies.
 - Les PR sont empilées sur la pile d'authentification/mémoire (#43 → #46 → #48 → #50, avec #51 en correctif complémentaire de #50, puis #52 sur la base de #50). Elles ne sont pas fusionnées.
 - PR #49 contient le présent registre de spécification, uniquement documentaire et également non fusionné.
-- Aucun test de bout en bout sur le vrai projet Supabase, aucun test HTTP multi-comptes, aucun test sur iPhone physique, aucune migration D1 appliquée et aucun déploiement n'ont été réalisés dans ce cycle.
+- Aucun test de bout en bout sur le vrai projet Supabase, aucun test HTTP multi-comptes, aucun test sur iPhone physique et aucun déploiement du Worker individuel n'ont été réalisés dans ce cycle. Les migrations D1 0002/0003 sont appliquées au schéma staging et ont été vérifiées en lecture seule ; le Worker actif ne les utilise pas encore.
 
 ---
 
@@ -484,8 +485,8 @@ Dépôt : https://github.com/Neros31415/-aria-web
 2. **Orbe :** élément visuel non cliquable comme commande ; commandes discrètes et accessibles.
 3. **iPhone :** la PWA est un prototype/canal de test ; la cible App Store est une véritable application native, avec SwiftUI privilégié.
 4. **Mémoire :** vierge par défaut, consentement explicite, séparation historique/mémoire, isolation serveur et confirmation réelle des suppressions.
-5. **Authentification :** Supabase Auth individuel est le choix cible du chantier staging, mais pas encore un service opérationnel configuré et validé de bout en bout.
-6. **D1 :** autorisation et mémoire ne sont pas considérées disponibles tant que les migrations et tests réels correspondants ne sont pas confirmés.
+5. **Authentification :** Supabase Auth individuel est le choix cible ; le projet staging existe, mais les réglages Email/redirects et les bindings Worker ne sont pas encore configurés et validés de bout en bout.
+6. **D1 :** les migrations de consentement/documents sont appliquées et vérifiées sur la base staging ; la mémoire individuelle reste indisponible sur le Worker actif tant que le code et l'authentification individuelle ne sont pas déployés et testés en HTTP.
 7. **Vision 3D :** les expériences 2D existantes ne doivent pas être confondues avec le God’s Eye View ou les simulations 3D demandées.
 8. **Finance :** suivi et analyse ne signifient pas accès bancaire ou exécution de transactions.
 9. **Proactivité :** une préférence de prompt n'est pas un ordonnanceur opérationnel ni une surveillance en arrière-plan.
