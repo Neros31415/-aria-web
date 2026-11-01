@@ -8,7 +8,10 @@ const KEYS = {
   clientId: "aria.voice.clientId.v1"
 };
 const API_BASE = "https://aria-brain-staging.quentineros-sevesi.workers.dev";
-const SESSION_TOKEN_KEY = "aria.voice.alphaToken";
+const SESSION_TOKEN_KEY = "aria.voice.alphaToken"; // legacy cleanup only; never used for new sessions
+let supabaseClient = null;
+let supabaseAccessToken = "";
+let authReady = false;
 let conversation = [];
 let requestInFlight = false;
 let turnInProgress = false;
@@ -33,13 +36,86 @@ function getClientId() {
   return id;
 }
 function getApiToken() {
-  return sessionStorage.getItem(SESSION_TOKEN_KEY) || "";
+  return supabaseAccessToken;
 }
-function setApiToken(value) {
-  const token = value.trim();
-  if (token) sessionStorage.setItem(SESSION_TOKEN_KEY, token);
-  else sessionStorage.removeItem(SESSION_TOKEN_KEY);
+function setAuthStatus(message) {
+  const node = $("authStatus");
+  if (node) node.textContent = message;
 }
+function openAuthDialog() {
+  if ($("authDialog") && !$("authDialog").open) $("authDialog").showModal();
+}
+async function initializeSupabaseAuth() {
+  const config = window.ARIA_SUPABASE_CONFIG;
+  if (!window.supabase?.createClient || !config?.url || !config?.publishableKey) {
+    setAuthStatus("Authentification indisponible : configuration publique Supabase absente.");
+    authReady = true;
+    return;
+  }
+  supabaseClient = window.supabase.createClient(config.url, config.publishableKey, {
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+  });
+  const { data, error } = await supabaseClient.auth.getSession();
+  if (error) setAuthStatus("Impossible de restaurer la session. Connectez-vous à nouveau.");
+  supabaseAccessToken = data?.session?.access_token || "";
+  authReady = true;
+  updateAuthUi(data?.session || null);
+  supabaseClient.auth.onAuthStateChange((_event, session) => {
+    supabaseAccessToken = session?.access_token || "";
+    updateAuthUi(session || null);
+    if (!session) {
+      cancelRemoteMemoryRequests();
+      conversation = [];
+    }
+  });
+}
+function updateAuthUi(session) {
+  const signedIn = Boolean(session?.user?.email);
+  const label = signedIn ? "Connecté : " + session.user.email : "Non connecté";
+  setAuthStatus(label);
+  const account = $("authAccountStatus");
+  if (account) account.textContent = label;
+  const logout = $("authLogout");
+  if (logout) logout.hidden = !signedIn;
+  const login = $("authOpen");
+  if (login) login.textContent = signedIn ? "Gérer la session" : "Se connecter";
+}
+async function submitEmailPasswordAuth(mode) {
+  if (!supabaseClient) return setAuthStatus("Supabase Auth n'est pas configuré.");
+  const email = $("authEmail").value.trim();
+  const password = $("authPassword").value;
+  if (!email || (mode !== "reset" && password.length < 8)) {
+    setAuthStatus(mode === "reset" ? "Saisissez votre adresse email." : "Saisissez un email et un mot de passe d'au moins 8 caractères.");
+    return;
+  }
+  setAuthStatus("Communication avec Supabase…");
+  let result;
+  if (mode === "signup") {
+    result = await supabaseClient.auth.signUp({
+      email, password,
+      options: { emailRedirectTo: window.location.origin + window.location.pathname }
+    });
+  } else if (mode === "reset") {
+    result = await supabaseClient.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + window.location.pathname
+    });
+  } else {
+    result = await supabaseClient.auth.signInWithPassword({ email, password });
+  }
+  if (result.error) {
+    setAuthStatus("Échec : " + result.error.message);
+    return;
+  }
+  if (mode === "signup" && !result.data?.session) {
+    setAuthStatus("Compte créé. Vérifiez votre email pour confirmer l'adresse avant de vous connecter.");
+  } else if (mode === "reset") {
+    setAuthStatus("Si cette adresse correspond à un compte, un email de récupération a été envoyé.");
+  } else {
+    setAuthStatus("Connexion réussie.");
+    $("authDialog").close();
+  }
+}
+
 
 async function persistRemoteMemoryConsent(enabled) {
   const token = getApiToken();
@@ -500,9 +576,9 @@ function applyIntentAction(result) {
 async function requestAriaReply(text) {
   const token = getApiToken();
   if (!token) {
-    $("settingsDialog").showModal();
-    announceVisual("Le moteur distant n'est pas encore connecté. Saisissez votre jeton d'accès alpha dans les paramètres.");
-    return "Je suis prête, mais il me manque le jeton d'accès alpha pour joindre mon moteur conversationnel. Ouvrons les paramètres pour le configurer.";
+    openAuthDialog();
+    announceVisual("Connectez-vous pour accéder au moteur conversationnel.");
+    return "Je suis prête. Connectez-vous à votre compte ARIA pour que je puisse joindre mon moteur conversationnel.";
   }
   if (requestInFlight) return "Je termine déjà votre demande précédente. Un instant, s'il vous plaît.";
   requestInFlight = true;
@@ -531,11 +607,11 @@ async function requestAriaReply(text) {
     let data = {};
     try { data = await response.json(); } catch {}
     if (response.status === 401) {
-      sessionStorage.removeItem(SESSION_TOKEN_KEY);
       conversation.pop();
-      $("settingsDialog").showModal();
-      announceVisual("Le jeton d'accès a été refusé. Vérifiez-le ou demandez-en un nouveau à l'administrateur.");
-      return "Le serveur a refusé le jeton d'accès. Je l'ai retiré de cette session. Vérifiez-le dans les paramètres.";
+      if (supabaseClient) await supabaseClient.auth.signOut();
+      openAuthDialog();
+      announceVisual("La session a expiré ou a été refusée. Reconnectez-vous.");
+      return "La session a expiré ou a été refusée. Reconnectez-vous pour continuer.";
     }
     if (!response.ok || typeof data.reply !== "string" || !data.reply.trim()) {
       conversation.pop();
@@ -734,7 +810,6 @@ function finishSetupIfReturning() {
   }
 }
 async function saveSettingsFromDialog() {
-  setApiToken($("apiTokenSetting").value);
   profile.proactivity = $("proactivitySetting").value;
   profile.verbosity = $("verbositySetting").value;
   profile.humor = $("humorSetting").value;
@@ -761,7 +836,7 @@ async function saveSettingsFromDialog() {
         : "Révocation locale appliquée, mais la révocation serveur n’a pas été confirmée. État distant à vérifier.";
     }
   }
-  speak(getApiToken() ? "Vos préférences sont enregistrées. Le jeton alpha est disponible pour cette session." : "Vos préférences sont enregistrées. Le moteur distant restera indisponible tant que le jeton alpha n'est pas configuré.", {resume:true});
+  speak(getApiToken() ? "Vos préférences sont enregistrées. Votre session ARIA est active." : "Vos préférences sont enregistrées. Connectez-vous à votre compte pour utiliser le moteur distant.", {resume:true});
 }
 function updateClock() {
   $("clockLabel").textContent = new Date().toLocaleTimeString("fr-FR", {hour:"2-digit",minute:"2-digit"});
@@ -822,7 +897,7 @@ $("visualizationBack").addEventListener("click", closeVisualization);
 $("memoryToggle").addEventListener("click", () => openPanel("memoryPanel"));
 $("memoryClose").addEventListener("click", () => closePanel("memoryPanel"));
 $("settingsBtn").addEventListener("click", () => {
-  $("apiTokenSetting").value = getApiToken();
+  $("authAccountStatus").textContent = getApiToken() ? "Session ARIA active" : "Non connecté";
   $("proactivitySetting").value = profile.proactivity;
   $("verbositySetting").value = profile.verbosity;
   $("humorSetting").value = profile.humor;
@@ -830,6 +905,18 @@ $("settingsBtn").addEventListener("click", () => {
   $("settingsDialog").showModal();
 });
 $("saveSettings").addEventListener("click", saveSettingsFromDialog);
+$("authOpen").addEventListener("click", () => openAuthDialog());
+$("authClose").addEventListener("click", () => $("authDialog").close());
+$("authSignIn").addEventListener("click", () => submitEmailPasswordAuth("signin"));
+$("authSignUp").addEventListener("click", () => submitEmailPasswordAuth("signup"));
+$("authReset").addEventListener("click", () => submitEmailPasswordAuth("reset"));
+$("authLogout").addEventListener("click", async () => {
+  if (!supabaseClient) return;
+  const { error } = await supabaseClient.auth.signOut();
+  setAuthStatus(error ? "Déconnexion impossible : " + error.message : "Session fermée.");
+  if (!error) $("authPassword").value = "";
+});
+initializeSupabaseAuth();
 $("restartOnboarding").addEventListener("click", () => {
   $("settingsDialog").close();
   localStorage.removeItem(KEYS.onboarded);
