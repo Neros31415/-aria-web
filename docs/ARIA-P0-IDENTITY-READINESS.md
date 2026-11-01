@@ -89,3 +89,47 @@ Aucune option ne doit être activée par simple hypothèse. La variable `ARIA_RE
 - [ ] La version active et le comportement réel sont re-vérifiés après déploiement ; un plan de retour arrière est prêt.
 
 **Statut : P0 ouvert.** La CI de la PR #43 est verte, mais l'identité cible n'est pas confirmée, le Worker actif n'est pas aligné avec ce code, et le parcours HTTP multi-compte n'est pas encore démontré. Cette mise à jour documentaire n'autorise aucune modification Cloudflare, migration supplémentaire ou déploiement.
+
+
+---
+
+## 7. Décision d'identité confirmée et préparation staging — 1 novembre 2026
+
+### Décision
+Le propriétaire confirme **Supabase Auth individuel comme stratégie cible d'identité d'ARIA**. L'option sessions alpha KV reste uniquement un mécanisme transitoire de compatibilité ; elle ne doit pas devenir l'identité durable du produit. Cette décision autorise la préparation technique et documentaire en staging, mais **n'autorise ni création/achat de projet, ni changement de configuration, ni migration, ni déploiement**.
+
+### État recontrôlé en lecture seule
+- Le Worker `aria-brain-staging` est toujours sur la version 26 (`c1387164-ffdd-48ea-9dbe-7034b98bb781)), déployée à 100 %. La liste des versions et déploiements Cloudflare ne montre aucune version plus récente.
+- Les noms de bindings du Worker staging incluent `ARIA_AUTH_MODE`, `ARIA_AUTHZ_DB`, `ARIA_USERS`, `ARIA_MEMORY`, `ARIA_ACCESS_TOKEN` et `OPENAI_API_KEY`. Aucun binding `SUPABASE_URL` ou `SUPABASE_ANON_KEY` n'est présent. Seuls les noms/types de bindings ont été consultés ; aucune valeur de secret n'a été lue.
+- L'inventaire Supabase accessible via la connexion actuelle retourne zéro projet visible. Cela ne prouve pas qu'aucun projet n'existe ; cela signifie qu'aucun projet ne peut être sélectionné ou inspecté avec l'accès actuellement disponible.
+- Dans la branche de la PR #43, le Worker sait déjà valider un bearer token en appelant côté serveur `GET {SUPABASE_URL}/auth/v1/user`, avec une clé API dans `apikey`, puis utilise exclusivement l'UUID `user.id` retourné comme propriétaire. Le navigateur ne fournit pas l'identité propriétaire.
+- En revanche, le front-end inspecté conserve encore un jeton alpha manuel dans `sessionStorage` (`aria.voice.alphaToken`) et ne montre pas de flux Supabase Auth (connexion, renouvellement de session, déconnexion). L'intégration du client Supabase reste donc à concevoir/implémenter.
+- La PR #43 est toujours ouverte et non fusionnée. Ses deux workflows CI sur le commit `97451097f0e265fd67a766908a67cfb1c1e9086a` sont terminés avec succès : `Staging Worker Tests` (run `40767287051`) et `ARIA secure UI integration checks` (run `40767287066`). Cela ne constitue pas un test HTTP multi-compte du Worker actif.
+- La PR #45 reste une documentation d'audit en brouillon, non fusionnée. La PR #41 reste une documentation P0 en brouillon, non fusionnée.
+
+### Contrat cible recommandé
+1. Le navigateur utilise Supabase Auth pour créer une session et obtient un access token court-vivant ; il ne fabrique jamais de `userId` ou `ownerId`.
+2. Chaque appel à `aria-brain` transmet le JWT Supabase dans `Authorization: Bearer <access_token>`.
+3. Le Worker valide le token côté serveur auprès de Supabase Auth (ou par validation JWKS si cette voie est retenue après revue), refuse les tokens invalides/expirés et dérive le propriétaire uniquement de l'identité vérifiée (`user.id` / claim `sub` vérifié).
+4. L'UUID Supabase devient l'identifiant canonique pour les rôles D1, le consentement mémoire et les documents mémoire. Aucun identifiant client local ne doit pouvoir sélectionner le propriétaire.
+5. La clé API publique/publishable est une configuration non secrète utilisée dans l'en-tête `apikey` ; aucune clé `service_role`/secret Supabase ne doit être envoyée au navigateur. Toute opération privilégiée reste strictement côté serveur.
+6. Les jetons alpha `session_kv` ne sont pas convertis automatiquement en comptes. Toute liaison d'anciens comptes ou de souvenirs nécessite un processus séparé, explicite et vérifié.
+
+### Plan staging — sans exécution à ce stade
+- [ ] **S0 — Accès projet :** rendre le projet Supabase staging existant visible via la connexion autorisée, ou fournir son Project Ref/URL non sensible. Ne pas créer un projet sans choix d'organisation, région et validation des éventuels coûts.
+- [ ] **S1 — Contrat de configuration :** confirmer le Project URL et la clé publishable (ou la clé anon historique si nécessaire à la compatibilité) ; configurer les valeurs uniquement dans les bindings staging. Les valeurs ne seront jamais copiées dans Git, PR, captures ou journaux. Garder toute clé secrète/service-role hors du Worker si elle n'est pas strictement nécessaire.
+- [ ] **S2 — Client web :** intégrer le flux Supabase Auth au front-end, avec persistance de session appropriée, rafraîchissement automatique, déconnexion et gestion des erreurs ; supprimer la dépendance au jeton alpha manuel uniquement après validation du parcours de remplacement.
+- [ ] **S3 — Worker :** conserver la validation serveur du bearer token et confirmer le contrat de réponse Auth, les délais/erreurs réseau, les statuts 401/503 et la validation UUID. Évaluer le passage du nom `SUPABASE_ANON_KEY` à `SUPABASE_PUBLISHABLE_KEY` pour alignement avec les clés actuelles, sans modifier le runtime avant validation.
+- [ ] **S4 — Autorisation et mémoire :** vérifier les migrations D1 0002/0003 sur la base staging identifiée ; contrôler que chaque requête mémoire utilise l'UUID Auth vérifié, que le consentement serveur est actif et que les erreurs D1 ferment l'accès.
+- [ ] **S5 — Tests :** ajouter des tests d'intégration avec deux comptes temporaires A/B : jeton valide, invalide, expiré, utilisateur supprimé/désactivé, fournisseur indisponible, A ne peut lire/écrire/supprimer les données de B, révocation de consentement, session alpha non migrée refusée, renouvellement et déconnexion.
+- [ ] **S6 — Gate de release :** CI verte sur le SHA exact ; revue du diff et des bindings (noms seulement) ; test HTTP staging avec comptes temporaires après autorisation explicite de déploiement ; vérification health/configuration et plan de rollback.
+- [ ] **S7 — Migration éventuelle :** inventaire des identités alpha et plan à blanc uniquement ; aucune migration automatique des jetons, rôles ou souvenirs sans approbation distincte.
+
+### Blocages et limites
+- **Bloquant immédiat :** aucun projet Supabase n'est visible dans la connexion actuelle ; il faut établir l'accès au projet staging existant avant toute configuration.
+- **Bloquant applicatif :** le front-end inspecté n'intègre pas encore Supabase Auth et utilise toujours le jeton alpha manuel.
+- **Bloquant release :** le Worker déployé est encore en `session_kv` et ne contient pas le code candidat de la PR #43 ; aucun test HTTP multi-compte n'a été réalisé sur un Worker candidat.
+- Les migrations D1 rapportées comme appliquées précédemment ne remplacent pas la vérification de la base staging effectivement liée au projet choisi.
+- Aucune configuration Cloudflare/Supabase n'a été modifiée, aucune migration n'a été exécutée pendant cette reprise, aucun secret n'a été lu, aucun test HTTP ni déploiement n'a été lancé.
+
+**Statut P0 : décision d'architecture validée ; préparation staging en attente d'accès au projet Supabase et de l'intégration front-end.**
