@@ -12,6 +12,9 @@ const SESSION_TOKEN_KEY = "aria.voice.alphaToken"; // legacy cleanup only; never
 let supabaseClient = null;
 let supabaseAccessToken = "";
 let authReady = false;
+let activeAuthUserId = null;
+let memoryStorageKey = KEYS.memory;
+let passwordRecoveryMode = false;
 let conversation = [];
 let requestInFlight = false;
 let turnInProgress = false;
@@ -60,14 +63,61 @@ async function initializeSupabaseAuth() {
   supabaseAccessToken = data?.session?.access_token || "";
   authReady = true;
   updateAuthUi(data?.session || null);
-  supabaseClient.auth.onAuthStateChange((_event, session) => {
+  const initialUserId = data?.session?.user?.id || null;
+  if (initialUserId) {
+    activateUserMemoryScope(initialUserId);
+    void refreshRemoteMemoryConsent();
+  }
+  supabaseClient.auth.onAuthStateChange((event, session) => {
     supabaseAccessToken = session?.access_token || "";
-    updateAuthUi(session || null);
-    if (!session) {
-      cancelRemoteMemoryRequests();
+    const nextUserId = session?.user?.id || null;
+    if (nextUserId !== activeAuthUserId) {
+      activateUserMemoryScope(nextUserId);
       conversation = [];
+      if (nextUserId) void refreshRemoteMemoryConsent();
     }
+    if (event === "PASSWORD_RECOVERY") {
+      passwordRecoveryMode = true;
+      $("authPassword").value = "";
+      $("authPassword").setAttribute("autocomplete", "new-password");
+      $("authUpdatePassword").hidden = false;
+      setAuthStatus("Choisissez votre nouveau mot de passe.");
+      openAuthDialog();
+    }
+    updateAuthUi(session || null);
   });
+}
+function activateUserMemoryScope(userId) {
+  cancelRemoteMemoryRequests();
+  activeAuthUserId = userId || null;
+  memoryStorageKey = userId ? KEYS.memory + ".user." + userId : KEYS.memory;
+  memories = safeRead(memoryStorageKey, []);
+  profile.memoryConsent = false;
+  saveProfile();
+  renderMemory();
+}
+async function refreshRemoteMemoryConsent() {
+  const token = getApiToken();
+  if (!token) return;
+  try {
+    const response = await fetch(API_BASE + "/memory/consent", {
+      headers: { "Authorization": "Bearer " + token, "Accept": "application/json" }
+    });
+    if (!response.ok) throw new Error("consent_unavailable");
+    const data = await response.json();
+    if (typeof data.enabled !== "boolean" || data.persisted !== true) throw new Error("invalid_consent_response");
+    profile.memoryConsent = data.enabled;
+    saveProfile();
+    if (!data.enabled) cancelRemoteMemoryRequests();
+    if ($("memoryStatus")) $("memoryStatus").textContent = data.enabled
+      ? "Consentement mémoire confirmé pour ce compte."
+      : "Mémoire désactivée pour ce compte.";
+  } catch {
+    profile.memoryConsent = false;
+    saveProfile();
+    cancelRemoteMemoryRequests();
+    if ($("memoryStatus")) $("memoryStatus").textContent = "Impossible de vérifier le consentement serveur : mémoire distante bloquée par sécurité.";
+  }
 }
 function updateAuthUi(session) {
   const signedIn = Boolean(session?.user?.email);
@@ -114,6 +164,26 @@ async function submitEmailPasswordAuth(mode) {
     setAuthStatus("Connexion réussie.");
     $("authDialog").close();
   }
+}
+async function updateRecoveredPassword() {
+  if (!supabaseClient || !passwordRecoveryMode) return;
+  const password = $("authPassword").value;
+  if (password.length < 8) {
+    setAuthStatus("Le nouveau mot de passe doit contenir au moins 8 caractères.");
+    return;
+  }
+  setAuthStatus("Mise à jour du mot de passe…");
+  const { error } = await supabaseClient.auth.updateUser({ password });
+  if (error) {
+    setAuthStatus("Échec : " + error.message);
+    return;
+  }
+  passwordRecoveryMode = false;
+  $("authUpdatePassword").hidden = true;
+  $("authPassword").value = "";
+  $("authPassword").setAttribute("autocomplete", "current-password");
+  setAuthStatus("Mot de passe modifié. Vous êtes connecté.");
+  $("authDialog").close();
 }
 
 
@@ -358,7 +428,7 @@ async function syncRemoteMemory() {
     if (!isMemoryRequestCurrent(generation)) return;
     if (!Array.isArray(data.memories)) throw new Error("invalid memory response");
     memories = data.memories;
-    localStorage.setItem(KEYS.memory, JSON.stringify(memories));
+    localStorage.setItem(memoryStorageKey, JSON.stringify(memories));
     renderMemory();
     $("memoryStatus").textContent = "Mémoire synchronisée avec le serveur.";
   } catch {
@@ -406,7 +476,7 @@ async function saveRemoteMemory() {
       return false;
     }
     memories = data.memories;
-    localStorage.setItem(KEYS.memory, JSON.stringify(memories));
+    localStorage.setItem(memoryStorageKey, JSON.stringify(memories));
     renderMemory();
     $("memoryStatus").textContent = "Mémoire distante mise à jour et confirmée par le serveur.";
     return true;
@@ -435,7 +505,7 @@ function renderMemory() {
     remove.setAttribute("aria-label", "Supprimer ce souvenir");
     remove.addEventListener("click", () => {
       memories = memories.filter(entry => entry !== item);
-      localStorage.setItem(KEYS.memory, JSON.stringify(memories));
+      localStorage.setItem(memoryStorageKey, JSON.stringify(memories));
       renderMemory();
       saveRemoteMemory();
     });
@@ -905,11 +975,15 @@ $("settingsBtn").addEventListener("click", () => {
   $("settingsDialog").showModal();
 });
 $("saveSettings").addEventListener("click", saveSettingsFromDialog);
-$("authOpen").addEventListener("click", () => openAuthDialog());
+$("authOpen").addEventListener("click", () => {
+  $("settingsDialog").close();
+  openAuthDialog();
+});
 $("authClose").addEventListener("click", () => $("authDialog").close());
 $("authSignIn").addEventListener("click", () => submitEmailPasswordAuth("signin"));
 $("authSignUp").addEventListener("click", () => submitEmailPasswordAuth("signup"));
 $("authReset").addEventListener("click", () => submitEmailPasswordAuth("reset"));
+$("authUpdatePassword").addEventListener("click", updateRecoveredPassword);
 $("authLogout").addEventListener("click", async () => {
   if (!supabaseClient) return;
   const { error } = await supabaseClient.auth.signOut();
