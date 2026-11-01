@@ -161,6 +161,11 @@ Les faits explicitement fournis, les inférences et les informations incertaines
 
 ### 6.3 Contrôles
 L'utilisateur doit pouvoir voir, corriger, désactiver, réactiver, exporter et supprimer les informations prises en charge. Le résultat réel de chaque opération doit être présenté honnêtement.
+- Les préférences personnelles (initiative, verbosité, humour et autres réglages de compte) sont isolées par identité authentifiée.
+- L'état d'onboarding est propre à chaque compte ; un compte ne doit pas hériter du parcours effectué par un autre.
+- Le profil anonyme conserve un espace distinct des profils authentifiés.
+- Une remise à zéro locale ne doit effacer que les données du compte actif. Elle ne doit pas supprimer les données locales d'autres comptes présents sur le même appareil.
+- Le consentement mémoire local reste désactivé par défaut lors d'un changement de compte jusqu'à confirmation du registre serveur.
 
 ## 7. Intelligence, intention et planification
 
@@ -443,7 +448,9 @@ Dépôt : https://github.com/Neros31415/-aria-web
 - La mémoire persistante multi-utilisateur doit rester bloquée tant que l'identité canonique, le consentement et les migrations réelles ne sont pas vérifiés.
 - Supabase Auth individuel par e-mail/mot de passe est la cible du chantier de staging.
 - PR #46 prépare ce parcours ; PR #48 ajoute la gestion des erreurs réseau, états occupés et doubles soumissions.
-- PR #46 et #48 sont ouvertes en brouillon et non fusionnées. Les workflows associés observés sont verts, mais le projet Supabase et ses réglages Auth n'ont pas été configurés par ces PR ; aucun test HTTP réel à deux comptes ni déploiement n'est attesté.
+- PR #50 corrige un cas de panne réseau pendant la restauration de session : le client Auth et son listener sont conservés afin de permettre une reconnexion sans rechargement. Un test comportemental couvre l'échec de restauration puis une connexion réussie.
+- PR #52 isole les préférences et l'onboarding par compte et corrige la remise à zéro locale afin qu'elle ne supprime pas les données des autres comptes du même appareil.
+- PR #46, #48, #50 et #52 sont ouvertes en brouillon et non fusionnées. Les CI des PR #50 et #52 sont vertes sur les commits vérifiés, mais le projet Supabase et ses réglages Auth n'ont pas été configurés par ces PR ; aucun test HTTP réel à deux comptes ni déploiement n'est attesté.
 - PR #43 contient des protections avancées de consentement mémoire et des migrations D1 0002/0003, mais les migrations n'étaient pas appliquées à la base réelle selon la description de la PR. Elle est ouverte et non fusionnée.
 - Aucune production ne doit être modifiée sur la base de ces travaux sans autorisation explicite.
 
@@ -459,6 +466,13 @@ Dépôt : https://github.com/Neros31415/-aria-web
 - Le client SwiftUI, Keychain, TestFlight et la distribution App Store restent à réaliser.
 - Le compagnon PC, l'appairage sécurisé, le chiffrement, la révocation d'appareil et les commandes système restent à réaliser ou à valider.
 - Les offres, paiements, clés privées, newsletter, pages juridiques et conditions de publication restent des exigences de produit, pas des fonctionnalités publiques confirmées.
+
+### 21.6 Correctifs d'ingénierie ouverts au 1er novembre 2026
+- PR #50 : correction de la récupération de session Supabase après échec réseau temporaire ; CI push et pull_request réussies.
+- PR #52 : isolation locale des préférences, de l'onboarding et du reset par compte ; CI push et pull_request réussies.
+- Les deux PR sont empilées sur la pile d'authentification/mémoire (#43 → #46 → #48 → #50 → #52). Elles ne sont pas fusionnées.
+- PR #49 contient le présent registre de spécification, uniquement documentaire et également non fusionné.
+- Aucun test de bout en bout sur le vrai projet Supabase, aucun test HTTP multi-comptes, aucun test sur iPhone physique, aucune migration D1 appliquée et aucun déploiement n'ont été réalisés dans ce cycle.
 
 ---
 
@@ -476,6 +490,8 @@ Dépôt : https://github.com/Neros31415/-aria-web
 10. **Autonomie :** l'intelligence de planification n'accorde jamais de nouvelles permissions.
 11. **Périmètre 1.0 :** la feuille de route App Store affirme que les familles fonctionnelles validées restent dans la cible publique 1.0, même si elles sont développées par incréments.
 12. **Idées réservées :** les concepts de monde miroir, moteur causal général et OS cognitif restent hors du périmètre immédiat d'ARIA.
+13. **Données locales multi-comptes :** préférences, onboarding et reset sont isolés par compte ; le reset d'un compte ne doit jamais effacer les autres espaces locaux.
+14. **Reprise Auth :** une erreur réseau pendant la restauration de session ne doit pas détruire le client Supabase ni empêcher une reconnexion sans rechargement.
 
 ---
 
