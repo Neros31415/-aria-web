@@ -788,11 +788,12 @@ test("voice fallback delegates chained onboarding speech to its completion callb
     announceVisual() {},
     setState(state) { context.state = state; },
     updateTranscript() {},
-    startListening() { context.startCalls = (context.startCalls || 0) + 1; }
+    startListening() { context.startCalls = (context.startCalls || 0) + 1; },
+    callbackCalled: false
   };
   vm.createContext(context);
   vm.runInContext(app.slice(start, end), context);
-  vm.runInContext('speak("Présentation", { resume: true, onEnd: () => { context.callbackCalled = true; } })', context);
+  vm.runInContext('speak("Présentation", { resume: true, onEnd: () => { callbackCalled = true; } })', context);
   assert.equal(context.callbackCalled, true);
   assert.equal(context.startCalls || 0, 0, "the completion callback owns the chained onboarding flow");
   assert.equal(context.shouldResumeListening, false);
