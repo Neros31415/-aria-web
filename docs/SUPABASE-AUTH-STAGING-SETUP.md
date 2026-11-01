@@ -31,14 +31,12 @@ Dans **Authentication → Sign In / Providers → Email** :
 4. Vérifier une longueur minimale de mot de passe de 8 caractères au minimum.
 5. Ne pas activer de fournisseur social sans décision distincte.
 
-Dans **Authentication → URL Configuration** pour les essais locaux :
-- Site URL : `http://localhost:4173/`
-- Redirect URL autorisée : `http://localhost:4173/**`
-- Redirect URL alternative, uniquement si le serveur local l'utilise : `http://127.0.0.1:4173/**`
+Dans **Authentication → URL Configuration**, configurer uniquement les URL exactes suivantes, également déclarées dans `supabase-config.js` :
+- `https://neros31415.github.io/-aria-web/` (interface ARIA actuellement hébergée sur GitHub Pages) ;
+- `http://localhost:4173/` (développement local) ;
+- `http://127.0.0.1:4173/` (alternative locale).
 
-Ne pas ajouter le domaine de production GitHub Pages comme URL de redirection staging. Ne pas utiliser de wildcard global. Les URL de redirection doivent correspondre exactement à l'origine de test autorisée.
-
-Le code utilise l'origine courante et le chemin courant pour les redirections de confirmation et de récupération. Le Worker candidat autorise les deux origines locales ci-dessus pour les tests sur `localhost:4173`.
+Définir le **Site URL** sur l'URL de l'environnement effectivement testé. Ne pas utiliser de wildcard global. Le navigateur compare l'origine ET le chemin courant à cette liste stricte et refuse toute autre destination.
 
 **Email :** le service email par défaut de Supabase est limité et adapté aux essais. Avant toute distribution publique, configurer un SMTP dédié, vérifier les modèles de confirmation/récupération et les limites d'envoi.
 
