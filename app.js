@@ -41,50 +41,80 @@ function getClientId() {
 function getApiToken() {
   return supabaseAccessToken;
 }
+let authOperationInFlight = false;
 function setAuthStatus(message) {
   const node = $("authStatus");
   if (node) node.textContent = message;
+}
+function setAuthBusy(busy, message = "") {
+  const ids = ["authSignIn", "authSignUp", "authReset", "authUpdatePassword", "authLogout"];
+  for (const id of ids) {
+    const control = $(id);
+    if (control) control.disabled = busy;
+  }
+  const dialog = $("authDialog");
+  if (dialog) dialog.setAttribute("aria-busy", String(busy));
+  if (message) setAuthStatus(message);
+}
+function authFailureMessage(error) {
+  const message = String(error?.message || error || "").toLowerCase();
+  if (/fetch|network|timeout|offline|load failed|failed to fetch/.test(message)) {
+    return "Connexion impossible. Vérifiez votre réseau puis réessayez.";
+  }
+  return "L’authentification a échoué. Vérifiez vos informations puis réessayez.";
 }
 function openAuthDialog() {
   if ($("authDialog") && !$("authDialog").open) $("authDialog").showModal();
 }
 async function initializeSupabaseAuth() {
-  const config = window.ARIA_SUPABASE_CONFIG;
-  if (!window.supabase?.createClient || !config?.url || !config?.publishableKey) {
-    setAuthStatus("Authentification indisponible : configuration publique Supabase absente.");
+  setAuthBusy(true, "Connexion au service d’authentification…");
+  try {
+    const config = window.ARIA_SUPABASE_CONFIG;
+    if (!window.supabase?.createClient || !config?.url || !config?.publishableKey) {
+      supabaseClient = null;
+      supabaseAccessToken = "";
+      updateAuthUi(null);
+      setAuthStatus("Authentification indisponible : configuration publique Supabase absente.");
+      return;
+    }
+    supabaseClient = window.supabase.createClient(config.url, config.publishableKey, {
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+    });
+    const { data, error } = await supabaseClient.auth.getSession();
+    if (error) throw error;
+    supabaseAccessToken = data?.session?.access_token || "";
+    updateAuthUi(data?.session || null);
+    const initialUserId = data?.session?.user?.id || null;
+    activateUserMemoryScope(initialUserId);
+    if (initialUserId) void refreshRemoteMemoryConsent();
+    supabaseClient.auth.onAuthStateChange((event, session) => {
+      supabaseAccessToken = session?.access_token || "";
+      const nextUserId = session?.user?.id || null;
+      if (nextUserId !== activeAuthUserId) {
+        activateUserMemoryScope(nextUserId);
+        conversation = [];
+        if (nextUserId) void refreshRemoteMemoryConsent();
+      }
+      if (event === "PASSWORD_RECOVERY") {
+        passwordRecoveryMode = true;
+        $("authPassword").value = "";
+        $("authPassword").setAttribute("autocomplete", "new-password");
+        $("authPasswordLabel").textContent = "Nouveau mot de passe";
+        $("authUpdatePassword").hidden = false;
+        setAuthStatus("Choisissez votre nouveau mot de passe.");
+        openAuthDialog();
+      }
+      updateAuthUi(session || null);
+    });
+  } catch (error) {
+    supabaseClient = null;
+    supabaseAccessToken = "";
+    updateAuthUi(null);
+    setAuthStatus(authFailureMessage(error) + " La session n’a pas pu être restaurée.");
+  } finally {
     authReady = true;
-    return;
+    setAuthBusy(false);
   }
-  supabaseClient = window.supabase.createClient(config.url, config.publishableKey, {
-    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
-  });
-  const { data, error } = await supabaseClient.auth.getSession();
-  if (error) setAuthStatus("Impossible de restaurer la session. Connectez-vous à nouveau.");
-  supabaseAccessToken = data?.session?.access_token || "";
-  authReady = true;
-  updateAuthUi(data?.session || null);
-  const initialUserId = data?.session?.user?.id || null;
-  activateUserMemoryScope(initialUserId);
-  if (initialUserId) void refreshRemoteMemoryConsent();
-  supabaseClient.auth.onAuthStateChange((event, session) => {
-    supabaseAccessToken = session?.access_token || "";
-    const nextUserId = session?.user?.id || null;
-    if (nextUserId !== activeAuthUserId) {
-      activateUserMemoryScope(nextUserId);
-      conversation = [];
-      if (nextUserId) void refreshRemoteMemoryConsent();
-    }
-    if (event === "PASSWORD_RECOVERY") {
-      passwordRecoveryMode = true;
-      $("authPassword").value = "";
-      $("authPassword").setAttribute("autocomplete", "new-password");
-      $("authPasswordLabel").textContent = "Nouveau mot de passe";
-      $("authUpdatePassword").hidden = false;
-      setAuthStatus("Choisissez votre nouveau mot de passe.");
-      openAuthDialog();
-    }
-    updateAuthUi(session || null);
-  });
 }
 function activateUserMemoryScope(userId) {
   cancelRemoteMemoryRequests();
@@ -135,59 +165,76 @@ function updateAuthUi(session) {
 }
 async function submitEmailPasswordAuth(mode) {
   if (!supabaseClient) return setAuthStatus("Supabase Auth n'est pas configuré.");
+  if (authOperationInFlight) return;
   const email = $("authEmail").value.trim();
   const password = $("authPassword").value;
   if (!email || (mode !== "reset" && password.length < 8)) {
     setAuthStatus(mode === "reset" ? "Saisissez votre adresse email." : "Saisissez un email et un mot de passe d'au moins 8 caractères.");
     return;
   }
-  setAuthStatus("Communication avec Supabase…");
-  let result;
-  if (mode === "signup") {
-    result = await supabaseClient.auth.signUp({
-      email, password,
-      options: { emailRedirectTo: window.location.origin + window.location.pathname }
-    });
-  } else if (mode === "reset") {
-    result = await supabaseClient.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin + window.location.pathname
-    });
-  } else {
-    result = await supabaseClient.auth.signInWithPassword({ email, password });
-  }
-  if (result.error) {
-    setAuthStatus("Échec : " + result.error.message);
-    return;
-  }
-  if (mode === "signup" && !result.data?.session) {
-    setAuthStatus("Compte créé. Vérifiez votre email pour confirmer l'adresse avant de vous connecter.");
-  } else if (mode === "reset") {
-    setAuthStatus("Si cette adresse correspond à un compte, un email de récupération a été envoyé.");
-  } else {
-    setAuthStatus("Connexion réussie.");
-    $("authDialog").close();
+  authOperationInFlight = true;
+  setAuthBusy(true, mode === "signup" ? "Création du compte…" : mode === "reset" ? "Envoi du lien de récupération…" : "Connexion à ARIA…");
+  try {
+    let result;
+    if (mode === "signup") {
+      result = await supabaseClient.auth.signUp({
+        email, password,
+        options: { emailRedirectTo: window.location.origin + window.location.pathname }
+      });
+    } else if (mode === "reset") {
+      result = await supabaseClient.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin + window.location.pathname
+      });
+    } else {
+      result = await supabaseClient.auth.signInWithPassword({ email, password });
+    }
+    if (result.error) {
+      setAuthStatus(authFailureMessage(result.error));
+      return;
+    }
+    if (mode === "signup" && !result.data?.session) {
+      setAuthStatus("Compte créé. Vérifiez votre email pour confirmer l'adresse avant de vous connecter.");
+    } else if (mode === "reset") {
+      setAuthStatus("Si cette adresse correspond à un compte, un email de récupération a été envoyé.");
+    } else {
+      setAuthStatus("Connexion réussie.");
+      $("authDialog").close();
+    }
+  } catch (error) {
+    setAuthStatus(authFailureMessage(error));
+  } finally {
+    authOperationInFlight = false;
+    setAuthBusy(false);
   }
 }
 async function updateRecoveredPassword() {
-  if (!supabaseClient || !passwordRecoveryMode) return;
+  if (!supabaseClient || !passwordRecoveryMode || authOperationInFlight) return;
   const password = $("authPassword").value;
   if (password.length < 8) {
     setAuthStatus("Le nouveau mot de passe doit contenir au moins 8 caractères.");
     return;
   }
-  setAuthStatus("Mise à jour du mot de passe…");
-  const { error } = await supabaseClient.auth.updateUser({ password });
-  if (error) {
-    setAuthStatus("Échec : " + error.message);
-    return;
+  authOperationInFlight = true;
+  setAuthBusy(true, "Mise à jour du mot de passe…");
+  try {
+    const { error } = await supabaseClient.auth.updateUser({ password });
+    if (error) {
+      setAuthStatus(authFailureMessage(error));
+      return;
+    }
+    passwordRecoveryMode = false;
+    $("authUpdatePassword").hidden = true;
+    $("authPassword").value = "";
+    $("authPassword").setAttribute("autocomplete", "current-password");
+    $("authPasswordLabel").textContent = "Mot de passe";
+    setAuthStatus("Mot de passe modifié. Vous êtes connecté.");
+    $("authDialog").close();
+  } catch (error) {
+    setAuthStatus(authFailureMessage(error));
+  } finally {
+    authOperationInFlight = false;
+    setAuthBusy(false);
   }
-  passwordRecoveryMode = false;
-  $("authUpdatePassword").hidden = true;
-  $("authPassword").value = "";
-  $("authPassword").setAttribute("autocomplete", "current-password");
-  $("authPasswordLabel").textContent = "Mot de passe";
-  setAuthStatus("Mot de passe modifié. Vous êtes connecté.");
-  $("authDialog").close();
 }
 
 
@@ -991,10 +1038,22 @@ $("authSignUp").addEventListener("click", () => submitEmailPasswordAuth("signup"
 $("authReset").addEventListener("click", () => submitEmailPasswordAuth("reset"));
 $("authUpdatePassword").addEventListener("click", updateRecoveredPassword);
 $("authLogout").addEventListener("click", async () => {
-  if (!supabaseClient) return;
-  const { error } = await supabaseClient.auth.signOut();
-  setAuthStatus(error ? "Déconnexion impossible : " + error.message : "Session fermée.");
-  if (!error) $("authPassword").value = "";
+  if (!supabaseClient || authOperationInFlight) return;
+  authOperationInFlight = true;
+  setAuthBusy(true, "Déconnexion…");
+  try {
+    const { error } = await supabaseClient.auth.signOut();
+    if (error) setAuthStatus(authFailureMessage(error));
+    else {
+      $("authPassword").value = "";
+      setAuthStatus("Session fermée.");
+    }
+  } catch (error) {
+    setAuthStatus(authFailureMessage(error));
+  } finally {
+    authOperationInFlight = false;
+    setAuthBusy(false);
+  }
 });
 initializeSupabaseAuth();
 $("restartOnboarding").addEventListener("click", () => {
