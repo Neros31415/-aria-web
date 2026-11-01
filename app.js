@@ -96,13 +96,16 @@ function activateUserMemoryScope(userId) {
 }
 async function refreshRemoteMemoryConsent() {
   const token = getApiToken();
-  if (!token) return;
+  const requestedUserId = activeAuthUserId;
+  if (!token || !requestedUserId) return;
   try {
     const response = await fetch(API_BASE + "/memory/consent", {
       headers: { "Authorization": "Bearer " + token, "Accept": "application/json" }
     });
+    if (requestedUserId !== activeAuthUserId || token !== getApiToken()) return;
     if (!response.ok) throw new Error("consent_unavailable");
     const data = await response.json();
+    if (requestedUserId !== activeAuthUserId || token !== getApiToken()) return;
     if (typeof data.enabled !== "boolean" || data.persisted !== true) throw new Error("invalid_consent_response");
     profile.memoryConsent = data.enabled;
     saveProfile();
@@ -111,6 +114,7 @@ async function refreshRemoteMemoryConsent() {
       ? "Consentement mémoire confirmé pour ce compte."
       : "Mémoire désactivée pour ce compte.";
   } catch {
+    if (requestedUserId !== activeAuthUserId) return;
     profile.memoryConsent = false;
     saveProfile();
     cancelRemoteMemoryRequests();
@@ -1009,28 +1013,53 @@ $("onboardingSkip").addEventListener("click", () => {
 $("resetMemoryBtn").addEventListener("click", async () => {
   if (!confirm("Effacer les données personnelles conservées localement par cette version d'ARIA ? Cette opération est irréversible sur cet appareil.")) return;
   cancelRemoteMemoryRequests();
-  const oldClientId = localStorage.getItem("aria.v07.memoryClientId");
-  const currentClientId = localStorage.getItem(KEYS.clientId);
-  const clientIdsToDelete = [...new Set([currentClientId, oldClientId].filter(Boolean))];
-  const oldToken = sessionStorage.getItem("aria.session.accessToken") || sessionStorage.getItem(SESSION_TOKEN_KEY);
-  let remoteDeleted = clientIdsToDelete.length > 0 && Boolean(oldToken);
-  if (remoteDeleted) {
-    for (const clientId of clientIdsToDelete) {
+  const legacyClientIds = [...new Set([
+    localStorage.getItem(KEYS.clientId),
+    localStorage.getItem("aria.v07.memoryClientId")
+  ].filter(Boolean))];
+  const legacyToken = sessionStorage.getItem("aria.session.accessToken") || sessionStorage.getItem(SESSION_TOKEN_KEY);
+  let remoteDeleted = false;
+
+  if (activeAuthUserId && getApiToken()) {
+    const token = getApiToken();
+    let consentRevoked = false;
+    try {
+      const consentResponse = await fetch(API_BASE + "/memory/consent", {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: false })
+      });
+      const consentResult = await consentResponse.json();
+      consentRevoked = consentResponse.ok && consentResult.persisted === true && consentResult.enabled === false;
+    } catch {}
+    let documentsDeleted = false;
+    try {
+      const deleteResponse = await fetch(API_BASE + "/memory", {
+        method: "DELETE",
+        headers: { "Authorization": "Bearer " + token }
+      });
+      const deleteResult = await deleteResponse.json();
+      documentsDeleted = deleteResponse.ok && deleteResult.deleted === true && deleteResult.persisted === true;
+    } catch {}
+    remoteDeleted = consentRevoked && documentsDeleted;
+  } else if (legacyClientIds.length > 0 && legacyToken) {
+    remoteDeleted = true;
+    for (const clientId of legacyClientIds) {
       try {
         const response = await fetch(API_BASE + "/memory?clientId=" + encodeURIComponent(clientId), {
           method: "DELETE",
-          headers: { "Authorization": "Bearer " + oldToken }
+          headers: { "Authorization": "Bearer " + legacyToken }
         });
         if (!response.ok) {
           remoteDeleted = false;
           continue;
         }
-        let result;
-        try { result = await response.json(); } catch { result = null; }
+        const result = await response.json();
         if (result?.deleted !== true || result?.persisted !== true) remoteDeleted = false;
       } catch { remoteDeleted = false; }
     }
   }
+
   memories = [];
   profile = {proactivity:"balanced",verbosity:"balanced",humor:"balanced",memoryConsent:false};
   for (const key of Object.keys(localStorage)) {
@@ -1040,10 +1069,11 @@ $("resetMemoryBtn").addEventListener("click", async () => {
     if (key.startsWith("aria.") && key !== "aria.session.accessToken" && key !== SESSION_TOKEN_KEY) sessionStorage.removeItem(key);
   }
   localStorage.setItem(KEYS.reset, "done");
-  localStorage.setItem(KEYS.memory, "[]");
+  localStorage.setItem(memoryStorageKey, "[]");
   localStorage.setItem(KEYS.profile, JSON.stringify(profile));
   renderMemory();
-  if (remoteDeleted) {
+
+  if (remoteDeleted && !activeAuthUserId) {
     localStorage.removeItem("aria.v07.memoryClientId");
     localStorage.removeItem(KEYS.clientId);
     sessionStorage.removeItem("aria.session.accessToken");
@@ -1051,11 +1081,11 @@ $("resetMemoryBtn").addEventListener("click", async () => {
   }
   conversation = [];
   $("memoryStatus").textContent = remoteDeleted
-    ? "Mémoire locale effacée et suppression serveur confirmée."
-    : "Mémoire locale effacée. Suppression serveur non confirmée : l'identifiant et la session sont conservés temporairement pour permettre une nouvelle tentative.";
+    ? "Mémoire locale effacée, consentement révoqué et suppression serveur confirmée."
+    : "Mémoire locale effacée. La révocation ou la suppression serveur n’a pas été entièrement confirmée.";
   speak(remoteDeleted
-    ? "La mémoire personnelle de cet appareil a été effacée et le serveur a confirmé la suppression."
-    : "La mémoire personnelle locale a été effacée. Je ne peux pas confirmer la suppression serveur, qui nécessite une session autorisée et un Worker compatible.", {resume:true});
+    ? "Votre mémoire personnelle locale et distante a été effacée et le serveur a confirmé la révocation du consentement."
+    : "Votre mémoire locale a été effacée. Je ne peux pas confirmer complètement la révocation et la suppression sur le serveur.", {resume:true});
 });
 $("settingsDialog").addEventListener("close", () => {});
 document.addEventListener("keydown", (event) => {
