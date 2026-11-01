@@ -515,3 +515,68 @@ test("Supabase Auth remains usable after transient getSession network failure", 
   assert.equal(context.activeAuthUserId, session.user.id, "the auth event must activate the correct account scope");
   assert.equal(elements.authDialog.closed, true);
 });
+
+
+test("a newer auth event wins over a stale session restoration snapshot", async () => {
+  const initStart = app.indexOf("async function initializeSupabaseAuth()");
+  const initEnd = app.indexOf("function activateUserMemoryScope", initStart);
+  assert.ok(initStart >= 0 && initEnd > initStart);
+  const authSource = app.slice(initStart, initEnd);
+
+  let authListener = null;
+  let resolveSession;
+  const freshSession = {
+    access_token: "fresh-event-token",
+    user: { id: "123e4567-e89b-42d3-a456-426614174001", email: "new@example.com" }
+  };
+  const client = {
+    auth: {
+      getSession() {
+        return new Promise((resolve) => { resolveSession = resolve; });
+      },
+      onAuthStateChange(callback) {
+        authListener = callback;
+        return { data: { subscription: { unsubscribe() {} } } };
+      }
+    }
+  };
+  const elements = {};
+  const context = {
+    supabaseClient: null,
+    supabaseAccessToken: "",
+    authReady: false,
+    activeAuthUserId: null,
+    authStateGeneration: 0,
+    memoryStorageKey: "aria.v07.memory",
+    passwordRecoveryMode: false,
+    conversation: [],
+    window: {
+      ARIA_SUPABASE_CONFIG: { url: "https://example.supabase.co", publishableKey: "sb_publishable_test" },
+      supabase: { createClient() { return client; } }
+    },
+    $: (id) => elements[id] || (elements[id] = { textContent: "", hidden: false, setAttribute() {} }),
+    setAuthBusy() {},
+    setAuthStatus(message) { context.lastAuthStatus = message; },
+    authFailureMessage() { return "Connexion impossible."; },
+    updateAuthUi(session) { context.authUiSession = session; },
+    activateUserMemoryScope(userId) { context.activeAuthUserId = userId; },
+    refreshRemoteMemoryConsent() { return Promise.resolve(); },
+    openAuthDialog() {}
+  };
+  vm.createContext(context);
+  vm.runInContext(authSource, context);
+
+  const initialization = vm.runInContext("initializeSupabaseAuth()", context);
+  assert.equal(typeof authListener, "function", "listener must be installed before getSession resolves");
+
+  authListener("SIGNED_IN", freshSession);
+  assert.equal(context.supabaseAccessToken, "fresh-event-token");
+  assert.equal(context.activeAuthUserId, freshSession.user.id);
+
+  resolveSession({ data: { session: null }, error: null });
+  await initialization;
+
+  assert.equal(context.supabaseAccessToken, "fresh-event-token", "stale null snapshot must not erase the newer token");
+  assert.equal(context.activeAuthUserId, freshSession.user.id, "stale snapshot must not switch the account scope");
+  assert.equal(context.authUiSession, freshSession, "stale snapshot must not overwrite the newer auth UI state");
+});
