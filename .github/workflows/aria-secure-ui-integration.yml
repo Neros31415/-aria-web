@@ -1,9 +1,9 @@
 name: ARIA secure UI integration checks
 on:
   pull_request:
-    branches: [main, feat/aria-brain-staging-integration, fix/memory-consent-revocation-race]
+    branches: [main, feat/aria-brain-staging-integration, fix/memory-consent-revocation-race, feat/aria-supabase-email-auth-staging]
   push:
-    branches: [feat/aria-secure-ui-scene-integration, feat/aria-supabase-email-auth-staging]
+    branches: [feat/aria-secure-ui-scene-integration, feat/aria-supabase-email-auth-staging, fix/supabase-auth-network-states]
 jobs:
   test:
     runs-on: ubuntu-latest
