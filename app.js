@@ -1018,7 +1018,6 @@ $("resetMemoryBtn").addEventListener("click", async () => {
   if (!confirm("Effacer les données personnelles conservées localement par cette version d'ARIA ? Cette opération est irréversible sur cet appareil.")) return;
   cancelRemoteMemoryRequests();
   const legacyClientIds = [...new Set([
-    localStorage.getItem(KEYS.clientId),
     localStorage.getItem("aria.v07.memoryClientId")
   ].filter(Boolean))];
   const legacyToken = sessionStorage.getItem("aria.session.accessToken") || sessionStorage.getItem(SESSION_TOKEN_KEY);
@@ -1046,6 +1045,21 @@ $("resetMemoryBtn").addEventListener("click", async () => {
       documentsDeleted = deleteResponse.ok && deleteResult.deleted === true && deleteResult.persisted === true;
     } catch {}
     remoteDeleted = consentRevoked && documentsDeleted;
+    if (legacyClientIds.length > 0) {
+      if (!legacyToken) remoteDeleted = false;
+      else {
+        for (const clientId of legacyClientIds) {
+          try {
+            const legacyResponse = await fetch(API_BASE + "/memory?clientId=" + encodeURIComponent(clientId), {
+              method: "DELETE",
+              headers: { "Authorization": "Bearer " + legacyToken }
+            });
+            const legacyResult = await legacyResponse.json();
+            if (!legacyResponse.ok || legacyResult?.deleted !== true || legacyResult?.persisted !== true) remoteDeleted = false;
+          } catch { remoteDeleted = false; }
+        }
+      }
+    }
   } else if (legacyClientIds.length > 0 && legacyToken) {
     remoteDeleted = true;
     for (const clientId of legacyClientIds) {
@@ -1077,12 +1091,12 @@ $("resetMemoryBtn").addEventListener("click", async () => {
   localStorage.setItem(KEYS.profile, JSON.stringify(profile));
   renderMemory();
 
-  if (remoteDeleted && !activeAuthUserId) {
+  if (remoteDeleted) {
     localStorage.removeItem("aria.v07.memoryClientId");
-    localStorage.removeItem(KEYS.clientId);
     sessionStorage.removeItem("aria.session.accessToken");
     sessionStorage.removeItem(SESSION_TOKEN_KEY);
   }
+  if (remoteDeleted && !activeAuthUserId) localStorage.removeItem(KEYS.clientId);
   conversation = [];
   $("memoryStatus").textContent = remoteDeleted
     ? "Mémoire locale effacée, consentement révoqué et suppression serveur confirmée."
