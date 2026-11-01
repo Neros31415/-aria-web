@@ -176,3 +176,12 @@ dialog .text-button{border:0;background:none;color:var(--muted);font-size:11px;p
 .aria-route-panel>button{align-self:flex-start;flex:0 0 auto}
 @media(max-width:850px){.aria-map-layout{grid-template-columns:1fr}.aria-map-canvas{height:clamp(300px,48vh,440px)}.aria-route-panel{max-height:none}.aria-route-summary{grid-template-columns:repeat(3,minmax(0,1fr))}.aria-route-metric{flex-direction:column;align-items:flex-start;gap:4px}.aria-route-metric strong{text-align:left}}
 @media(max-width:520px){.aria-map-toolbar button{flex:1 1 100%}.aria-route-summary{grid-template-columns:1fr}.aria-route-metric{flex-direction:row;align-items:center}.aria-route-metric strong{text-align:right}}
+
+
+/* Supabase email/password dialog */
+#authDialog .token-field{display:flex;flex-direction:column;gap:7px;color:#cbd8e2;font-size:11px}
+#authDialog input{width:100%;border:1px solid #ffffff24;border-radius:10px;padding:12px;background:#080e18;color:var(--ink);font:inherit;font-size:13px}
+#authDialog input:focus{outline:1px solid var(--cyan);border-color:var(--cyan)}
+#authDialog .quiet-action{border:1px solid #ffffff22;border-radius:999px;padding:10px 14px;color:#d5e3eb;background:#111a24}
+#authDialog .text-button{width:100%}
+#authStatus{min-height:30px;overflow-wrap:anywhere}

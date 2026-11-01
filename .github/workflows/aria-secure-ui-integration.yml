@@ -1,9 +1,9 @@
 name: ARIA secure UI integration checks
 on:
   pull_request:
-    branches: [main, feat/aria-brain-staging-integration]
+    branches: [main, feat/aria-brain-staging-integration, fix/memory-consent-revocation-race, feat/aria-supabase-email-auth-staging]
   push:
-    branches: [feat/aria-secure-ui-scene-integration]
+    branches: [feat/aria-secure-ui-scene-integration, feat/aria-supabase-email-auth-staging]
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -12,5 +12,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: node --check app.js && node --check visualization-engine.js && node --check cloudflare/aria-brain-staging.mjs
+      - run: node --check app.js && node --check supabase-config.js && node --check visualization-engine.js && node --check cloudflare/aria-brain-staging.mjs
       - run: node --test tests/aria-secure-ui-integration.test.mjs

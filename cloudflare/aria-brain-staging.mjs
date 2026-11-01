@@ -140,7 +140,7 @@ async function authenticateRequest(req, env) {
   }
 
   if (authMode === "individual") {
-    if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) {
+    if (!env.SUPABASE_URL || !(env.SUPABASE_PUBLISHABLE_KEY || env.SUPABASE_ANON_KEY)) {
       return { ok: false, status: 503, error: "auth_not_configured" };
     }
 
@@ -165,7 +165,7 @@ async function authenticateRequest(req, env) {
       response = await fetch(authEndpoint.toString(), {
         method: "GET",
         headers: {
-          "apikey": env.SUPABASE_ANON_KEY,
+          "apikey": env.SUPABASE_PUBLISHABLE_KEY || env.SUPABASE_ANON_KEY,
           "Authorization": "Bearer " + match[1],
           "Accept": "application/json"
         },
@@ -239,6 +239,8 @@ export default {
     const origin = req.headers.get("Origin") || "";
     const allowedOrigins = new Set([
       "https://neros31415.github.io",
+      "http://localhost:4173",
+      "http://127.0.0.1:4173",
       "https://id-preview--501fb7b4-c872-4c82-ab9e-db8f88b04bfb.lovable.app",
       "https://661f988b-f4a0-442c-b1a4-0f755a95bf3e.sandbox.floot.app"
     ]);
@@ -261,7 +263,7 @@ export default {
     if (url.pathname === "/health" && req.method === "GET") {
       const authMode = env.ARIA_AUTH_MODE || "individual";
       const authConfigured = authMode === "individual"
-        ? Boolean(env.SUPABASE_URL && env.SUPABASE_ANON_KEY)
+        ? Boolean(env.SUPABASE_URL && (env.SUPABASE_PUBLISHABLE_KEY || env.SUPABASE_ANON_KEY))
         : authMode === "session_kv"
           ? Boolean(env.ARIA_USERS)
           : authMode === "legacy" && Boolean(env.ARIA_ACCESS_TOKEN);

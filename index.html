@@ -118,9 +118,9 @@
   <dialog id="settingsDialog">
     <form method="dialog" class="dialog-content">
       <div class="drawer-heading"><div><span class="micro-heading">CONFIGURATION</span><h2>Préférences d'ARIA</h2></div><button class="close-drawer" aria-label="Fermer">×</button></div>
-      <p class="dialog-help">Le mode vocal dépend des autorisations et des capacités du navigateur. L'écoute peut s'interrompre en arrière-plan sur mobile. Pour connecter le moteur de conversation de l’alpha, saisissez le jeton qui vous a été fourni par l’administrateur. Il n’est jamais inclus dans le code public.</p>
-      <label class="token-field" for="apiTokenSetting"><span>Jeton d’accès alpha</span><input id="apiTokenSetting" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Non configuré"></label>
-      <p class="token-help">Conservé uniquement dans la session de ce navigateur. Ne partagez pas ce jeton.</p>
+      <p class="dialog-help">Le mode vocal dépend des autorisations et des capacités du navigateur. Votre compte ARIA utilise Supabase Auth ; votre session est conservée de façon sécurisée par le client Supabase et renouvelée automatiquement.</p>
+      <div class="setting-row"><span>Compte</span><b id="authAccountStatus">Vérification…</b></div>
+      <button class="quiet-action" id="authOpen" type="button">Se connecter</button>
       <div class="setting-row"><span>Proactivité</span><select id="proactivitySetting"><option value="discrete">Discrète</option><option value="balanced" selected>Équilibrée</option><option value="proactive">Proactive</option></select></div>
       <div class="setting-row"><span>Réponses</span><select id="verbositySetting"><option value="short">Plutôt courtes</option><option value="balanced" selected>Équilibrées</option><option value="detailed">Détaillées</option></select></div>
       <div class="setting-row"><span>Humour</span><select id="humorSetting"><option value="low">Discret</option><option value="balanced" selected>Naturel</option><option value="high">Fréquent</option></select></div>
@@ -132,6 +132,24 @@
     </form>
   </dialog>
 
+  <dialog id="authDialog" aria-labelledby="authTitle">
+    <div class="dialog-content">
+      <div class="micro-heading">COMPTE ARIA</div>
+      <h2 id="authTitle">Connexion</h2>
+      <p class="dialog-help">Utilisez votre adresse email et votre mot de passe. La confirmation de votre adresse peut être demandée avant la première connexion.</p>
+      <label class="token-field" for="authEmail"><span>Adresse email</span><input id="authEmail" type="email" autocomplete="email" required placeholder="vous@exemple.fr"></label>
+      <label class="token-field" for="authPassword"><span id="authPasswordLabel">Mot de passe</span><input id="authPassword" type="password" autocomplete="current-password" minlength="8" required placeholder="8 caractères minimum"></label>
+      <p id="authStatus" class="token-help" role="status" aria-live="polite">Initialisation de Supabase Auth…</p>
+      <button class="primary-button" id="authSignIn" type="button">Se connecter</button>
+      <button class="quiet-action" id="authSignUp" type="button">Créer un compte</button>
+      <button class="primary-button" id="authUpdatePassword" type="button" hidden>Enregistrer le nouveau mot de passe</button>
+      <button class="text-button" id="authReset" type="button">Mot de passe oublié</button>
+      <button class="text-button" id="authLogout" type="button" hidden>Se déconnecter</button>
+      <button class="text-button" id="authClose" type="button">Fermer</button>
+    </div>
+  </dialog>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
   <script src="visualization-engine.js"></script>
   <script src="app.js"></script>
 </body>
