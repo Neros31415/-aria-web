@@ -7,6 +7,7 @@ on:
       - feat/aria-authenticated-memory
       - fix/memory-consent-revocation-race
       - feat/aria-supabase-email-auth-staging
+      - fix/enforce-required-individual-auth
     paths:
       - "cloudflare/aria-brain-staging.mjs"
       - "cloudflare/aria-authorization.mjs"
@@ -23,6 +24,7 @@ on:
       - feat/aria-brain-staging-integration
       - fix/staging-worker-input-security
       - fix/memory-consent-revocation-race
+      - test/staging-auth-two-account-http-e2e
     paths:
       - "cloudflare/aria-brain-staging.mjs"
       - "cloudflare/aria-authorization.mjs"
