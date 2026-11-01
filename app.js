@@ -78,6 +78,7 @@ async function initializeSupabaseAuth() {
       passwordRecoveryMode = true;
       $("authPassword").value = "";
       $("authPassword").setAttribute("autocomplete", "new-password");
+      $("authPasswordLabel").textContent = "Nouveau mot de passe";
       $("authUpdatePassword").hidden = false;
       setAuthStatus("Choisissez votre nouveau mot de passe.");
       openAuthDialog();
@@ -184,6 +185,7 @@ async function updateRecoveredPassword() {
   $("authUpdatePassword").hidden = true;
   $("authPassword").value = "";
   $("authPassword").setAttribute("autocomplete", "current-password");
+  $("authPasswordLabel").textContent = "Mot de passe";
   setAuthStatus("Mot de passe modifié. Vous êtes connecté.");
   $("authDialog").close();
 }
@@ -874,6 +876,8 @@ function finishOnboarding() {
   });
 }
 function finishSetupIfReturning() {
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  if (hashParams.get("type") === "recovery") return;
   if (!localStorage.getItem(KEYS.onboarded)) {
     $("onboardingDialog").showModal();
   } else {
