@@ -1,9 +1,9 @@
 name: ARIA secure UI integration checks
 on:
   pull_request:
-    branches: [main, feat/aria-brain-staging-integration, fix/memory-consent-revocation-race, feat/aria-supabase-email-auth-staging, fix/supabase-auth-network-states-v2, fix/auth-retry-after-session-restore-failure, fix/isolate-account-preferences-and-onboarding]
+    branches: [main, feat/aria-brain-staging-integration, fix/memory-consent-revocation-race, feat/aria-supabase-email-auth-staging, fix/supabase-auth-network-states-v2, fix/auth-retry-after-session-restore-failure, fix/isolate-account-preferences-and-onboarding, test/staging-auth-two-account-http-e2e]
   push:
-    branches: [feat/aria-secure-ui-scene-integration, feat/aria-supabase-email-auth-staging, fix/auth-retry-after-session-restore-failure, fix/isolate-account-preferences-and-onboarding]
+    branches: [feat/aria-secure-ui-scene-integration, feat/aria-supabase-email-auth-staging, fix/auth-retry-after-session-restore-failure, fix/isolate-account-preferences-and-onboarding, test/staging-auth-two-account-http-e2e]
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -12,5 +12,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: node --check app.js && node --check supabase-config.js && node --check visualization-engine.js && node --check cloudflare/aria-brain-staging.mjs
-      - run: node --test tests/aria-secure-ui-integration.test.mjs
+      - run: node --check app.js && node --check supabase-config.js && node --check visualization-engine.js && node --check cloudflare/aria-brain-staging.mjs && node --check scripts/staging-auth-two-account-http-e2e.mjs
+      - run: node --test tests/aria-secure-ui-integration.test.mjs tests/staging-auth-two-account-http-e2e.test.mjs
