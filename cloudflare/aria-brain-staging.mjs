@@ -139,6 +139,13 @@ async function authenticateRequest(req, env) {
     return { ok: false, status: 503, error: "invalid_auth_mode" };
   }
 
+  // An explicit deployment guard must override compatibility modes. In
+  // particular, session_kv IDs are not canonical account identities and must
+  // never authenticate requests when individual auth is required.
+  if (env.ARIA_REQUIRE_INDIVIDUAL_AUTH === "true" && authMode !== "individual") {
+    return { ok: false, status: 503, error: "individual_auth_required" };
+  }
+
   if (authMode === "individual") {
     if (!env.SUPABASE_URL || !(env.SUPABASE_PUBLISHABLE_KEY || env.SUPABASE_ANON_KEY)) {
       return { ok: false, status: 503, error: "auth_not_configured" };
@@ -262,11 +269,13 @@ export default {
     const url = new URL(req.url);
     if (url.pathname === "/health" && req.method === "GET") {
       const authMode = env.ARIA_AUTH_MODE || "individual";
-      const authConfigured = authMode === "individual"
+      const individualAuthRequired = env.ARIA_REQUIRE_INDIVIDUAL_AUTH === "true";
+      const identityMigrationRequired = individualAuthRequired && authMode !== "individual";
+      const authConfigured = !identityMigrationRequired && (authMode === "individual"
         ? Boolean(env.SUPABASE_URL && (env.SUPABASE_PUBLISHABLE_KEY || env.SUPABASE_ANON_KEY))
         : authMode === "session_kv"
           ? Boolean(env.ARIA_USERS)
-          : authMode === "legacy" && Boolean(env.ARIA_ACCESS_TOKEN);
+          : authMode === "legacy" && Boolean(env.ARIA_ACCESS_TOKEN));
       const individualMode = authMode === "individual" || authMode === "session_kv";
       const authorizationConfigured = !individualMode || Boolean(env.ARIA_AUTHZ_DB);
       const memoryStorageConfigured = authMode === "individual"
@@ -301,6 +310,8 @@ export default {
         service: "aria-api",
         configured: Boolean(env.OPENAI_API_KEY && authConfigured && authorizationConfigured && (!individualMode || memoryStorageConfigured) && (authMode !== "individual" || memoryConsentStoreConfigured === true)),
         authenticationMode: authMode,
+        individualAuthRequired,
+        identityMigrationRequired,
         authorizationStore: Boolean(env.ARIA_AUTHZ_DB),
         memoryConsentStoreConfigured,
         provider: "openai",
