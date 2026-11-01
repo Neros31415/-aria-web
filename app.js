@@ -80,13 +80,10 @@ async function initializeSupabaseAuth() {
     supabaseClient = window.supabase.createClient(config.url, config.publishableKey, {
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
     });
-    const { data, error } = await supabaseClient.auth.getSession();
-    if (error) throw error;
-    supabaseAccessToken = data?.session?.access_token || "";
-    updateAuthUi(data?.session || null);
-    const initialUserId = data?.session?.user?.id || null;
-    activateUserMemoryScope(initialUserId);
-    if (initialUserId) void refreshRemoteMemoryConsent();
+
+    // Subscribe before restoring the session. If getSession() fails because the
+    // network is temporarily unavailable, later sign-in/recovery events must
+    // still update the token and the account-scoped memory state.
     supabaseClient.auth.onAuthStateChange((event, session) => {
       supabaseAccessToken = session?.access_token || "";
       const nextUserId = session?.user?.id || null;
@@ -106,11 +103,24 @@ async function initializeSupabaseAuth() {
       }
       updateAuthUi(session || null);
     });
+
+    const { data, error } = await supabaseClient.auth.getSession();
+    if (error) throw error;
+    supabaseAccessToken = data?.session?.access_token || "";
+    updateAuthUi(data?.session || null);
+    const initialUserId = data?.session?.user?.id || null;
+    if (initialUserId !== activeAuthUserId) {
+      activateUserMemoryScope(initialUserId);
+      if (initialUserId) void refreshRemoteMemoryConsent();
+    }
   } catch (error) {
-    supabaseClient = null;
-    supabaseAccessToken = "";
-    updateAuthUi(null);
-    setAuthStatus(authFailureMessage(error) + " La session n’a pas pu être restaurée.");
+    // Keep a successfully-created Supabase client and its auth listener. A
+    // transient session-restore failure must not disable the sign-in retry.
+    if (!supabaseClient) {
+      supabaseAccessToken = "";
+      updateAuthUi(null);
+    }
+    setAuthStatus(authFailureMessage(error) + " La session n’a pas pu être restaurée. Vous pouvez réessayer.");
   } finally {
     authReady = true;
     setAuthBusy(false);
