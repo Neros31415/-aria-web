@@ -443,3 +443,72 @@ test("Supabase Auth network failures are reported without leaking provider detai
   assert.match(app, /async function updateRecoveredPassword\(\)[\s\S]*?catch \(error\)/);
   assert.match(app, /authLogout[\s\S]*?catch \(error\)/);
 });
+
+
+test("Supabase Auth remains usable after transient getSession network failure", async () => {
+  const initStart = app.indexOf("async function initializeSupabaseAuth()");
+  const initEnd = app.indexOf("function activateUserMemoryScope", initStart);
+  const submitStart = app.indexOf("async function submitEmailPasswordAuth(mode)");
+  const submitEnd = app.indexOf("async function updateRecoveredPassword()", submitStart);
+  assert.ok(initStart >= 0 && initEnd > initStart);
+  assert.ok(submitStart >= 0 && submitEnd > submitStart);
+
+  const authSource = app.slice(initStart, initEnd) + "\n" + app.slice(submitStart, submitEnd);
+  let authListener = null;
+  let signInCalls = 0;
+  const session = {
+    access_token: "fresh-session-token",
+    user: { id: "123e4567-e89b-42d3-a456-426614174000", email: "test@example.com" }
+  };
+  const client = {
+    auth: {
+      async getSession() { throw new Error("network request failed"); },
+      onAuthStateChange(callback) { authListener = callback; return { data: { subscription: { unsubscribe() {} } } }; },
+      async signInWithPassword() {
+        signInCalls += 1;
+        authListener?.("SIGNED_IN", session);
+        return { data: { session }, error: null };
+      }
+    }
+  };
+  const elements = {
+    authEmail: { value: "test@example.com" },
+    authPassword: { value: "CorrectHorseBatteryStaple" },
+    authDialog: { close() { this.closed = true; } }
+  };
+  const context = {
+    supabaseClient: null,
+    supabaseAccessToken: "",
+    authReady: false,
+    authOperationInFlight: false,
+    activeAuthUserId: null,
+    passwordRecoveryMode: false,
+    conversation: [],
+    window: {
+      ARIA_SUPABASE_CONFIG: { url: "https://example.supabase.co", publishableKey: "sb_publishable_test" },
+      supabase: { createClient() { return client; } }
+    },
+    $: (id) => elements[id] || (elements[id] = { textContent: "", hidden: false, setAttribute() {} }),
+    setAuthBusy() {},
+    setAuthStatus(message) { context.lastAuthStatus = message; },
+    authFailureMessage(error) { return /network/i.test(error.message) ? "Connexion impossible." : "Échec."; },
+    updateAuthUi(sessionValue) { context.authUiSession = sessionValue; },
+    activateUserMemoryScope(userId) { context.activeAuthUserId = userId; },
+    refreshRemoteMemoryConsent() { return Promise.resolve(); },
+    openAuthDialog() {},
+    document: undefined
+  };
+  vm.createContext(context);
+  vm.runInContext(authSource, context);
+
+  await vm.runInContext("initializeSupabaseAuth()", context);
+  assert.ok(context.supabaseClient, "the created Supabase client must remain available for retry");
+  assert.equal(typeof authListener, "function", "auth state listener must be registered before session restoration");
+  assert.match(context.lastAuthStatus, /Vous pouvez réessayer/);
+
+  await vm.runInContext('submitEmailPasswordAuth("signin")', context);
+  assert.equal(signInCalls, 1, "the user must be able to retry sign-in without reloading the page");
+  assert.equal(context.supabaseAccessToken, "fresh-session-token", "the auth event must update the bearer token");
+  assert.equal(context.activeAuthUserId, session.user.id, "the auth event must activate the correct account scope");
+  assert.equal(elements.authDialog.closed, true);
+});
