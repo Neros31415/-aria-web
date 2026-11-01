@@ -449,8 +449,9 @@ Dépôt : https://github.com/Neros31415/-aria-web
 - Supabase Auth individuel par e-mail/mot de passe est la cible du chantier de staging.
 - PR #46 prépare ce parcours ; PR #48 ajoute la gestion des erreurs réseau, états occupés et doubles soumissions.
 - PR #50 corrige un cas de panne réseau pendant la restauration de session : le client Auth et son listener sont conservés afin de permettre une reconnexion sans rechargement. Un test comportemental couvre l'échec de restauration puis une connexion réussie.
+- PR #51 corrige une course concurrente : un instantané `getSession()` ancien ne peut plus écraser un événement d'authentification plus récent (connexion, déconnexion ou renouvellement de jeton). Un test de régression vérifie la priorité de l'événement récent.
 - PR #52 isole les préférences et l'onboarding par compte et corrige la remise à zéro locale afin qu'elle ne supprime pas les données des autres comptes du même appareil.
-- PR #46, #48, #50 et #52 sont ouvertes en brouillon et non fusionnées. Les CI des PR #50 et #52 sont vertes sur les commits vérifiés, mais le projet Supabase et ses réglages Auth n'ont pas été configurés par ces PR ; aucun test HTTP réel à deux comptes ni déploiement n'est attesté.
+- PR #46, #48, #50, #51 et #52 sont ouvertes en brouillon et non fusionnées. Les CI des PR #50 et #52 sont vertes sur les commits vérifiés, mais le projet Supabase et ses réglages Auth n'ont pas été configurés par ces PR ; aucun test HTTP réel à deux comptes ni déploiement n'est attesté.
 - PR #43 contient des protections avancées de consentement mémoire et des migrations D1 0002/0003, mais les migrations n'étaient pas appliquées à la base réelle selon la description de la PR. Elle est ouverte et non fusionnée.
 - Aucune production ne doit être modifiée sur la base de ces travaux sans autorisation explicite.
 
@@ -469,8 +470,9 @@ Dépôt : https://github.com/Neros31415/-aria-web
 
 ### 21.6 Correctifs d'ingénierie ouverts au 1er novembre 2026
 - PR #50 : correction de la récupération de session Supabase après échec réseau temporaire ; CI push et pull_request réussies.
+- PR #51 : protection contre l'écrasement d'une session récente par un instantané `getSession()` obsolète ; CI push et pull_request réussies.
 - PR #52 : isolation locale des préférences, de l'onboarding et du reset par compte ; CI push et pull_request réussies.
-- Les deux PR sont empilées sur la pile d'authentification/mémoire (#43 → #46 → #48 → #50 → #52). Elles ne sont pas fusionnées.
+- Les PR sont empilées sur la pile d'authentification/mémoire (#43 → #46 → #48 → #50, avec #51 en correctif complémentaire de #50, puis #52 sur la base de #50). Elles ne sont pas fusionnées.
 - PR #49 contient le présent registre de spécification, uniquement documentaire et également non fusionné.
 - Aucun test de bout en bout sur le vrai projet Supabase, aucun test HTTP multi-comptes, aucun test sur iPhone physique, aucune migration D1 appliquée et aucun déploiement n'ont été réalisés dans ce cycle.
 
