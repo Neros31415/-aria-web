@@ -456,6 +456,7 @@ Dépôt : https://github.com/Neros31415/-aria-web
 - PR #52 isole les préférences et l'onboarding par compte et corrige la remise à zéro locale afin qu'elle ne supprime pas les données des autres comptes du même appareil.
 - PR #54 fait respecter `ARIA_REQUIRE_INDIVIDUAL_AUTH=true` au point d'entrée du Worker et rend le health check explicite lorsqu'une migration d'identité est nécessaire. Sa CI est verte ; elle n'est pas déployée.
 - PR #55 verrouille les panneaux personnels jusqu'à la restauration du scope authentifié et protège contre les snapshots de session obsolètes. Sa CI est verte.
+- PR #56 corrige le cas où la synthèse vocale est absente ou inutilisable : ARIA conserve la réponse dans la transcription et reprend l'écoute lorsque cela est demandé. Trois tests comportementaux supplémentaires valident les chemins de secours ; la CI passe à 29 tests réussis.
 - PR #43, #46, #48, #50, #51 et #52 sont ouvertes et non fusionnées. Les CI des PR #50, #51 et #52 sont vertes sur les commits vérifiés. Aucun test HTTP réel multi-comptes ni déploiement du Worker individuel n'est attesté.
 - Aucune production n'a été modifiée ; aucune configuration Cloudflare ou Supabase n'a été changée pendant cet audit en lecture seule.
 
@@ -479,6 +480,7 @@ Dépôt : https://github.com/Neros31415/-aria-web
 - PR #53 : harnais HTTP manuel à deux comptes, strictement limité aux origines staging, avec garde-fous de readiness, isolation, révocation et nettoyage ; CI push et pull_request réussies. Le harnais n'a pas été exécuté contre les services réels.
 - PR #54 : application effective du garde-fou d'authentification individuelle ; CI push et pull_request réussies.
 - PR #55 : verrouillage de l'interface personnelle jusqu'à restauration du scope ; CI pull_request réussie.
+- PR #56 : reprise de l'écoute si la synthèse vocale n'est pas disponible ; CI pull_request réussie, 29 tests réussis et 0 échec.
 - Les PR sont empilées sur la pile d'authentification/mémoire (#43 → #46 → #48 → #50, avec #51 en correctif complémentaire de #50, puis #52 ; #53 et #54 forment la pile Worker/E2E ; #55 est un correctif de confidentialité sur #52). Elles ne sont pas fusionnées.
 - PR #49 contient le présent registre de spécification, uniquement documentaire et également non fusionné.
 - Aucun test de bout en bout sur le vrai projet Supabase, aucun test HTTP multi-comptes, aucun test sur iPhone physique et aucun déploiement du Worker individuel n'ont été réalisés dans ce cycle. Les migrations D1 0002/0003 sont appliquées au schéma staging et ont été vérifiées en lecture seule ; le Worker actif ne les utilise pas encore.
@@ -541,6 +543,7 @@ Une fonctionnalité non livrée ou non vérifiée ne doit pas être annoncée co
 - PR harnais HTTP staging #53 : https://github.com/Neros31415/-aria-web/pull/53
 - PR garde-fou auth individuel #54 : https://github.com/Neros31415/-aria-web/pull/54
 - PR verrouillage du scope personnel #55 : https://github.com/Neros31415/-aria-web/pull/55
+- PR secours de synthèse vocale #56 : https://github.com/Neros31415/-aria-web/pull/56
 - PR garde-fou authentification individuelle obligatoire #54 : https://github.com/Neros31415/-aria-web/pull/54
 - Audit de parité backend staging : `docs/STAGING-BACKEND-PARITY-AUDIT-2026-11-01.md` (PR #54)
 
