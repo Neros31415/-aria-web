@@ -485,6 +485,7 @@ test("Supabase Auth remains usable after transient getSession network failure", 
     authReady: false,
     authOperationInFlight: false,
     activeAuthUserId: null,
+    authStateGeneration: 0,
     passwordRecoveryMode: false,
     conversation: [],
     window: {
