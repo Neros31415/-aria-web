@@ -10,6 +10,7 @@ const css = await readFile(new URL("../voice.css", import.meta.url), "utf8");
 const sw = await readFile(new URL("../sw.js", import.meta.url), "utf8");
 const workerSource = await readFile(new URL("../cloudflare/aria-brain-staging.mjs", import.meta.url), "utf8");
 const visualEngine = await readFile(new URL("../visualization-engine.js", import.meta.url), "utf8");
+const supabaseConfig = await readFile(new URL("../supabase-config.js", import.meta.url), "utf8");
 
 const endpoint = "https://aria-brain-staging.quentineros-sevesi.workers.dev";
 const clientId = "123e4567-e89b-42d3-a456-426614174000";
@@ -200,18 +201,33 @@ test("async scene guards prevent stale map, finance or NASA responses from repla
 
 test("individual auth accepts the publishable API key without requiring a legacy anon key", async () => {
   const originalFetch = globalThis.fetch;
+  const identity = "123e4567-e89b-42d3-a456-426614174000";
+  let authCalls = 0;
   globalThis.fetch = async (url, options) => {
-    assert.match(String(url), /\/auth\/v1\/user$/);
-    assert.equal(options.headers.apikey, "sb_publishable_test");
-    assert.equal(options.headers.Authorization, "Bearer valid-user-token");
-    return new Response(JSON.stringify({ id: "123e4567-e89b-42d3-a456-426614174000" }), { status: 200 });
+    if (String(url).endsWith("/auth/v1/user")) {
+      authCalls++;
+      assert.equal(options.headers.apikey, "sb_publishable_test");
+      assert.equal(options.headers.Authorization, "Bearer valid-user-token");
+      return new Response(JSON.stringify({ id: identity }), { status: 200 });
+    }
+    return providerResponse({ reply:"Authentifié.", action:"none", scene:"none" });
   };
   try {
+    const db = {
+      prepare() {
+        return {
+          bind() { return this; },
+          async first() { return { userId:identity, role:"user", active:1 }; },
+          async run() { return { success:true, meta:{changes:1} }; }
+        };
+      },
+      async batch() { return [{success:true},{success:true}]; }
+    };
     const env = {
       ARIA_AUTH_MODE: "individual",
       SUPABASE_URL: "https://project.supabase.co",
       SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test",
-      ARIA_AUTHZ_DB: { async prepare() { return { bind() { return this; }, async first() { return { userId:"123e4567-e89b-42d3-a456-426614174000", role:"user", active:1 }; } }; } },
+      ARIA_AUTHZ_DB: db,
       OPENAI_API_KEY: "test-key"
     };
     const response = await worker.fetch(new Request(endpoint + "/chat", {
@@ -219,13 +235,13 @@ test("individual auth accepts the publishable API key without requiring a legacy
       headers:{ Authorization:"Bearer valid-user-token", "Content-Type":"application/json" },
       body:JSON.stringify({messages:[{role:"user",content:"Bonjour"}],memoryConsent:false})
     }), env);
-    assert.notEqual(response.status, 503);
-    assert.notEqual(response.status, 401);
+    assert.equal(response.status, 200);
+    assert.equal(authCalls, 1);
+    assert.equal((await response.json()).reply, "Authentifié.");
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
-
 test("latest secure Worker retains D1 authorization and hashed session-token lookup", () => {
   assert.match(workerSource, /authorizeFromD1/);
   assert.match(workerSource, /ensureDefaultUserRole/);
