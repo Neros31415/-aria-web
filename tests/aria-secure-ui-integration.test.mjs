@@ -515,3 +515,114 @@ test("Supabase Auth remains usable after transient getSession network failure", 
   assert.equal(context.activeAuthUserId, session.user.id, "the auth event must activate the correct account scope");
   assert.equal(elements.authDialog.closed, true);
 });
+
+
+test("account preferences and onboarding progress are isolated per authenticated user", () => {
+  const defaultStart = app.indexOf("function defaultProfile()");
+  const defaultEnd = app.indexOf("function setState(", defaultStart);
+  const scopeStart = app.indexOf("function activateUserMemoryScope(userId)");
+  const scopeEnd = app.indexOf("async function refreshRemoteMemoryConsent()", scopeStart);
+  assert.ok(defaultStart >= 0 && defaultEnd > defaultStart);
+  assert.ok(scopeStart >= 0 && scopeEnd > scopeStart);
+
+  const storage = new Map();
+  const localStorage = {
+    getItem(key) { return storage.has(key) ? storage.get(key) : null; },
+    setItem(key, value) { storage.set(key, String(value)); },
+    removeItem(key) { storage.delete(key); }
+  };
+  const context = {
+    KEYS: { memory: "aria.memory", profile: "aria.profile", onboarded: "aria.onboarded" },
+    profileStorageKey: "aria.profile",
+    onboardedStorageKey: "aria.onboarded",
+    memoryStorageKey: "aria.memory",
+    activeAuthUserId: null,
+    profile: null,
+    memories: [],
+    onboarding: false,
+    localStorage,
+    cancelRemoteMemoryRequests() {},
+    safeRead(key, fallback) {
+      try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
+    },
+    renderMemory() {},
+    finishSetupIfReturning() {},
+    announceVisual() {}
+  };
+  vm.createContext(context);
+  vm.runInContext(app.slice(defaultStart, defaultEnd) + "\n" + app.slice(scopeStart, scopeEnd), context);
+
+  vm.runInContext('activateUserMemoryScope("account-A")', context);
+  assert.equal(context.profileStorageKey, "aria.profile.user.account-A");
+  assert.equal(context.onboardedStorageKey, "aria.onboarded.user.account-A");
+  context.profile.proactivity = "proactive";
+  context.profile.memoryConsent = true;
+  vm.runInContext("saveProfile()", context);
+  localStorage.setItem(context.onboardedStorageKey, "done");
+
+  vm.runInContext('activateUserMemoryScope("account-B")', context);
+  assert.equal(context.profile.proactivity, "balanced", "account B must not inherit account A preferences");
+  assert.equal(context.profile.memoryConsent, false, "memory consent must fail closed on account switch");
+  assert.equal(localStorage.getItem("aria.onboarded.user.account-B"), null, "account B must have its own onboarding state");
+  context.profile.humor = "frequent";
+  vm.runInContext("saveProfile()", context);
+  localStorage.setItem(context.onboardedStorageKey, "skipped");
+
+  vm.runInContext('activateUserMemoryScope("account-A")', context);
+  assert.equal(context.profile.proactivity, "proactive");
+  assert.equal(localStorage.getItem("aria.onboarded.user.account-A"), "done");
+  vm.runInContext('activateUserMemoryScope("account-B")', context);
+  assert.equal(context.profile.humor, "frequent");
+  assert.equal(localStorage.getItem("aria.onboarded.user.account-B"), "skipped");
+});
+
+test("clearing one signed-in account's local ARIA data preserves other accounts", () => {
+  const start = app.indexOf("function clearLocalAccountData()");
+  const end = app.indexOf("function updateAuthUi", start);
+  assert.ok(start >= 0 && end > start);
+  const storage = (initial = {}) => {
+    const target = { ...initial };
+    Object.defineProperties(target, {
+      getItem: { value(key) { return Object.prototype.hasOwnProperty.call(this, key) ? this[key] : null; } },
+      setItem: { value(key, value) { this[key] = String(value); } },
+      removeItem: { value(key) { delete this[key]; } }
+    });
+    return target;
+  };
+  const localStorage = storage({
+    "aria.memory.user.account-A": "[{\"text\":\"A\"}]",
+    "aria.profile.user.account-A": "{\"proactivity\":\"proactive\"}",
+    "aria.onboarded.user.account-A": "done",
+    "aria.memory.user.account-B": "[{\"text\":\"B\"}]",
+    "aria.profile.user.account-B": "{\"proactivity\":\"discrete\"}",
+    "aria.onboarded.user.account-B": "done",
+    "aria.v07.memoryClientId": "legacy-client"
+  });
+  const sessionStorage = storage({ "aria.session.accessToken": "legacy-token", "aria.voice.alphaToken": "legacy-alpha" });
+  const context = {
+    memoryStorageKey: "aria.memory.user.account-A",
+    profileStorageKey: "aria.profile.user.account-A",
+    onboardedStorageKey: "aria.onboarded.user.account-A",
+    activeAuthUserId: "account-A",
+    profile: { proactivity: "balanced", verbosity: "balanced", humor: "balanced", memoryConsent: false },
+    memory: "unused",
+    memories: [],
+    KEYS: { reset: "aria.reset" },
+    SESSION_TOKEN_KEY: "aria.voice.alphaToken",
+    localStorage,
+    sessionStorage
+  };
+  vm.createContext(context);
+  vm.runInContext(app.slice(start, end), context);
+  vm.runInContext("clearLocalAccountData()", context);
+
+  assert.equal(localStorage.getItem("aria.memory.user.account-A"), "[]");
+  assert.equal(JSON.parse(localStorage.getItem("aria.profile.user.account-A")).memoryConsent, false);
+  assert.equal(localStorage.getItem("aria.onboarded.user.account-A"), null);
+  assert.equal(localStorage.getItem("aria.memory.user.account-B"), "[{\"text\":\"B\"}]");
+  assert.equal(localStorage.getItem("aria.profile.user.account-B"), "{\"proactivity\":\"discrete\"}");
+  assert.equal(localStorage.getItem("aria.onboarded.user.account-B"), "done");
+  assert.equal(localStorage.getItem("aria.v07.memoryClientId"), "legacy-client");
+  assert.equal(sessionStorage.getItem("aria.session.accessToken"), "legacy-token");
+  assert.equal(sessionStorage.getItem("aria.voice.alphaToken"), "legacy-alpha");
+});

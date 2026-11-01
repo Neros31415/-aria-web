@@ -14,6 +14,8 @@ let supabaseAccessToken = "";
 let authReady = false;
 let activeAuthUserId = null;
 let memoryStorageKey = KEYS.memory;
+let profileStorageKey = KEYS.profile;
+let onboardedStorageKey = KEYS.onboarded;
 let passwordRecoveryMode = false;
 let conversation = [];
 let requestInFlight = false;
@@ -130,10 +132,15 @@ function activateUserMemoryScope(userId) {
   cancelRemoteMemoryRequests();
   activeAuthUserId = userId || null;
   memoryStorageKey = userId ? KEYS.memory + ".user." + userId : KEYS.memory + ".anonymous";
+  profileStorageKey = userId ? KEYS.profile + ".user." + userId : KEYS.profile;
+  onboardedStorageKey = userId ? KEYS.onboarded + ".user." + userId : KEYS.onboarded;
   memories = safeRead(memoryStorageKey, []);
+  profile = safeRead(profileStorageKey, defaultProfile());
+  // Server consent remains authoritative; fail closed until it is reloaded.
   profile.memoryConsent = false;
   saveProfile();
   renderMemory();
+  if (!onboarding) finishSetupIfReturning();
 }
 async function refreshRemoteMemoryConsent() {
   const token = getApiToken();
@@ -162,6 +169,28 @@ async function refreshRemoteMemoryConsent() {
     if ($("memoryStatus")) $("memoryStatus").textContent = "Impossible de vérifier le consentement serveur : mémoire distante bloquée par sécurité.";
   }
 }
+function clearLocalAccountData() {
+  const currentAccountKeys = new Set([memoryStorageKey, profileStorageKey, onboardedStorageKey]);
+  for (const key of Object.keys(localStorage)) {
+    const isCurrentAccountData = currentAccountKeys.has(key);
+    const isLegacyAnonymousData = !activeAuthUserId &&
+      key.startsWith("aria.") &&
+      !key.includes(".user.") &&
+      key !== "aria.v07.memoryClientId";
+    if (isCurrentAccountData || isLegacyAnonymousData) localStorage.removeItem(key);
+  }
+  if (!activeAuthUserId) {
+    for (const key of Object.keys(sessionStorage)) {
+      if (key.startsWith("aria.") && key !== "aria.session.accessToken" && key !== SESSION_TOKEN_KEY) {
+        sessionStorage.removeItem(key);
+      }
+    }
+  }
+  localStorage.setItem(KEYS.reset, "done");
+  localStorage.setItem(memoryStorageKey, "[]");
+  localStorage.setItem(profileStorageKey, JSON.stringify(profile));
+}
+
 function updateAuthUi(session) {
   const signedIn = Boolean(session?.user?.email);
   const label = signedIn ? "Connecté : " + session.user.email : "Non connecté";
@@ -311,23 +340,26 @@ let speaking = false;
 let shouldResumeListening = false;
 let onboarding = false;
 let onboardingStep = 0;
-let profile = safeRead(KEYS.profile, {
-  proactivity: "balanced",
-  verbosity: "balanced",
-  humor: "balanced",
-  memoryConsent: false
-});
+let profile = safeRead(profileStorageKey, defaultProfile());
 let memories = safeRead(KEYS.memory, []);
 let transcriptVisible = false;
 let visualizationOpen = false;
 let transitionTimer = null;
 
+function defaultProfile() {
+  return {
+    proactivity: "balanced",
+    verbosity: "balanced",
+    humor: "balanced",
+    memoryConsent: false
+  };
+}
 function safeRead(key, fallback) {
   try { const value = JSON.parse(localStorage.getItem(key)); return value ?? fallback; }
   catch { return fallback; }
 }
 function saveProfile() {
-  try { localStorage.setItem(KEYS.profile, JSON.stringify(profile)); }
+  try { localStorage.setItem(profileStorageKey, JSON.stringify(profile)); }
   catch { announceVisual("Le navigateur ne permet pas de sauvegarder les préférences."); }
 }
 function setState(state, title, subtitle, spokenText = "") {
@@ -907,7 +939,7 @@ function beginOnboarding() {
 function finishOnboarding() {
   onboarding = false;
   saveProfile();
-  localStorage.setItem(KEYS.onboarded, "done");
+  localStorage.setItem(onboardedStorageKey, "done");
   speak("Parfait. Vous pourrez modifier ces préférences à tout moment. Je vais maintenant vous expliquer les états de mon orbe.", {
     resume: false,
     onEnd: () => {
@@ -935,9 +967,12 @@ function finishOnboarding() {
 function finishSetupIfReturning() {
   const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
   if (hashParams.get("type") === "recovery") return;
-  if (!localStorage.getItem(KEYS.onboarded)) {
-    $("onboardingDialog").showModal();
+  if (!localStorage.getItem(onboardedStorageKey)) {
+    const dialog = $("onboardingDialog");
+    if (dialog && !dialog.open) dialog.showModal();
   } else {
+    const dialog = $("onboardingDialog");
+    if (dialog?.open) dialog.close();
     setState("presence");
     $("voiceStart").textContent = "Commencer à parler";
   }
@@ -1012,7 +1047,7 @@ if (SpeechRecognition) {
   };
 }
 $("voiceStart").addEventListener("click", () => {
-  if (!localStorage.getItem(KEYS.onboarded)) beginOnboarding();
+  if (!localStorage.getItem(onboardedStorageKey)) beginOnboarding();
   else startListening();
 });
 $("voiceStop").addEventListener("click", stopListening);
@@ -1068,7 +1103,7 @@ $("authLogout").addEventListener("click", async () => {
 initializeSupabaseAuth();
 $("restartOnboarding").addEventListener("click", () => {
   $("settingsDialog").close();
-  localStorage.removeItem(KEYS.onboarded);
+  localStorage.removeItem(onboardedStorageKey);
   $("onboardingDialog").showModal();
 });
 $("settingsMemory").addEventListener("click", () => {
@@ -1081,15 +1116,17 @@ $("onboardingBegin").addEventListener("click", (event) => {
 });
 $("onboardingSkip").addEventListener("click", () => {
   onboarding = false;
-  localStorage.setItem(KEYS.onboarded, "skipped");
+  localStorage.setItem(onboardedStorageKey, "skipped");
 });
 $("resetMemoryBtn").addEventListener("click", async () => {
   if (!confirm("Effacer les données personnelles conservées localement par cette version d'ARIA ? Cette opération est irréversible sur cet appareil.")) return;
   cancelRemoteMemoryRequests();
-  const legacyClientIds = [...new Set([
+  // Legacy single-user alpha storage belongs to the anonymous/legacy scope.
+  // Never delete it while a different authenticated account is active.
+  const legacyClientIds = activeAuthUserId ? [] : [...new Set([
     localStorage.getItem("aria.v07.memoryClientId")
   ].filter(Boolean))];
-  const legacyToken = sessionStorage.getItem("aria.session.accessToken") || sessionStorage.getItem(SESSION_TOKEN_KEY);
+  const legacyToken = activeAuthUserId ? "" : (sessionStorage.getItem("aria.session.accessToken") || sessionStorage.getItem(SESSION_TOKEN_KEY));
   let remoteDeleted = false;
 
   if (activeAuthUserId && getApiToken()) {
@@ -1148,24 +1185,16 @@ $("resetMemoryBtn").addEventListener("click", async () => {
   }
 
   memories = [];
-  profile = {proactivity:"balanced",verbosity:"balanced",humor:"balanced",memoryConsent:false};
-  for (const key of Object.keys(localStorage)) {
-    if (key.startsWith("aria.") && key !== "aria.v07.memoryClientId") localStorage.removeItem(key);
-  }
-  for (const key of Object.keys(sessionStorage)) {
-    if (key.startsWith("aria.") && key !== "aria.session.accessToken" && key !== SESSION_TOKEN_KEY) sessionStorage.removeItem(key);
-  }
-  localStorage.setItem(KEYS.reset, "done");
-  localStorage.setItem(memoryStorageKey, "[]");
-  localStorage.setItem(KEYS.profile, JSON.stringify(profile));
+  profile = defaultProfile();
+  clearLocalAccountData();
   renderMemory();
 
-  if (remoteDeleted) {
+  if (remoteDeleted && !activeAuthUserId) {
     localStorage.removeItem("aria.v07.memoryClientId");
     sessionStorage.removeItem("aria.session.accessToken");
     sessionStorage.removeItem(SESSION_TOKEN_KEY);
+    localStorage.removeItem(KEYS.clientId);
   }
-  if (remoteDeleted && !activeAuthUserId) localStorage.removeItem(KEYS.clientId);
   conversation = [];
   $("memoryStatus").textContent = remoteDeleted
     ? "Mémoire locale effacée, consentement révoqué et suppression serveur confirmée."
@@ -1189,7 +1218,7 @@ remoteResetPromise.then(deleted => {
     localStorage.removeItem("aria.v07.memoryClientId");
     sessionStorage.removeItem("aria.session.accessToken");
   }
-  if (localStorage.getItem(KEYS.reset) === "done" && !localStorage.getItem(KEYS.onboarded)) {
+  if (localStorage.getItem(KEYS.reset) === "done" && !localStorage.getItem(onboardedStorageKey)) {
     $("memoryStatus").textContent = deleted
       ? "Les anciennes données locales et la mémoire serveur ont été effacées."
       : "Les anciennes données locales ont été effacées. La suppression distante n'a pas pu être confirmée; l'identifiant et la session sont conservés temporairement pour permettre une nouvelle tentative.";
