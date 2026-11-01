@@ -1257,3 +1257,45 @@ test("health reports an individual-auth service as not configured without D1 aut
   assert.equal(body.authenticationMode, "session_kv");
   assert.equal(body.authorizationStore, false);
 });
+
+
+test("required individual auth fails closed before session_kv or legacy authentication", async () => {
+  let sessionLookups = 0;
+  for (const mode of ["session_kv", "legacy"]) {
+    const guardedEnv = {
+      ...env,
+      ARIA_AUTH_MODE: mode,
+      ARIA_REQUIRE_INDIVIDUAL_AUTH: "true",
+      ARIA_USERS: {
+        async get() {
+          sessionLookups++;
+          return "opaque-alpha-user";
+        }
+      }
+    };
+    const response = await worker.fetch(request({
+      messages: [{ role: "user", content: "Bonjour" }]
+    }), guardedEnv);
+    assert.equal(response.status, 503, mode + " must be disabled by the explicit individual-auth guard");
+    assert.deepEqual(await response.json(), { error: "individual_auth_required" });
+  }
+  assert.equal(sessionLookups, 0, "the session registry must not be consulted when individual auth is mandatory");
+});
+
+test("health reports identity migration required when a compatibility mode conflicts with the guard", async () => {
+  const response = await worker.fetch(new Request("https://aria-staging.test/health"), {
+    ARIA_AUTH_MODE: "session_kv",
+    ARIA_REQUIRE_INDIVIDUAL_AUTH: "true",
+    ARIA_USERS: { async get() { return null; } },
+    ARIA_MEMORY: env.ARIA_MEMORY,
+    ARIA_AUTHZ_DB: authorizationDb(),
+    OPENAI_API_KEY: "test-provider-key"
+  });
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.configured, false);
+  assert.equal(body.authenticationMode, "session_kv");
+  assert.equal(body.individualAuthRequired, true);
+  assert.equal(body.identityMigrationRequired, true);
+  assert.equal(body.persistentMemory, false);
+});
