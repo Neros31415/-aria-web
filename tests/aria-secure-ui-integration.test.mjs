@@ -72,7 +72,7 @@ test("voice-first HUD loads the scene engine and responsive styles without a per
 
 test("voice frontend sends preferences and explicit memory consent and applies structured actions", () => {
   assert.match(app, /memoryConsent: profile\.memoryConsent === true/);
-  assert.match(html, /@supabase\/supabase-js@2/);
+  assert.match(html, /@supabase\/supabase-js@2\.118\.0\/dist\/umd\/supabase\.min\.js/);
   assert.match(html, /id="authSignIn"/);
   assert.match(html, /id="authSignUp"/);
   assert.match(html, /id="authReset"/);
@@ -415,4 +415,31 @@ test("memory consent revocation ignores a late remote write response at runtime"
   assert.deepEqual(context.memories, [{ text: "local memory after edit" }]);
   assert.equal(storageWrites.length, 0, "stale write response must not overwrite localStorage");
   assert.equal(context.activeMemoryControllers.size, 0);
+});
+
+
+test("Supabase Auth initialization handles missing config and rejected session restoration", () => {
+  assert.match(app, /async function initializeSupabaseAuth\(\)[\s\S]*?try \{/);
+  assert.match(app, /if \(error\) throw error;/);
+  assert.match(app, /catch \(error\) \{[\s\S]*?supabaseAccessToken = "";[\s\S]*?setAuthStatus\(authFailureMessage\(error\)\)/);
+  assert.match(app, /finally \{[\s\S]*?authReady = true;[\s\S]*?setAuthBusy\(false\)/);
+  assert.match(app, /Authentification indisponible : configuration publique Supabase absente/);
+});
+
+test("Supabase Auth actions guard duplicate submissions and always release loading state", () => {
+  assert.match(app, /let authOperationInFlight = false/);
+  assert.match(app, /if \(authOperationInFlight\) return/);
+  assert.match(app, /setAuthBusy\(true, mode === "signup"/);
+  assert.match(app, /catch \(error\) \{\s*setAuthStatus\(authFailureMessage\(error\)\);\s*\}\s*finally \{\s*authOperationInFlight = false;\s*setAuthBusy\(false\);/);
+  assert.match(app, /function setAuthBusy\(busy, message = ""\)/);
+  assert.match(app, /control\.disabled = busy/);
+  assert.match(app, /dialog\.setAttribute\("aria-busy", String\(busy\)\)/);
+});
+
+test("Supabase Auth network failures are reported without leaking provider details", () => {
+  assert.match(app, /function authFailureMessage\(error\)/);
+  assert.match(app, /Connexion impossible\. Vérifiez votre réseau puis réessayez\./);
+  assert.match(app, /L’authentification a échoué\. Vérifiez vos informations puis réessayez\./);
+  assert.match(app, /async function updateRecoveredPassword\(\)[\s\S]*?catch \(error\)/);
+  assert.match(app, /authLogout[\s\S]*?catch \(error\)/);
 });
