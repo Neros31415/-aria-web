@@ -138,13 +138,16 @@ async function runStagingE2E(config) {
   const health = healthResult.payload || {};
   if (health.authenticationMode !== "individual" ||
       health.authorizationStore !== true ||
+      health.memoryStorageConfigured !== true ||
       health.memoryConsentStoreConfigured !== true ||
-      health.persistentMemory !== true ||
-      health.configured !== true) {
+      health.persistentMemory !== true) {
     throw new Error("Staging is not ready for individual-account memory E2E. Expected individual auth, D1 authorization, consent tables and persistent memory.");
   }
 
   const accounts = await Promise.all(config.users.map(user => signIn(config, user)));
+  if (accounts[0].userId === accounts[1].userId) {
+    throw new Error("The two staging test credentials resolved to the same canonical account identity.");
+  }
   const originalConsents = [null, null];
   const memoryWriteAttempted = new Set();
   let primaryError = null;
