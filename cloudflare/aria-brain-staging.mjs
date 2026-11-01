@@ -239,6 +239,8 @@ export default {
     const origin = req.headers.get("Origin") || "";
     const allowedOrigins = new Set([
       "https://neros31415.github.io",
+      "http://localhost:4173",
+      "http://127.0.0.1:4173",
       "https://id-preview--501fb7b4-c872-4c82-ab9e-db8f88b04bfb.lovable.app",
       "https://661f988b-f4a0-442c-b1a4-0f755a95bf3e.sandbox.floot.app"
     ]);
