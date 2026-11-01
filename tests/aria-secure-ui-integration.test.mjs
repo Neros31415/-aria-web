@@ -418,10 +418,13 @@ test("memory consent revocation ignores a late remote write response at runtime"
 });
 
 
-test("Supabase Auth initialization handles missing config and rejected session restoration", () => {
+test("Supabase Auth initialization handles missing config and preserves retry after session restoration failure", () => {
   assert.match(app, /async function initializeSupabaseAuth\(\)[\s\S]*?try \{/);
   assert.match(app, /if \(error\) throw error;/);
-  assert.match(app, /catch \(error\) \{[\s\S]*?supabaseClient = null;[\s\S]*?setAuthStatus\(authFailureMessage\(error\)\)/);
+  const listenerIndex = app.indexOf("onAuthStateChange((event, session) =>");
+  const restoreIndex = app.indexOf("auth.getSession()", app.indexOf("async function initializeSupabaseAuth"));
+  assert.ok(listenerIndex >= 0 && restoreIndex > listenerIndex, "auth listener must be registered before session restoration");
+  assert.match(app, /catch \(error\) \{[\s\S]*?if \(!supabaseClient\) \{[\s\S]*?updateAuthUi\(null\);[\s\S]*?Vous pouvez réessayer/);
   assert.match(app, /finally \{[\s\S]*?authReady = true;[\s\S]*?setAuthBusy\(false\)/);
   assert.match(app, /Authentification indisponible : configuration publique Supabase absente/);
 });
