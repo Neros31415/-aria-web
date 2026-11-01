@@ -483,6 +483,8 @@ test("Supabase Auth remains usable after transient getSession network failure", 
     supabaseClient: null,
     supabaseAccessToken: "",
     authReady: false,
+    authStateGeneration: 0,
+    authScopeInitialized: false,
     authOperationInFlight: false,
     activeAuthUserId: null,
     passwordRecoveryMode: false,
@@ -496,7 +498,7 @@ test("Supabase Auth remains usable after transient getSession network failure", 
     setAuthStatus(message) { context.lastAuthStatus = message; },
     authFailureMessage(error) { return /network/i.test(error.message) ? "Connexion impossible." : "Échec."; },
     updateAuthUi(sessionValue) { context.authUiSession = sessionValue; },
-    activateUserMemoryScope(userId) { context.activeAuthUserId = userId; },
+    activateUserMemoryScope(userId) { context.activeAuthUserId = userId; context.authScopeInitialized = true; },
     refreshRemoteMemoryConsent() { return Promise.resolve(); },
     openAuthDialog() {},
     document: undefined
@@ -508,11 +510,13 @@ test("Supabase Auth remains usable after transient getSession network failure", 
   assert.ok(context.supabaseClient, "the created Supabase client must remain available for retry");
   assert.equal(typeof authListener, "function", "auth state listener must be registered before session restoration");
   assert.match(context.lastAuthStatus, /Vous pouvez réessayer/);
+  assert.equal(context.authScopeInitialized, false, "personal account scope must remain locked after failed session restoration");
 
   await vm.runInContext('submitEmailPasswordAuth("signin")', context);
   assert.equal(signInCalls, 1, "the user must be able to retry sign-in without reloading the page");
   assert.equal(context.supabaseAccessToken, "fresh-session-token", "the auth event must update the bearer token");
   assert.equal(context.activeAuthUserId, session.user.id, "the auth event must activate the correct account scope");
+  assert.equal(context.authScopeInitialized, true, "successful sign-in must unlock the authenticated account scope");
   assert.equal(elements.authDialog.closed, true);
 });
 
@@ -625,4 +629,102 @@ test("clearing one signed-in account's local ARIA data preserves other accounts"
   assert.equal(localStorage.getItem("aria.v07.memoryClientId"), "legacy-client");
   assert.equal(sessionStorage.getItem("aria.session.accessToken"), "legacy-token");
   assert.equal(sessionStorage.getItem("aria.voice.alphaToken"), "legacy-alpha");
+});
+
+
+test("a newer auth event wins over a stale session restoration snapshot", async () => {
+  const initStart = app.indexOf("async function initializeSupabaseAuth()");
+  const initEnd = app.indexOf("function activateUserMemoryScope", initStart);
+  assert.ok(initStart >= 0 && initEnd > initStart);
+  const authSource = app.slice(initStart, initEnd);
+
+  let authListener = null;
+  let resolveSession;
+  const freshSession = {
+    access_token: "fresh-event-token",
+    user: { id: "123e4567-e89b-42d3-a456-426614174001", email: "new@example.com" }
+  };
+  const client = {
+    auth: {
+      getSession() {
+        return new Promise(resolve => { resolveSession = resolve; });
+      },
+      onAuthStateChange(callback) {
+        authListener = callback;
+        return { data: { subscription: { unsubscribe() {} } } };
+      }
+    }
+  };
+  const elements = {};
+  const context = {
+    supabaseClient: null,
+    supabaseAccessToken: "",
+    authReady: false,
+    authStateGeneration: 0,
+    authScopeInitialized: false,
+    activeAuthUserId: null,
+    passwordRecoveryMode: false,
+    conversation: [],
+    window: {
+      ARIA_SUPABASE_CONFIG: { url: "https://example.supabase.co", publishableKey: "sb_publishable_test" },
+      supabase: { createClient() { return client; } }
+    },
+    $: id => elements[id] || (elements[id] = { textContent: "", hidden: false, setAttribute() {} }),
+    setAuthBusy() {},
+    setAuthStatus(message) { context.lastAuthStatus = message; },
+    authFailureMessage() { return "Connexion impossible."; },
+    updateAuthUi(session) { context.authUiSession = session; },
+    activateUserMemoryScope(userId) {
+      context.activeAuthUserId = userId;
+      context.authScopeInitialized = true;
+    },
+    refreshRemoteMemoryConsent() { return Promise.resolve(); },
+    openAuthDialog() {}
+  };
+  vm.createContext(context);
+  vm.runInContext(authSource, context);
+
+  const initialization = vm.runInContext("initializeSupabaseAuth()", context);
+  assert.equal(typeof authListener, "function");
+  authListener("SIGNED_IN", freshSession);
+  assert.equal(context.supabaseAccessToken, "fresh-event-token");
+  assert.equal(context.activeAuthUserId, freshSession.user.id);
+
+  resolveSession({ data: { session: null }, error: null });
+  await initialization;
+  assert.equal(context.supabaseAccessToken, "fresh-event-token", "stale null snapshot must not erase the newer token");
+  assert.equal(context.activeAuthUserId, freshSession.user.id, "stale snapshot must not switch the account scope");
+  assert.equal(context.authUiSession, freshSession, "stale snapshot must not overwrite the newer auth UI state");
+});
+
+test("personal profile and memory remain hidden until the authenticated scope is restored", () => {
+  assert.match(app, /let authScopeInitialized = false/);
+  assert.match(app, /let profile = defaultProfile\(\);\s*let memories = \[\];/);
+  assert.match(app, /if \(id === "memoryPanel" && !authScopeInitialized\)/);
+  assert.match(app, /settingsBtn[\s\S]*?if \(!authScopeInitialized\)/);
+  assert.match(app, /voiceStart[\s\S]*?if \(!authScopeInitialized\)/);
+  assert.match(app, /authScopeInitialized = true/);
+  assert.doesNotMatch(app, /finishSetupIfReturning\(\);\s*$/);
+});
+
+test("memory drawer does not open while account scope is unresolved", () => {
+  const start = app.indexOf("function openPanel(id)");
+  const end = app.indexOf("async function syncRemoteMemory()", start);
+  assert.ok(start >= 0 && end > start);
+  const source = app.slice(start, end);
+  const elements = {
+    memoryPanel: { hidden: true },
+    memoryStatus: { textContent: "" }
+  };
+  const context = {
+    authScopeInitialized: false,
+    $: id => elements[id],
+    renderMemory() {},
+    syncRemoteMemory() {}
+  };
+  vm.createContext(context);
+  vm.runInContext(source, context);
+  vm.runInContext('openPanel("memoryPanel")', context);
+  assert.equal(elements.memoryPanel.hidden, true);
+  assert.match(elements.memoryStatus.textContent, /session n'est pas encore restaurée/);
 });
