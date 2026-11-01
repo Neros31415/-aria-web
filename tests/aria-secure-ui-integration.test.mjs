@@ -421,7 +421,7 @@ test("memory consent revocation ignores a late remote write response at runtime"
 test("Supabase Auth initialization handles missing config and rejected session restoration", () => {
   assert.match(app, /async function initializeSupabaseAuth\(\)[\s\S]*?try \{/);
   assert.match(app, /if \(error\) throw error;/);
-  assert.match(app, /catch \(error\) \{[\s\S]*?supabaseAccessToken = "";[\s\S]*?setAuthStatus\(authFailureMessage\(error\)\)/);
+  assert.ok(app.includes("catch (error) { supabaseAccessToken = ''; updateAuthUi(null); setAuthStatus(authFailureMessage(error)"));
   assert.match(app, /finally \{[\s\S]*?authReady = true;[\s\S]*?setAuthBusy\(false\)/);
   assert.match(app, /Authentification indisponible : configuration publique Supabase absente/);
 });
