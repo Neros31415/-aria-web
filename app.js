@@ -416,8 +416,10 @@ function updateTranscript(text, role = "ARIA") {
 function speak(text, options = {}) {
   if (options.resume === true && recognition) shouldResumeListening = true;
   if (!window.speechSynthesis || typeof SpeechSynthesisUtterance !== "function") {
+    updateTranscript(text, "ARIA");
     announceVisual("La synthèse vocale n'est pas disponible dans ce navigateur. La réponse reste consultable dans la transcription.");
     speaking = false;
+    setState("presence", "Je suis là.", "La réponse est disponible dans la transcription.");
     if (typeof options.onEnd === "function") {
       shouldResumeListening = false;
       options.onEnd();
@@ -426,8 +428,6 @@ function speak(text, options = {}) {
     if (shouldResumeListening) {
       shouldResumeListening = false;
       window.setTimeout(startListening, 300);
-    } else {
-      setState("presence");
     }
     return;
   }
