@@ -487,7 +487,7 @@ Dépôt : https://github.com/Neros31415/-aria-web
 3. **iPhone :** la PWA est un prototype/canal de test ; la cible App Store est une véritable application native, avec SwiftUI privilégié.
 4. **Mémoire :** vierge par défaut, consentement explicite, séparation historique/mémoire, isolation serveur et confirmation réelle des suppressions.
 5. **Authentification :** Supabase Auth individuel est le choix cible ; le projet staging existe, mais les réglages Email/redirects et les bindings Worker ne sont pas encore configurés et validés de bout en bout.
-6. **D1 :** les migrations de consentement/documents sont appliquées et vérifiées sur la base staging ; la mémoire individuelle reste indisponible sur le Worker actif tant que le code et l'authentification individuelle ne sont pas déployés et testés en HTTP.
+6. **D1 :** les cinq tables applicatives sont présentes sur la base staging et leur structure correspond aux migrations versionnées 0001–0003 ; le contrôle des clés étrangères ne retourne aucune anomalie. En revanche, aucune table de suivi des migrations n'a été trouvée : l'état structurel est vérifié, mais l'historique d'application n'est pas traçable. Le compteur API `num_tables` est incohérent avec le résultat SQL. La mémoire individuelle reste indisponible sur le Worker actif tant que l'authentification individuelle n'est pas configurée et déployée.
 7. **Vision 3D :** les expériences 2D existantes ne doivent pas être confondues avec le God’s Eye View ou les simulations 3D demandées.
 8. **Finance :** suivi et analyse ne signifient pas accès bancaire ou exécution de transactions.
 9. **Proactivité :** une préférence de prompt n'est pas un ordonnanceur opérationnel ni une surveillance en arrière-plan.
@@ -534,6 +534,8 @@ Une fonctionnalité non livrée ou non vérifiée ne doit pas être annoncée co
 - PR anti-course de session #51 : https://github.com/Neros31415/-aria-web/pull/51
 - PR isolation multi-comptes #52 : https://github.com/Neros31415/-aria-web/pull/52
 - PR harnais HTTP staging #53 : https://github.com/Neros31415/-aria-web/pull/53
+- PR garde-fou authentification individuelle obligatoire #54 : https://github.com/Neros31415/-aria-web/pull/54
+- Audit de parité backend staging : `docs/STAGING-BACKEND-PARITY-AUDIT-2026-11-01.md` (PR #54)
 
 ---
 
