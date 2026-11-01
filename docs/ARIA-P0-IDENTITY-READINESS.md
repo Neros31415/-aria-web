@@ -177,3 +177,34 @@ Le projet Supabase nouvellement créé sert de fournisseur d'identité **Supabas
 - [ ] **S7 — Release :** revue du diff, CI sur SHA exact, vérification des bindings par noms/types, puis demander une autorisation distincte avant tout déploiement staging. Production reste hors périmètre.
 
 **Statut P0 :** projet Supabase staging créé ; Auth n'est pas encore configuré, le Worker staging n'est pas relié à Supabase et le front-end n'utilise pas encore Supabase Auth. Aucune activation utilisateur ne doit être annoncée avant validation de bout en bout.
+
+
+---
+
+## 9. Candidat d'intégration email/mot de passe — 1 novembre 2026
+
+### Décision d'interface
+Le mode choisi pour ARIA staging est **email + mot de passe**. Le parcours candidat est développé dans la PR #46, empilée sur la PR #43 :
+- Client Supabase JS v2 : session persistante, renouvellement automatique et détection des redirections.
+- Inscription, connexion, déconnexion, récupération et mise à jour du mot de passe.
+- Confirmation email attendue avant première connexion.
+- Le navigateur utilise uniquement l'URL et la clé publishable du projet staging.
+- Le Worker candidat accepte `SUPABASE_PUBLISHABLE_KEY` pour l'en-tête `apikey`, tout en gardant une compatibilité temporaire avec `SUPABASE_ANON_KEY`.
+- Les caches mémoire locaux sont isolés par UUID utilisateur ; le consentement serveur est relu pour chaque compte et l'accès mémoire est bloqué par défaut si cette lecture échoue.
+- La suppression mémoire côté client révoque d'abord le consentement serveur, puis supprime les documents du compte authentifié.
+
+### Validation automatisée
+Sur le commit candidat `4a33f3c85418885b9210f70cd0c3d0adcaece7c6`, les workflows GitHub Actions suivants sont verts :
+- `ARIA secure UI integration checks` — succès.
+- `Staging Worker Tests` — succès.
+
+Ces résultats valident les tests unitaires et d'intégration simulés du dépôt. Ils ne démontrent pas encore une authentification HTTP réelle contre le projet Supabase staging ni l'isolation multi-compte sur un Worker déployé.
+
+### Configuration encore à effectuer
+- Les paramètres Auth du Dashboard Supabase (Email provider, confirmation email, Site URL et URLs de redirection locales) ne sont pas modifiés.
+- Les bindings du Worker Cloudflare staging ne sont pas modifiés ; le Worker actif reste en `session_kv`.
+- Les origines de test locales `http://localhost:4173` et `http://127.0.0.1:4173` sont ajoutées au code candidat, mais ne sont pas activées dans le Worker actif.
+- Aucun test HTTP multi-compte n'a été exécuté.
+
+### État
+**PR #46 ouverte, en brouillon, non fusionnée et empilée sur PR #43.** Les CI sont vertes sur son SHA actuel. Aucun réglage Auth, binding Cloudflare, déploiement, merge ou changement de production n'a été effectué pendant cette étape. Aucun secret n'a été lu ou exposé. La mise en service staging reste bloquée jusqu'à la configuration du Dashboard, la configuration des bindings staging et une autorisation explicite de déploiement.
