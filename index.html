@@ -138,7 +138,7 @@
       <h2 id="authTitle">Connexion</h2>
       <p class="dialog-help">Utilisez votre adresse email et votre mot de passe. La confirmation de votre adresse peut être demandée avant la première connexion.</p>
       <label class="token-field" for="authEmail"><span>Adresse email</span><input id="authEmail" type="email" autocomplete="email" required placeholder="vous@exemple.fr"></label>
-      <label class="token-field" for="authPassword"><span>Mot de passe</span><input id="authPassword" type="password" autocomplete="current-password" minlength="8" required placeholder="8 caractères minimum"></label>
+      <label class="token-field" for="authPassword"><span id="authPasswordLabel">Mot de passe</span><input id="authPassword" type="password" autocomplete="current-password" minlength="8" required placeholder="8 caractères minimum"></label>
       <p id="authStatus" class="token-help" role="status" aria-live="polite">Initialisation de Supabase Auth…</p>
       <button class="primary-button" id="authSignIn" type="button">Se connecter</button>
       <button class="quiet-action" id="authSignUp" type="button">Créer un compte</button>
