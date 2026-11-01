@@ -728,3 +728,72 @@ test("memory drawer does not open while account scope is unresolved", () => {
   assert.equal(elements.memoryPanel.hidden, true);
   assert.match(elements.memoryStatus.textContent, /session n'est pas encore restaurée/);
 });
+
+
+test("voice recognition resumes when speech synthesis is unavailable", () => {
+  const start = app.indexOf("function speak(text, options = {})");
+  const end = app.indexOf("function startListening()", start);
+  assert.ok(start >= 0 && end > start);
+  const context = {
+    recognition: {},
+    listening: false,
+    speaking: false,
+    shouldResumeListening: false,
+    window: { setTimeout(callback) { callback(); } },
+    announceVisual(message) { context.visualMessage = message; },
+    setState(state) { context.state = state; },
+    updateTranscript() {},
+    startListening() { context.startCalls = (context.startCalls || 0) + 1; }
+  };
+  vm.createContext(context);
+  vm.runInContext(app.slice(start, end), context);
+
+  vm.runInContext('speak("Réponse de test", { resume: true })', context);
+  assert.equal(context.speaking, false);
+  assert.equal(context.startCalls, 1, "the microphone should resume after the unavailable TTS path");
+  assert.equal(context.shouldResumeListening, false);
+  assert.match(context.visualMessage, /transcription/);
+});
+
+test("voice fallback handles an exposed but unusable speechSynthesis constructor", () => {
+  const start = app.indexOf("function speak(text, options = {})");
+  const end = app.indexOf("function startListening()", start);
+  const context = {
+    recognition: {},
+    listening: false,
+    speaking: false,
+    shouldResumeListening: false,
+    window: { speechSynthesis: {}, setTimeout(callback) { callback(); } },
+    announceVisual(message) { context.visualMessage = message; },
+    setState(state) { context.state = state; },
+    updateTranscript() {},
+    startListening() { context.startCalls = (context.startCalls || 0) + 1; }
+  };
+  vm.createContext(context);
+  vm.runInContext(app.slice(start, end), context);
+  vm.runInContext('speak("Réponse de test", { resume: true })', context);
+  assert.equal(context.startCalls, 1);
+  assert.match(context.visualMessage, /synthèse vocale/);
+});
+
+test("voice fallback delegates chained onboarding speech to its completion callback", () => {
+  const start = app.indexOf("function speak(text, options = {})");
+  const end = app.indexOf("function startListening()", start);
+  const context = {
+    recognition: {},
+    listening: false,
+    speaking: false,
+    shouldResumeListening: false,
+    window: { setTimeout(callback) { callback(); } },
+    announceVisual() {},
+    setState(state) { context.state = state; },
+    updateTranscript() {},
+    startListening() { context.startCalls = (context.startCalls || 0) + 1; }
+  };
+  vm.createContext(context);
+  vm.runInContext(app.slice(start, end), context);
+  vm.runInContext('speak("Présentation", { resume: true, onEnd: () => { context.callbackCalled = true; } })', context);
+  assert.equal(context.callbackCalled, true);
+  assert.equal(context.startCalls || 0, 0, "the completion callback owns the chained onboarding flow");
+  assert.equal(context.shouldResumeListening, false);
+});
