@@ -13,6 +13,7 @@ let supabaseClient = null;
 let supabaseAccessToken = "";
 let authReady = false;
 let activeAuthUserId = null;
+let authStateGeneration = 0;
 let memoryStorageKey = KEYS.memory;
 let passwordRecoveryMode = false;
 let conversation = [];
@@ -85,6 +86,7 @@ async function initializeSupabaseAuth() {
     // network is temporarily unavailable, later sign-in/recovery events must
     // still update the token and the account-scoped memory state.
     supabaseClient.auth.onAuthStateChange((event, session) => {
+      authStateGeneration += 1;
       supabaseAccessToken = session?.access_token || "";
       const nextUserId = session?.user?.id || null;
       if (nextUserId !== activeAuthUserId) {
@@ -104,8 +106,12 @@ async function initializeSupabaseAuth() {
       updateAuthUi(session || null);
     });
 
+    const restoreGeneration = authStateGeneration;
     const { data, error } = await supabaseClient.auth.getSession();
     if (error) throw error;
+    // A sign-in, sign-out or token event may arrive while session restoration is pending.
+    // The event is newer than this snapshot, so never let the stale snapshot overwrite it.
+    if (restoreGeneration !== authStateGeneration) return;
     supabaseAccessToken = data?.session?.access_token || "";
     updateAuthUi(data?.session || null);
     const initialUserId = data?.session?.user?.id || null;
