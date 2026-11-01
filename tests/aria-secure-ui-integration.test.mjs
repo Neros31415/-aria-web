@@ -79,6 +79,10 @@ test("voice frontend sends preferences and explicit memory consent and applies s
   assert.match(app, /signInWithPassword/);
   assert.match(app, /auth\.signUp/);
   assert.match(app, /resetPasswordForEmail/);
+  assert.match(app, /updateUser\(\{ password \}\)/);
+  assert.match(app, /refreshRemoteMemoryConsent/);
+  assert.match(app, /memoryStorageKey = userId \?/);
+  assert.match(html, /id="authUpdatePassword"/);
   assert.match(app, /autoRefreshToken: true/);
   assert.doesNotMatch(html, /apiTokenSetting|Jeton d’accès alpha/);
   assert.match(sw, /supabase-config\.js/);
