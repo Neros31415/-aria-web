@@ -23,7 +23,6 @@ on:
       - feat/aria-brain-staging-integration
       - fix/staging-worker-input-security
       - fix/memory-consent-revocation-race
-      - fix/memory-consent-revocation-race
     paths:
       - "cloudflare/aria-brain-staging.mjs"
       - "cloudflare/aria-authorization.mjs"
