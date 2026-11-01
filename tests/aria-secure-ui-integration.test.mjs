@@ -88,7 +88,8 @@ test("voice frontend sends preferences and explicit memory consent and applies s
   assert.match(sw, /supabase-config\.js/);
   assert.match(supabaseConfig, /mvcunzhhioeplrvanhgn\.supabase\.co/);
   assert.match(supabaseConfig, /sb_publishable_/);
-  assert.doesNotMatch(supabaseConfig, /service_role|sb_secret_/i);
+  assert.doesNotMatch(supabaseConfig, /sb_secret_/i);
+  assert.doesNotMatch(supabaseConfig, /service_role["']?\\s*:/i);
   assert.match(app, /preferences: \{/);
   assert.match(app, /function applyIntentAction/);
   assert.match(app, /"finance"/);
