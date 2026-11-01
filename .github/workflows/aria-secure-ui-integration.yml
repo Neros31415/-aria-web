@@ -1,7 +1,7 @@
 name: ARIA secure UI integration checks
 on:
   pull_request:
-    branches: [main, feat/aria-brain-staging-integration, fix/memory-consent-revocation-race, feat/aria-supabase-email-auth-staging, fix/supabase-auth-network-states-v2, fix/auth-retry-after-session-restore-failure, fix/isolate-account-preferences-and-onboarding]
+    branches: [main, feat/aria-brain-staging-integration, fix/memory-consent-revocation-race, feat/aria-supabase-email-auth-staging, fix/supabase-auth-network-states-v2, fix/auth-retry-after-session-restore-failure, fix/isolate-account-preferences-and-onboarding, fix/auth-scope-before-personal-ui]
   push:
     branches: [feat/aria-secure-ui-scene-integration, feat/aria-supabase-email-auth-staging, fix/auth-retry-after-session-restore-failure, fix/isolate-account-preferences-and-onboarding]
 jobs:
