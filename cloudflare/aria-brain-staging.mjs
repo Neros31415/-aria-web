@@ -140,7 +140,7 @@ async function authenticateRequest(req, env) {
   }
 
   if (authMode === "individual") {
-    if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) {
+    if (!env.SUPABASE_URL || !(env.SUPABASE_PUBLISHABLE_KEY || env.SUPABASE_ANON_KEY)) {
       return { ok: false, status: 503, error: "auth_not_configured" };
     }
 
@@ -165,7 +165,7 @@ async function authenticateRequest(req, env) {
       response = await fetch(authEndpoint.toString(), {
         method: "GET",
         headers: {
-          "apikey": env.SUPABASE_ANON_KEY,
+          "apikey": env.SUPABASE_PUBLISHABLE_KEY || env.SUPABASE_ANON_KEY,
           "Authorization": "Bearer " + match[1],
           "Accept": "application/json"
         },
@@ -261,7 +261,7 @@ export default {
     if (url.pathname === "/health" && req.method === "GET") {
       const authMode = env.ARIA_AUTH_MODE || "individual";
       const authConfigured = authMode === "individual"
-        ? Boolean(env.SUPABASE_URL && env.SUPABASE_ANON_KEY)
+        ? Boolean(env.SUPABASE_URL && (env.SUPABASE_PUBLISHABLE_KEY || env.SUPABASE_ANON_KEY))
         : authMode === "session_kv"
           ? Boolean(env.ARIA_USERS)
           : authMode === "legacy" && Boolean(env.ARIA_ACCESS_TOKEN);
