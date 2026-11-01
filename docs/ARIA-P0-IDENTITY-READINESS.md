@@ -133,3 +133,47 @@ Le propriétaire confirme **Supabase Auth individuel comme stratégie cible d'id
 - Aucune configuration Cloudflare/Supabase n'a été modifiée, aucune migration n'a été exécutée pendant cette reprise, aucun secret n'a été lu, aucun test HTTP ni déploiement n'a été lancé.
 
 **Statut P0 : décision d'architecture validée ; préparation staging en attente d'accès au projet Supabase et de l'intégration front-end.**
+
+
+---
+
+## 8. Projet Supabase staging créé — 1 novembre 2026
+
+### Création confirmée
+- Projet créé après confirmation explicite du propriétaire dans l'organisation **Neros Corp**.
+- Nom : `aria-staging`.
+- Project Ref : `mvcunzhhioeplrvanhgn`.
+- Région : `eu-west-3` (Paris).
+- Statut retourné par Supabase : `ACTIVE_HEALTHY`.
+- Coût de création vérifié avant action : **0 USD/mois** au moment de la création.
+- URL API publique du projet : `https://mvcunzhhioeplrvanhgn.supabase.co`.
+- Le projet ne contient aucune migration ni table dans le schéma `public` à sa création. Les contrôles Security Advisor et Performance Advisor ne retournent aucun lint.
+
+### Périmètre de cette vérification
+- Aucun secret, aucune clé API et aucune donnée utilisateur n'ont été lus.
+- L'URL du projet et son Project Ref sont des identifiants de configuration, pas des secrets.
+- Aucun réglage Auth (méthodes d'inscription, confirmation email, URL du site ou URLs de redirection) n'a été modifié.
+- Aucune migration SQL n'a été appliquée au projet Supabase.
+- Aucun changement Cloudflare, déploiement Worker, fusion de PR ou changement de production n'a été effectué.
+
+### Architecture de données retenue pour la préparation
+Le projet Supabase nouvellement créé sert de fournisseur d'identité **Supabase Auth**. Il ne remplace pas automatiquement la base D1 Cloudflare déjà utilisée pour l'autorisation ARIA et le stockage de consentement/documents mémoire. Toute évolution de schéma dans Supabase doit être justifiée séparément ; ne pas dupliquer les données mémoire entre Supabase Postgres et D1 sans décision d'architecture explicite.
+
+### État staging recontrôlé après création
+- Le Worker Cloudflare `aria-brain-staging` conserve les bindings existants : `ARIA_AUTH_MODE`, `ARIA_AUTHZ_DB`, `ARIA_USERS`, `ARIA_MEMORY`, `ARIA_ACCESS_TOKEN`, `OPENAI_API_KEY` et `ARIA_REQUIRE_INDIVIDUAL_AUTH`. Les valeurs des secrets n'ont pas été consultées.
+- Aucun binding `SUPABASE_URL` ou `SUPABASE_ANON_KEY` n'est présent.
+- Le code candidat de la PR #43 vérifie le bearer token via `GET /auth/v1/user` et utilise l'UUID retourné. Il attend actuellement `SUPABASE_URL` et `SUPABASE_ANON_KEY`. Une adaptation contrôlée vers la clé publishable moderne est à évaluer ; ne pas confondre une clé publishable avec une clé secret/service-role.
+- Le front-end de cette PR utilise encore le jeton alpha manuel `aria.voice.alphaToken` dans `sessionStorage`. Aucun flux Supabase Auth complet n'est encore livré dans ce code.
+- Le projet Supabase étant neuf, l'URL du site et les URLs de redirection Auth doivent être configurées avant les tests de confirmation email et de récupération de compte. Les URL exactes de staging doivent être vérifiées depuis les origines réellement utilisées par ARIA ; ne pas autoriser un joker large ou une origine de production par commodité.
+
+### Étapes restantes
+- [ ] **S0 — Projet :** terminé ; projet staging créé et `ACTIVE_HEALTHY`.
+- [ ] **S1 — Auth dashboard :** inspecter puis configurer explicitement les méthodes Auth retenues, la confirmation email, le Site URL et les URLs de redirection staging. Aucun fournisseur social n'est présumé nécessaire.
+- [ ] **S2 — Configuration Worker staging :** ajouter uniquement les bindings de staging nécessaires (`SUPABASE_URL` et clé publishable si le code la requiert), sans exposer leurs valeurs. Ne pas changer `ARIA_AUTH_MODE` avant que le code candidat, les tests et la configuration soient prêts.
+- [ ] **S3 — Front-end :** implémenter connexion, inscription, récupération de session, rafraîchissement, déconnexion et gestion des états Auth. Retirer le jeton alpha manuel uniquement après tests de remplacement.
+- [ ] **S4 — Worker :** valider les tokens Supabase côté serveur, limiter les appels réseau et échouer de façon fermée ; dériver l'identité uniquement du résultat Auth vérifié. Revoir l'usage de `SUPABASE_ANON_KEY` versus clé publishable et documenter le contrat.
+- [ ] **S5 — Autorisation/mémoire :** conserver D1 comme source de vérité actuelle pour les rôles et la mémoire tant qu'une décision contraire n'est pas approuvée ; confirmer les migrations D1 0002/0003 sur la base effectivement liée au Worker.
+- [ ] **S6 — Tests :** comptes temporaires A/B, jetons invalides/expirés, rafraîchissement, déconnexion, fournisseur indisponible, isolation des données, révocation de consentement et sessions alpha non migrées.
+- [ ] **S7 — Release :** revue du diff, CI sur SHA exact, vérification des bindings par noms/types, puis demander une autorisation distincte avant tout déploiement staging. Production reste hors périmètre.
+
+**Statut P0 :** projet Supabase staging créé ; Auth n'est pas encore configuré, le Worker staging n'est pas relié à Supabase et le front-end n'utilise pas encore Supabase Auth. Aucune activation utilisateur ne doit être annoncée avant validation de bout en bout.
