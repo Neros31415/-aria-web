@@ -742,7 +742,7 @@ test("voice recognition resumes when speech synthesis is unavailable", () => {
     window: { setTimeout(callback) { callback(); } },
     announceVisual(message) { context.visualMessage = message; },
     setState(state) { context.state = state; },
-    updateTranscript() {},
+    updateTranscript(text, role) { context.transcriptText = text; context.transcriptRole = role; },
     startListening() { context.startCalls = (context.startCalls || 0) + 1; }
   };
   vm.createContext(context);
@@ -752,6 +752,9 @@ test("voice recognition resumes when speech synthesis is unavailable", () => {
   assert.equal(context.speaking, false);
   assert.equal(context.startCalls, 1, "the microphone should resume after the unavailable TTS path");
   assert.equal(context.shouldResumeListening, false);
+  assert.equal(context.transcriptText, "Réponse de test", "the spoken answer must remain visible when TTS is unavailable");
+  assert.equal(context.transcriptRole, "ARIA");
+  assert.equal(context.state, "presence");
   assert.match(context.visualMessage, /transcription/);
 });
 
