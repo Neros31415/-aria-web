@@ -1185,6 +1185,8 @@ test("health reports authorization readiness for session_kv mode", async () => {
     service: "aria-api",
     configured: true,
     authenticationMode: "session_kv",
+    individualAuthRequired: false,
+    identityMigrationRequired: false,
     authorizationStore: true,
     memoryConsentStoreConfigured: null,
     provider: "openai",
