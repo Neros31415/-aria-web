@@ -796,6 +796,7 @@ test("persists and retrieves memory notes through the memory routes", async () =
     },
     body: JSON.stringify({
       clientId,
+      expectedRevision: 0,
       memories: [{ id: "note-1", text: "Préférence de test", createdAt: 1 }]
     })
   }), memoryEnv);
@@ -914,6 +915,7 @@ test("individual-auth memory is isolated by the validated account, not clientId"
     },
     body: JSON.stringify({
       clientId: ownerB,
+      expectedRevision: 0,
       memories: [{ id: "private-note", text: "Note privée du compte A" }]
     })
   }), memoryEnv);
@@ -1325,4 +1327,67 @@ test("health reports identity migration required when a compatibility mode confl
   assert.equal(body.individualAuthRequired, true);
   assert.equal(body.identityMigrationRequired, true);
   assert.equal(body.persistentMemory, false);
+});
+
+
+test("individual memory PUT uses optimistic revision and rejects stale concurrent writes", async (t) => {
+  const ownerId = "123e4567-e89b-42d3-a456-426614174000";
+  const db = individualMemoryDb({ consent: { [ownerId]: { enabled: 1, consentVersion: "memory-v1", updatedAt: 1 } } });
+  t.mock.method(globalThis, "fetch", async (url) => {
+    if (String(url).endsWith("/auth/v1/user")) {
+      return new Response(JSON.stringify({ id: ownerId }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    throw new Error("unexpected provider call");
+  });
+  const memoryEnv = {
+    ARIA_AUTH_MODE: "individual",
+    SUPABASE_URL: "https://project.supabase.co",
+    SUPABASE_ANON_KEY: "test-anon-key",
+    ARIA_AUTHZ_DB: db,
+    OPENAI_API_KEY: "test-provider-key"
+  };
+  const put = (id, text) => worker.fetch(new Request("https://aria-staging.test/memory", {
+    method: "PUT",
+    headers: { Authorization: "Bearer account-token", "Content-Type": "application/json" },
+    body: JSON.stringify({ expectedRevision: 0, memories: [{ id, text }] })
+  }), memoryEnv);
+
+  const first = await put("first", "first writer");
+  assert.equal(first.status, 200);
+  assert.deepEqual(await first.json(), {
+    memories: [{ id: "first", text: "first writer", createdAt: Date.now(), updatedAt: Date.now() }],
+    revision: 1,
+    persisted: true
+  });
+
+  const stale = await put("second", "stale writer");
+  assert.equal(stale.status, 409);
+  assert.deepEqual(await stale.json(), { error: "memory_revision_conflict" });
+  assert.deepEqual(JSON.parse(db.memories.get(ownerId)), [{ id: "first", text: "first writer", createdAt: JSON.parse(db.memories.get(ownerId))[0].createdAt, updatedAt: JSON.parse(db.memories.get(ownerId))[0].updatedAt }]);
+  assert.equal(db.revisions.get(ownerId), 1);
+});
+
+test("memory consent changes are written with an account-scoped audit event", async (t) => {
+  const ownerId = "123e4567-e89b-42d3-a456-426614174000";
+  const db = statefulMemoryConsentDb(false);
+  t.mock.method(globalThis, "fetch", async (url) => {
+    if (String(url).endsWith("/auth/v1/user")) {
+      return new Response(JSON.stringify({ id: ownerId }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    throw new Error("unexpected provider call");
+  });
+  const response = await worker.fetch(new Request("https://aria-staging.test/memory/consent", {
+    method: "POST",
+    headers: { Authorization: "Bearer account-token", "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled: true })
+  }), {
+    ARIA_AUTH_MODE: "individual",
+    SUPABASE_URL: "https://project.supabase.co",
+    SUPABASE_ANON_KEY: "test-anon-key",
+    ARIA_AUTHZ_DB: db
+  });
+  assert.equal(response.status, 200);
+  assert.equal(db.audit.length, 1);
+  assert.equal(db.audit[0].ownerId, ownerId);
+  assert.equal(db.audit[0].enabled, 1);
 });
