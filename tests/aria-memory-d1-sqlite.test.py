@@ -51,7 +51,7 @@ class AriaMemoryD1SqliteTests(unittest.TestCase):
     def write(self, owner, memories_json, updated_at, expected_revision=0):
         return self.db.execute(
             WRITE_MEMORY_SQL,
-            (owner, memories_json, updated_at, expected_revision, owner, expected_revision, owner),
+            (owner, memories_json, updated_at, owner, expected_revision, owner, expected_revision, expected_revision, owner),
         )
 
     def test_migrations_create_constrained_tables(self):
