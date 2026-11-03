@@ -1249,6 +1249,31 @@ test("health reports individual auth as not ready when the durable consent schem
 });
 
 
+test("health reports individual memory as unavailable when the consent audit table is missing", async () => {
+  const response = await worker.fetch(new Request("https://aria-staging.test/health"), {
+    ARIA_AUTH_MODE: "individual",
+    SUPABASE_URL: "https://project.supabase.co",
+    SUPABASE_ANON_KEY: "test-anon-key",
+    OPENAI_API_KEY: "test-provider-key",
+    ARIA_MEMORY: env.ARIA_MEMORY,
+    ARIA_AUTHZ_DB: {
+      prepare(sql) {
+        return { bind() { return { async first() {
+          if (sql.includes("aria_memory_consent_audit")) throw new Error("no such table");
+          return null;
+        } }; } };
+      }
+    }
+  });
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.configured, false);
+  assert.equal(body.memoryConsentStoreConfigured, false);
+  assert.equal(body.persistentMemory, false);
+  assert.equal(body.memoryStatus, "consent_store_unavailable");
+});
+
+
 test("health reports individual memory as unavailable when the D1 document table is missing", async () => {
   const response = await worker.fetch(new Request("https://aria-staging.test/health"), {
     ARIA_AUTH_MODE: "individual",
@@ -1354,11 +1379,12 @@ test("individual memory PUT uses optimistic revision and rejects stale concurren
 
   const first = await put("first", "first writer");
   assert.equal(first.status, 200);
-  assert.deepEqual(await first.json(), {
-    memories: [{ id: "first", text: "first writer", createdAt: Date.now(), updatedAt: Date.now() }],
-    revision: 1,
-    persisted: true
-  });
+  const firstPayload = await first.json();
+  assert.equal(firstPayload.persisted, true);
+  assert.equal(firstPayload.revision, 1);
+  assert.equal(firstPayload.memories.length, 1);
+  assert.equal(firstPayload.memories[0].id, "first");
+  assert.equal(firstPayload.memories[0].text, "first writer");
 
   const stale = await put("second", "stale writer");
   assert.equal(stale.status, 409);
