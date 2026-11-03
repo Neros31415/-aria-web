@@ -1,9 +1,9 @@
 name: ARIA secure UI integration checks
 on:
   pull_request:
-    branches: [main, feat/aria-brain-staging-integration, fix/memory-consent-revocation-race, feat/aria-supabase-email-auth-staging, fix/supabase-auth-network-states-v2, fix/auth-retry-after-session-restore-failure, fix/isolate-account-preferences-and-onboarding, test/staging-auth-two-account-http-e2e]
+    branches: [main, feat/aria-brain-staging-integration, fix/memory-consent-revocation-race, feat/aria-supabase-email-auth-staging, fix/supabase-auth-network-states-v2, fix/auth-retry-after-session-restore-failure, fix/isolate-account-preferences-and-onboarding, test/staging-auth-two-account-http-e2e, fix/enforce-required-individual-auth]
   push:
-    branches: [feat/aria-secure-ui-scene-integration, feat/aria-supabase-email-auth-staging, fix/auth-retry-after-session-restore-failure, fix/isolate-account-preferences-and-onboarding, test/staging-auth-two-account-http-e2e]
+    branches: [feat/aria-secure-ui-scene-integration, feat/aria-supabase-email-auth-staging, fix/auth-retry-after-session-restore-failure, fix/isolate-account-preferences-and-onboarding, test/staging-auth-two-account-http-e2e, fix/staging-e2e-require-individual-auth]
 jobs:
   test:
     runs-on: ubuntu-latest
