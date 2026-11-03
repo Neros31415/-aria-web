@@ -383,6 +383,7 @@ test("memory consent revocation ignores a late remote write response at runtime"
   const context = {
     profile: { memoryConsent: true },
     memories: [{ text: "local memory after edit" }],
+    remoteMemoryRevision: 1,
     memorySyncGeneration: 0,
     isMemoryRequestCurrent: (generation) => generation === context.memorySyncGeneration && context.profile.memoryConsent === true,
     activeMemoryControllers: new Set(),
