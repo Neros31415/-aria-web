@@ -27,6 +27,9 @@ on:
       - fix/staging-worker-input-security
       - fix/memory-consent-revocation-race
       - test/staging-auth-two-account-http-e2e
+      - fix/staging-e2e-require-individual-auth
+      - fix/enforce-required-individual-auth
+      - fix/memory-revision-and-consent-audit
     paths:
       - "cloudflare/aria-brain-staging.mjs"
       - "cloudflare/aria-authorization.mjs"
@@ -37,6 +40,7 @@ on:
       - "tests/aria-memory-d1-sqlite.test.py"
       - "migrations/0002_aria_memory_consent.sql"
       - "migrations/0003_aria_memory_documents.sql"
+      - "migrations/0004_aria_memory_revision_and_consent_audit.sql"
       - ".github/workflows/staging-worker-tests.yml"
 
 permissions:

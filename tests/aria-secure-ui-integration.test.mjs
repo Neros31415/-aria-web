@@ -100,6 +100,16 @@ test("voice frontend sends preferences and explicit memory consent and applies s
   assert.match(app, /scientific_model/);
 });
 
+test("memory frontend tracks D1 revisions and refuses stale document writes", () => {
+  assert.match(app, /let remoteMemoryRevision = null/);
+  assert.match(app, /Number\.isSafeInteger\(data\.revision\)/);
+  assert.match(app, /expectedRevision: remoteMemoryRevision/);
+  assert.match(app, /memory_revision_conflict|La mémoire distante a changé depuis votre dernière synchronisation/);
+  assert.match(workerSource, /revision = aria_memory_documents\.revision \+ 1/);
+  assert.match(workerSource, /memory_revision_conflict/);
+  assert.match(workerSource, /aria_memory_consent_audit/);
+});
+
 test("memory consent revocation aborts pending requests and ignores stale remote responses", () => {
   assert.ok(app.includes("const activeMemoryControllers = new Set();"));
   assert.ok(app.includes("memorySyncGeneration += 1;"));
@@ -373,6 +383,7 @@ test("memory consent revocation ignores a late remote write response at runtime"
   const context = {
     profile: { memoryConsent: true },
     memories: [{ text: "local memory after edit" }],
+    remoteMemoryRevision: 1,
     memorySyncGeneration: 0,
     isMemoryRequestCurrent: (generation) => generation === context.memorySyncGeneration && context.profile.memoryConsent === true,
     activeMemoryControllers: new Set(),

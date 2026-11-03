@@ -43,7 +43,9 @@ function authorizationDb(consentEnabled = true) {
 
 function statefulMemoryConsentDb(initialEnabled = false) {
   let consent = initialEnabled ? { enabled: 1, consentVersion: "memory-v1", updatedAt: Date.now() } : null;
+  const audit = [];
   return {
+    audit,
     prepare(sql) {
       return {
         bind(...values) {
@@ -57,13 +59,20 @@ function statefulMemoryConsentDb(initialEnabled = false) {
               if (sql.includes("INSERT INTO aria_memory_consent")) {
                 consent = { enabled: values[1], consentVersion: "memory-v1", updatedAt: values[2] };
               }
-              return { success: true };
+              if (sql.includes("aria_memory_consent_audit")) {
+                audit.push({ id: values[0], ownerId: values[1], enabled: values[2], occurredAt: values[3] });
+              }
+              return { success: true, meta: { changes: 1 } };
             }
           };
         }
       };
     },
-    async batch() { return [{ success: true }, { success: true }]; }
+    async batch(statements) {
+      const results = [];
+      for (const statement of statements) results.push(await statement.run());
+      return results;
+    }
   };
 }
 
@@ -71,9 +80,13 @@ function statefulMemoryConsentDb(initialEnabled = false) {
 function individualMemoryDb({ consent = {}, documents = {} } = {}) {
   const consents = new Map(Object.entries(consent));
   const memories = new Map(Object.entries(documents));
+  const revisions = new Map([...memories.keys()].map((owner) => [owner, 1]));
+  const audit = [];
   return {
     consents,
     memories,
+    revisions,
+    audit,
     prepare(sql) {
       return {
         bind(...values) {
@@ -85,7 +98,8 @@ function individualMemoryDb({ consent = {}, documents = {} } = {}) {
                 const consentEnabled = consents.get(ownerId)?.enabled;
                 return {
                   consentEnabled: consentEnabled === 1 || consentEnabled === true ? 1 : 0,
-                  memoriesJson: memories.get(ownerId) ?? null
+                  memoriesJson: memories.get(ownerId) ?? null,
+                  revision: revisions.get(ownerId) ?? 0
                 };
               }
               if (sql.includes("aria_memory_consent")) return consents.get(values[0]) || null;
@@ -96,13 +110,21 @@ function individualMemoryDb({ consent = {}, documents = {} } = {}) {
                 consents.set(values[0], { enabled: values[1], consentVersion: "memory-v1", updatedAt: values[2] });
                 return { success: true, meta: { changes: 1 } };
               }
+              if (sql.includes("aria_memory_consent_audit")) {
+                audit.push({ id: values[0], ownerId: values[1], enabled: values[2], occurredAt: values[3] });
+                return { success: true, meta: { changes: 1 } };
+              }
               if (sql.includes("INSERT INTO aria_memory_documents")) {
-                const [ownerId, memoriesJson, updatedAt, consentOwner, conflictOwner] = values;
-                if (consentOwner !== ownerId || conflictOwner !== ownerId ||
-                    (consents.get(ownerId)?.enabled !== 1 && consents.get(ownerId)?.enabled !== true)) {
+                const [ownerId, memoriesJson, updatedAt, consentOwner, expectedInsert, existsOwner, existsRevision, expectedUpdate, updateConsentOwner] = values;
+                const currentRevision = revisions.get(ownerId) ?? 0;
+                if (consentOwner !== ownerId || existsOwner !== ownerId || updateConsentOwner !== ownerId ||
+                    (consents.get(ownerId)?.enabled !== 1 && consents.get(ownerId)?.enabled !== true) ||
+                    (expectedInsert !== 0 && currentRevision !== existsRevision) ||
+                    currentRevision !== expectedUpdate) {
                   return { success: true, meta: { changes: 0 } };
                 }
                 memories.set(ownerId, memoriesJson);
+                revisions.set(ownerId, currentRevision + 1);
                 return { success: true, meta: { changes: 1 } };
               }
               if (sql.includes("DELETE FROM aria_memory_documents")) {
@@ -115,7 +137,11 @@ function individualMemoryDb({ consent = {}, documents = {} } = {}) {
         }
       };
     },
-    async batch() { return [{ success: true }, { success: true }]; }
+    async batch(statements) {
+      const results = [];
+      for (const statement of statements) results.push(await statement.run());
+      return results;
+    }
   };
 }
 
@@ -583,7 +609,7 @@ test("D1 memory write is rejected if consent is revoked before the conditional w
   const response = await worker.fetch(new Request("https://aria-staging.test/memory", {
     method: "PUT",
     headers: { Authorization: "Bearer account-token", "Content-Type": "application/json" },
-    body: JSON.stringify({ memories: [{ text: "must not persist after revocation" }] })
+    body: JSON.stringify({ expectedRevision: 0, memories: [{ text: "must not persist after revocation" }] })
   }), env);
 
   assert.equal(response.status, 403);
@@ -771,6 +797,7 @@ test("persists and retrieves memory notes through the memory routes", async () =
     },
     body: JSON.stringify({
       clientId,
+      expectedRevision: 0,
       memories: [{ id: "note-1", text: "Préférence de test", createdAt: 1 }]
     })
   }), memoryEnv);
@@ -889,6 +916,7 @@ test("individual-auth memory is isolated by the validated account, not clientId"
     },
     body: JSON.stringify({
       clientId: ownerB,
+      expectedRevision: 0,
       memories: [{ id: "private-note", text: "Note privée du compte A" }]
     })
   }), memoryEnv);
@@ -1222,6 +1250,31 @@ test("health reports individual auth as not ready when the durable consent schem
 });
 
 
+test("health reports individual memory as unavailable when the consent audit table is missing", async () => {
+  const response = await worker.fetch(new Request("https://aria-staging.test/health"), {
+    ARIA_AUTH_MODE: "individual",
+    SUPABASE_URL: "https://project.supabase.co",
+    SUPABASE_ANON_KEY: "test-anon-key",
+    OPENAI_API_KEY: "test-provider-key",
+    ARIA_MEMORY: env.ARIA_MEMORY,
+    ARIA_AUTHZ_DB: {
+      prepare(sql) {
+        return { bind() { return { async first() {
+          if (sql.includes("aria_memory_consent_audit")) throw new Error("no such table");
+          return null;
+        } }; } };
+      }
+    }
+  });
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.configured, false);
+  assert.equal(body.memoryConsentStoreConfigured, false);
+  assert.equal(body.persistentMemory, false);
+  assert.equal(body.memoryStatus, "consent_store_unavailable");
+});
+
+
 test("health reports individual memory as unavailable when the D1 document table is missing", async () => {
   const response = await worker.fetch(new Request("https://aria-staging.test/health"), {
     ARIA_AUTH_MODE: "individual",
@@ -1300,4 +1353,68 @@ test("health reports identity migration required when a compatibility mode confl
   assert.equal(body.individualAuthRequired, true);
   assert.equal(body.identityMigrationRequired, true);
   assert.equal(body.persistentMemory, false);
+});
+
+
+test("individual memory PUT uses optimistic revision and rejects stale concurrent writes", async (t) => {
+  const ownerId = "123e4567-e89b-42d3-a456-426614174000";
+  const db = individualMemoryDb({ consent: { [ownerId]: { enabled: 1, consentVersion: "memory-v1", updatedAt: 1 } } });
+  t.mock.method(globalThis, "fetch", async (url) => {
+    if (String(url).endsWith("/auth/v1/user")) {
+      return new Response(JSON.stringify({ id: ownerId }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    throw new Error("unexpected provider call");
+  });
+  const memoryEnv = {
+    ARIA_AUTH_MODE: "individual",
+    SUPABASE_URL: "https://project.supabase.co",
+    SUPABASE_ANON_KEY: "test-anon-key",
+    ARIA_AUTHZ_DB: db,
+    OPENAI_API_KEY: "test-provider-key"
+  };
+  const put = (id, text) => worker.fetch(new Request("https://aria-staging.test/memory", {
+    method: "PUT",
+    headers: { Authorization: "Bearer account-token", "Content-Type": "application/json" },
+    body: JSON.stringify({ expectedRevision: 0, memories: [{ id, text }] })
+  }), memoryEnv);
+
+  const first = await put("first", "first writer");
+  assert.equal(first.status, 200);
+  const firstPayload = await first.json();
+  assert.equal(firstPayload.persisted, true);
+  assert.equal(firstPayload.revision, 1);
+  assert.equal(firstPayload.memories.length, 1);
+  assert.equal(firstPayload.memories[0].id, "first");
+  assert.equal(firstPayload.memories[0].text, "first writer");
+
+  const stale = await put("second", "stale writer");
+  assert.equal(stale.status, 409);
+  assert.deepEqual(await stale.json(), { error: "memory_revision_conflict" });
+  assert.deepEqual(JSON.parse(db.memories.get(ownerId)), [{ id: "first", text: "first writer", createdAt: JSON.parse(db.memories.get(ownerId))[0].createdAt, updatedAt: JSON.parse(db.memories.get(ownerId))[0].updatedAt }]);
+  assert.equal(db.revisions.get(ownerId), 1);
+});
+
+test("memory consent changes are written with an account-scoped audit event", async (t) => {
+  const ownerId = "123e4567-e89b-42d3-a456-426614174000";
+  const db = statefulMemoryConsentDb(false);
+  t.mock.method(globalThis, "fetch", async (url) => {
+    if (String(url).endsWith("/auth/v1/user")) {
+      return new Response(JSON.stringify({ id: ownerId }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    throw new Error("unexpected provider call");
+  });
+  const response = await worker.fetch(new Request("https://aria-staging.test/memory/consent", {
+    method: "POST",
+    headers: { Authorization: "Bearer account-token", "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled: true })
+  }), {
+    ARIA_AUTH_MODE: "individual",
+    SUPABASE_URL: "https://project.supabase.co",
+    SUPABASE_ANON_KEY: "test-anon-key",
+    ARIA_AUTHZ_DB: db
+  });
+  assert.equal(response.status, 200);
+  assert.equal(db.audit.length, 1);
+  assert.equal(db.audit[0].ownerId, ownerId);
+  assert.equal(db.audit[0].enabled, 1);
 });

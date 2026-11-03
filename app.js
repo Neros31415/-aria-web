@@ -23,9 +23,11 @@ let turnInProgress = false;
 let turnGeneration = 0;
 let activeChatController = null;
 let memorySyncGeneration = 0;
+let remoteMemoryRevision = null;
 const activeMemoryControllers = new Set();
 function cancelRemoteMemoryRequests() {
   memorySyncGeneration += 1;
+  remoteMemoryRevision = null;
   for (const controller of activeMemoryControllers) controller.abort();
   activeMemoryControllers.clear();
 }
@@ -519,7 +521,8 @@ async function syncRemoteMemory() {
     }
     const data = await response.json();
     if (!isMemoryRequestCurrent(generation)) return;
-    if (!Array.isArray(data.memories)) throw new Error("invalid memory response");
+    if (!Array.isArray(data.memories) || !Number.isSafeInteger(data.revision) || data.revision < 0) throw new Error("invalid memory response");
+    remoteMemoryRevision = data.revision;
     memories = data.memories;
     localStorage.setItem(memoryStorageKey, JSON.stringify(memories));
     renderMemory();
@@ -542,6 +545,10 @@ async function saveRemoteMemory() {
     $("memoryStatus").textContent = "Modification locale enregistrée. La suppression distante n’est pas confirmée : configurez le jeton alpha pour synchroniser.";
     return false;
   }
+  if (!Number.isSafeInteger(remoteMemoryRevision) || remoteMemoryRevision < 0) {
+    $("memoryStatus").textContent = "Version distante inconnue : synchronisez la mémoire avant de l’enregistrer.";
+    return false;
+  }
   const generation = memorySyncGeneration;
   const controller = new AbortController();
   activeMemoryControllers.add(controller);
@@ -551,23 +558,30 @@ async function saveRemoteMemory() {
       headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json", "X-ARIA-Memory-Consent": "true" },
       body: JSON.stringify({
         clientId: getClientId(),
+        expectedRevision: remoteMemoryRevision,
         memories: memories.map(item => typeof item === "string" ? {text:item} : item)
       }),
       signal: controller.signal
     });
     if (!isMemoryRequestCurrent(generation)) return false;
     if (!response.ok) {
-      $("memoryStatus").textContent = response.status === 401
-        ? "Modification locale enregistrée. Jeton refusé : la modification distante n’est pas confirmée."
-        : "Modification locale enregistrée. Le serveur n’a pas confirmé la modification distante.";
+      if (response.status === 409) {
+        remoteMemoryRevision = null;
+        $("memoryStatus").textContent = "La mémoire distante a changé depuis votre dernière synchronisation. Vos modifications locales sont conservées ; synchronisez avant de réessayer.";
+      } else {
+        $("memoryStatus").textContent = response.status === 401
+          ? "Modification locale enregistrée. Jeton refusé : la modification distante n’est pas confirmée."
+          : "Modification locale enregistrée. Le serveur n’a pas confirmé la modification distante.";
+      }
       return false;
     }
     const data = await response.json();
     if (!isMemoryRequestCurrent(generation)) return false;
-    if (data.persisted !== true || !Array.isArray(data.memories)) {
+    if (data.persisted !== true || !Array.isArray(data.memories) || !Number.isSafeInteger(data.revision) || data.revision < 1) {
       $("memoryStatus").textContent = "Modification locale enregistrée. Réponse serveur insuffisante : la modification distante n’est pas confirmée.";
       return false;
     }
+    remoteMemoryRevision = data.revision;
     memories = data.memories;
     localStorage.setItem(memoryStorageKey, JSON.stringify(memories));
     renderMemory();
