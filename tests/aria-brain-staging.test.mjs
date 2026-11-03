@@ -115,11 +115,12 @@ function individualMemoryDb({ consent = {}, documents = {} } = {}) {
                 return { success: true, meta: { changes: 1 } };
               }
               if (sql.includes("INSERT INTO aria_memory_documents")) {
-                const [ownerId, memoriesJson, updatedAt, expectedInsert, consentOwner, expectedUpdate, updateConsentOwner] = values;
+                const [ownerId, memoriesJson, updatedAt, consentOwner, expectedInsert, existsOwner, existsRevision, expectedUpdate, updateConsentOwner] = values;
                 const currentRevision = revisions.get(ownerId) ?? 0;
-                if (consentOwner !== ownerId || updateConsentOwner !== ownerId ||
+                if (consentOwner !== ownerId || existsOwner !== ownerId || updateConsentOwner !== ownerId ||
                     (consents.get(ownerId)?.enabled !== 1 && consents.get(ownerId)?.enabled !== true) ||
-                    currentRevision !== expectedInsert || currentRevision !== expectedUpdate) {
+                    (expectedInsert !== 0 && currentRevision !== existsRevision) ||
+                    currentRevision !== expectedUpdate) {
                   return { success: true, meta: { changes: 0 } };
                 }
                 memories.set(ownerId, memoriesJson);
