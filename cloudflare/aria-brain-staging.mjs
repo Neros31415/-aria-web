@@ -640,9 +640,10 @@ export default {
       : "Mémoire personnelle désactivée ou non autorisée côté serveur. N’utilise aucun souvenir persistant et n’enregistre rien.";
     if (memoryConsent && memoryOwnerKey) {
       try {
-        const saved = individualAuth
+        const savedDocument = individualAuth
           ? await readAccountMemory(env, ownerId)
           : (env.ARIA_MEMORY ? await env.ARIA_MEMORY.get(memoryOwnerKey, "json") : null);
+        const saved = individualAuth ? savedDocument.memories : savedDocument;
         if (Array.isArray(saved) && saved.length) {
           memoryContext = saved.map((item) => "- " + item.text).join("\n");
         }
