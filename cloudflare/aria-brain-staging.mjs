@@ -107,8 +107,8 @@ async function writeAccountMemory(env, ownerId, memories, expectedRevision, now 
   const db = env?.ARIA_AUTHZ_DB;
   if (!db || typeof db.prepare !== "function") return { ok: false, reason: "memory_storage_unavailable" };
   const result = await db.prepare(
-    "INSERT INTO aria_memory_documents (owner_id, memories_json, updated_at_ms, revision) SELECT ?, ?, ?, 1 WHERE ? = 0 AND EXISTS (SELECT 1 FROM aria_memory_consent WHERE owner_id = ? AND enabled = 1) ON CONFLICT(owner_id) DO UPDATE SET memories_json = excluded.memories_json, updated_at_ms = excluded.updated_at_ms, revision = aria_memory_documents.revision + 1 WHERE aria_memory_documents.revision = ? AND EXISTS (SELECT 1 FROM aria_memory_consent WHERE owner_id = ? AND enabled = 1)"
-  ).bind(ownerId, JSON.stringify(memories), now, expectedRevision, ownerId, expectedRevision, ownerId).run();
+    "INSERT INTO aria_memory_documents (owner_id, memories_json, updated_at_ms, revision) SELECT ?, ?, ?, 1 WHERE EXISTS (SELECT 1 FROM aria_memory_consent WHERE owner_id = ? AND enabled = 1) AND (? = 0 OR EXISTS (SELECT 1 FROM aria_memory_documents WHERE owner_id = ? AND revision = ?)) ON CONFLICT(owner_id) DO UPDATE SET memories_json = excluded.memories_json, updated_at_ms = excluded.updated_at_ms, revision = aria_memory_documents.revision + 1 WHERE aria_memory_documents.revision = ? AND EXISTS (SELECT 1 FROM aria_memory_consent WHERE owner_id = ? AND enabled = 1)"
+  ).bind(ownerId, JSON.stringify(memories), now, ownerId, expectedRevision, ownerId, expectedRevision, expectedRevision, ownerId).run();
   if (result?.success === false) return { ok: false, reason: "memory_storage_unavailable" };
   if (Number.isFinite(result?.meta?.changes) && result.meta.changes === 0) {
     const consent = await readServerMemoryConsent(env, ownerId);
