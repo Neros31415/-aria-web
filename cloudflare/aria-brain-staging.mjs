@@ -305,7 +305,7 @@ export default {
           ).bind("00000000-0000-4000-8000-000000000000").first();
           await env.ARIA_AUTHZ_DB.prepare(
             "SELECT id FROM aria_memory_consent_audit LIMIT 1"
-          ).first();
+          ).bind().first();
           memoryConsentStoreConfigured = true;
         } catch {
           memoryConsentStoreConfigured = false;
