@@ -27,6 +27,7 @@ on:
       - fix/staging-worker-input-security
       - fix/memory-consent-revocation-race
       - test/staging-auth-two-account-http-e2e
+      - fix/staging-e2e-require-individual-auth
       - fix/enforce-required-individual-auth
       - fix/memory-revision-and-consent-audit
     paths:
