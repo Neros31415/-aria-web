@@ -43,7 +43,9 @@ function authorizationDb(consentEnabled = true) {
 
 function statefulMemoryConsentDb(initialEnabled = false) {
   let consent = initialEnabled ? { enabled: 1, consentVersion: "memory-v1", updatedAt: Date.now() } : null;
+  const audit = [];
   return {
+    audit,
     prepare(sql) {
       return {
         bind(...values) {
@@ -57,13 +59,20 @@ function statefulMemoryConsentDb(initialEnabled = false) {
               if (sql.includes("INSERT INTO aria_memory_consent")) {
                 consent = { enabled: values[1], consentVersion: "memory-v1", updatedAt: values[2] };
               }
-              return { success: true };
+              if (sql.includes("aria_memory_consent_audit")) {
+                audit.push({ id: values[0], ownerId: values[1], enabled: values[2], occurredAt: values[3] });
+              }
+              return { success: true, meta: { changes: 1 } };
             }
           };
         }
       };
     },
-    async batch() { return [{ success: true }, { success: true }]; }
+    async batch(statements) {
+      const results = [];
+      for (const statement of statements) results.push(await statement.run());
+      return results;
+    }
   };
 }
 
@@ -71,9 +80,13 @@ function statefulMemoryConsentDb(initialEnabled = false) {
 function individualMemoryDb({ consent = {}, documents = {} } = {}) {
   const consents = new Map(Object.entries(consent));
   const memories = new Map(Object.entries(documents));
+  const revisions = new Map([...memories.keys()].map((owner) => [owner, 1]));
+  const audit = [];
   return {
     consents,
     memories,
+    revisions,
+    audit,
     prepare(sql) {
       return {
         bind(...values) {
@@ -85,7 +98,8 @@ function individualMemoryDb({ consent = {}, documents = {} } = {}) {
                 const consentEnabled = consents.get(ownerId)?.enabled;
                 return {
                   consentEnabled: consentEnabled === 1 || consentEnabled === true ? 1 : 0,
-                  memoriesJson: memories.get(ownerId) ?? null
+                  memoriesJson: memories.get(ownerId) ?? null,
+                  revision: revisions.get(ownerId) ?? 0
                 };
               }
               if (sql.includes("aria_memory_consent")) return consents.get(values[0]) || null;
@@ -96,13 +110,20 @@ function individualMemoryDb({ consent = {}, documents = {} } = {}) {
                 consents.set(values[0], { enabled: values[1], consentVersion: "memory-v1", updatedAt: values[2] });
                 return { success: true, meta: { changes: 1 } };
               }
+              if (sql.includes("aria_memory_consent_audit")) {
+                audit.push({ id: values[0], ownerId: values[1], enabled: values[2], occurredAt: values[3] });
+                return { success: true, meta: { changes: 1 } };
+              }
               if (sql.includes("INSERT INTO aria_memory_documents")) {
-                const [ownerId, memoriesJson, updatedAt, consentOwner, conflictOwner] = values;
-                if (consentOwner !== ownerId || conflictOwner !== ownerId ||
-                    (consents.get(ownerId)?.enabled !== 1 && consents.get(ownerId)?.enabled !== true)) {
+                const [ownerId, memoriesJson, updatedAt, expectedInsert, consentOwner, expectedUpdate, updateConsentOwner] = values;
+                const currentRevision = revisions.get(ownerId) ?? 0;
+                if (consentOwner !== ownerId || updateConsentOwner !== ownerId ||
+                    (consents.get(ownerId)?.enabled !== 1 && consents.get(ownerId)?.enabled !== true) ||
+                    currentRevision !== expectedInsert || currentRevision !== expectedUpdate) {
                   return { success: true, meta: { changes: 0 } };
                 }
                 memories.set(ownerId, memoriesJson);
+                revisions.set(ownerId, currentRevision + 1);
                 return { success: true, meta: { changes: 1 } };
               }
               if (sql.includes("DELETE FROM aria_memory_documents")) {
@@ -115,7 +136,11 @@ function individualMemoryDb({ consent = {}, documents = {} } = {}) {
         }
       };
     },
-    async batch() { return [{ success: true }, { success: true }]; }
+    async batch(statements) {
+      const results = [];
+      for (const statement of statements) results.push(await statement.run());
+      return results;
+    }
   };
 }
 
