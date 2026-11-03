@@ -523,7 +523,6 @@ async function syncRemoteMemory() {
     if (!isMemoryRequestCurrent(generation)) return;
     if (!Array.isArray(data.memories) || !Number.isSafeInteger(data.revision) || data.revision < 0) throw new Error("invalid memory response");
     remoteMemoryRevision = data.revision;
-    remoteMemoryRevision = data.revision;
     memories = data.memories;
     localStorage.setItem(memoryStorageKey, JSON.stringify(memories));
     renderMemory();
@@ -582,6 +581,7 @@ async function saveRemoteMemory() {
       $("memoryStatus").textContent = "Modification locale enregistrée. Réponse serveur insuffisante : la modification distante n’est pas confirmée.";
       return false;
     }
+    remoteMemoryRevision = data.revision;
     memories = data.memories;
     localStorage.setItem(memoryStorageKey, JSON.stringify(memories));
     renderMemory();
