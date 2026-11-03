@@ -137,10 +137,6 @@ class AriaMemoryD1SqliteTests(unittest.TestCase):
         self.assertEqual([row["owner_id"] for row in remaining], [self.owner_b])
 
 
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
-
-
     def test_stale_concurrent_write_is_rejected_without_lost_update(self):
         self.enable_consent(self.owner_a)
         first = self.write(
@@ -189,3 +185,7 @@ if __name__ == "__main__":
         self.assertEqual(events[0]["owner_id"], self.owner_a)
         self.assertEqual(events[0]["enabled"], 1)
         self.assertEqual(events[0]["source"], "user_request")
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
