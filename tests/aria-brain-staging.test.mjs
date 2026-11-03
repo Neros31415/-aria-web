@@ -609,7 +609,7 @@ test("D1 memory write is rejected if consent is revoked before the conditional w
   const response = await worker.fetch(new Request("https://aria-staging.test/memory", {
     method: "PUT",
     headers: { Authorization: "Bearer account-token", "Content-Type": "application/json" },
-    body: JSON.stringify({ memories: [{ text: "must not persist after revocation" }] })
+    body: JSON.stringify({ expectedRevision: 0, memories: [{ text: "must not persist after revocation" }] })
   }), env);
 
   assert.equal(response.status, 403);
