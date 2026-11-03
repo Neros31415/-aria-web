@@ -104,3 +104,22 @@ Inspection en lecture seule de l'API Cloudflare pour `aria-brain-staging` :
 2. Déterminer si le mode d'authentification staging doit rester `session_kv` (mémoire individuelle alors bloquée) ou passer à `individual` avec les paramètres Supabase nécessaires ; ne pas changer ce choix implicitement.
 3. Déployer uniquement après vérification de tous les bindings hérités, des secrets requis, de la readiness et du retour arrière.
 4. Exécuter les tests HTTP authentifiés à deux comptes canoniques distincts sur le Worker déployé, puis revérifier sa version active et les contrôles CI.
+
+
+## Concurrence mémoire et audit du consentement — PR #58, 3 novembre 2026
+
+La migration candidate `0004_aria_memory_revision_and_consent_audit.sql` ajoute deux mécanismes au chemin d'identité individuelle :
+
+- **Révision du document mémoire :** chaque document possède une révision monotone. Une lecture retourne `revision`; un remplacement complet doit fournir `expectedRevision`. L'UPSERT D1 n'insère un document absent que pour la révision 0 et ne remplace un document existant que si la révision courante correspond à celle attendue et si le consentement est toujours actif dans la même instruction SQL.
+- **Conflit explicite :** une version périmée produit HTTP 409 `memory_revision_conflict`. L'interface conserve ses modifications locales et exige une nouvelle synchronisation avant une nouvelle tentative ; elle ne réécrit pas silencieusement un document plus récent. Le chemin de mémorisation du chat applique aussi le contrôle de révision.
+- **Journal de consentement :** `aria_memory_consent_audit` reçoit un événement pour chaque requête authentifiée de changement de consentement, dans le même batch D1 que la mise à jour de l'état courant. Un échec du batch ne doit pas laisser l'état et l'audit diverger. Les événements sont rattachés au compte ; l'effacement complet du compte entraîne leur suppression en cascade.
+- **Readiness :** `/health` exige désormais la présence de la table d'audit avant de déclarer la mémoire individuelle disponible.
+
+### Validation automatisée du candidat
+
+Sur le commit `6d9261015dbdce90724b1ca2bdc98380be67a3b5` :
+- Staging Worker Tests — run #155 : 74 tests Node réussis, 0 échec ; 8 tests SQLite réussis.
+- ARIA secure UI integration checks — run #155 : 33 tests réussis, 0 échec.
+- Les tests couvrent le rejet d'une écriture concurrente obsolète, l'incrément de révision, la journalisation de consentement et le comportement UI en cas de conflit.
+
+**Limites de livraison :** la migration 0004 est uniquement dans la branche/PR #58 ; elle n'a pas été appliquée à D1. Aucun test HTTP réel, déploiement, changement de configuration, merge ou opération de production n'a été réalisé. La mémoire individuelle reste bloquée tant que le Worker staging et sa configuration ne sont pas à parité et que le test HTTP à deux comptes n'a pas été exécuté.
