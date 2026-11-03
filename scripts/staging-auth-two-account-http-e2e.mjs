@@ -91,6 +91,20 @@ async function workerRequest(config, path, accessToken, method = "GET", body) {
   return { status: response.status, ok: response.ok, payload: await readJson(response) };
 }
 
+export function assertStagingReadiness(health) {
+  if (!health || health.status !== "ok" ||
+      health.authenticationMode !== "individual" ||
+      health.individualAuthRequired !== true ||
+      health.identityMigrationRequired !== false ||
+      health.authorizationStore !== true ||
+      health.memoryStorageConfigured !== true ||
+      health.memoryConsentStoreConfigured !== true ||
+      health.persistentMemory !== true ||
+      health.memoryStatus !== "available") {
+    throw new Error("Staging is not ready for individual-account memory E2E. Expected enforced individual auth, D1 authorization, consent/document tables and persistent memory.");
+  }
+}
+
 function requireStatus(result, expected, label) {
   if (result.status !== expected) {
     const code = typeof result.payload?.error === "string" ? "; " + result.payload.error : "";
@@ -135,14 +149,7 @@ async function deleteMemories(config, token) {
 async function runStagingE2E(config) {
   const healthResult = await workerRequest(config, "/health");
   requireStatus(healthResult, 200, "GET /health");
-  const health = healthResult.payload || {};
-  if (health.authenticationMode !== "individual" ||
-      health.authorizationStore !== true ||
-      health.memoryStorageConfigured !== true ||
-      health.memoryConsentStoreConfigured !== true ||
-      health.persistentMemory !== true) {
-    throw new Error("Staging is not ready for individual-account memory E2E. Expected individual auth, D1 authorization, consent tables and persistent memory.");
-  }
+  assertStagingReadiness(healthResult.payload);
 
   const accounts = await Promise.all(config.users.map(user => signIn(config, user)));
   if (accounts[0].userId === accounts[1].userId) {
