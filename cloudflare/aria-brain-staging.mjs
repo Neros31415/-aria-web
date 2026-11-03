@@ -303,6 +303,9 @@ export default {
           await env.ARIA_AUTHZ_DB.prepare(
             "SELECT owner_id FROM aria_memory_documents WHERE owner_id = ? LIMIT 1"
           ).bind("00000000-0000-4000-8000-000000000000").first();
+          await env.ARIA_AUTHZ_DB.prepare(
+            "SELECT id FROM aria_memory_consent_audit LIMIT 1"
+          ).first();
           memoryConsentStoreConfigured = true;
         } catch {
           memoryConsentStoreConfigured = false;
