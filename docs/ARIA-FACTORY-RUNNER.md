@@ -25,7 +25,9 @@ Never put provider keys in task text, workflow inputs, repository files, or logs
 
 ## Starting a task
 
-After the runner workflow is available on the default branch, open **Actions → ARIA Factory — bounded task runner → Run workflow**.
+After the runner workflow is available on the default branch, start a task either from **Actions → ARIA Factory — bounded task runner → Run workflow**, or from Nexus using a GitHub `repository_dispatch` event of type `aria-factory-task`.
+
+Dispatch payload fields are `title`, `task`, `allowed_paths`, and optionally `max_budget_usd` / `max_output_tokens`. The Nexus service must use a server-side GitHub credential with permission to dispatch repository events; never expose that credential to the iPhone app or a model prompt.
 
 Provide:
 - a short title (1–80 characters);
@@ -54,6 +56,6 @@ These checks do not replace application tests, browser testing, security review,
 
 ## Current maturity
 
-This is the first bounded execution slice, not the complete autonomous factory. It supports one configured OpenAI-compatible model endpoint per run. Multi-provider routing, task decomposition, parallel agents, Nexus dispatch, persistent run accounting, automated repair loops and policy-based auto-integration are subsequent milestones.
+This is the first bounded execution slice, not the complete autonomous factory. It supports one configured OpenAI-compatible model endpoint per run and accepts a future Nexus repository-dispatch event. Multi-provider routing, task decomposition, parallel agents, a secure Nexus dispatcher, persistent run accounting, automated repair loops and policy-based auto-integration are subsequent milestones.
 
 Until secrets and variables are configured and the workflow is merged into the default branch, no model execution occurs.
