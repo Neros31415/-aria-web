@@ -62,6 +62,15 @@ jobs:
           git switch -c "$BRANCH"
           echo "name=$BRANCH" >> "$GITHUB_OUTPUT"
 
+      - name: Report task started to Nexus
+        continue-on-error: true
+        env:
+          ARIA_FACTORY_DISPATCH_ID: ${{ github.event.client_payload.dispatch_id || '' }}
+          NEXUS_STATUS_URL: ${{ secrets.NEXUS_STATUS_URL }}
+          NEXUS_CALLBACK_SECRET: ${{ secrets.NEXUS_CALLBACK_SECRET }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: node scripts/aria-factory-status.mjs running
+
       - name: Generate constrained patch
         id: agent
         env:
@@ -105,6 +114,7 @@ jobs:
           git push --set-upstream origin "$BRANCH"
 
       - name: Open pull request
+        id: pr
         env:
           GH_TOKEN: ${{ github.token }}
           BRANCH: ${{ steps.branch.outputs.name }}
@@ -114,7 +124,7 @@ jobs:
           CHANGED_PATHS: ${{ steps.agent.outputs.changed_paths }}
         run: |
           set -euo pipefail
-          gh pr create \
+          PR_URL="$(gh pr create \
             --base main \
             --head "$BRANCH" \
             --title "ARIA Factory: $TASK_TITLE" \
@@ -124,7 +134,30 @@ jobs:
               "Estimated model cost: \$$MODEL_COST" \
               "Changed paths: $CHANGED_PATHS" \
               'Static checks: git diff --check, Node syntax checks for app.js and sw.js.' \
-              'This workflow never merges or deploys. Review the diff and CI before integration.')"
+              'This workflow never merges or deploys. Review the diff and CI before integration.')")
+          echo "url=$PR_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Report pull request to Nexus
+        if: success()
+        continue-on-error: true
+        env:
+          ARIA_FACTORY_DISPATCH_ID: ${{ github.event.client_payload.dispatch_id || '' }}
+          ARIA_FACTORY_PR_URL: ${{ steps.pr.outputs.url }}
+          ARIA_FACTORY_SUMMARY: ${{ steps.agent.outputs.summary }}
+          NEXUS_STATUS_URL: ${{ secrets.NEXUS_STATUS_URL }}
+          NEXUS_CALLBACK_SECRET: ${{ secrets.NEXUS_CALLBACK_SECRET }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: node scripts/aria-factory-status.mjs pr_opened
+
+      - name: Report task failure to Nexus
+        if: failure()
+        continue-on-error: true
+        env:
+          ARIA_FACTORY_DISPATCH_ID: ${{ github.event.client_payload.dispatch_id || '' }}
+          NEXUS_STATUS_URL: ${{ secrets.NEXUS_STATUS_URL }}
+          NEXUS_CALLBACK_SECRET: ${{ secrets.NEXUS_CALLBACK_SECRET }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: node scripts/aria-factory-status.mjs failed
 
       - name: Publish run summary
         if: always()
