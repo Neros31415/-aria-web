@@ -1,0 +1,141 @@
+name: ARIA Factory — bounded task runner
+
+on:
+  repository_dispatch:
+    types: [aria-factory-task]
+  workflow_dispatch:
+    inputs:
+      title:
+        description: Short task title (maximum 80 characters)
+        required: true
+        type: string
+      task:
+        description: Complete implementation request and acceptance criteria
+        required: true
+        type: string
+      allowed_paths:
+        description: Newline-separated exact paths or directory prefixes ending in /
+        required: true
+        type: string
+      max_budget_usd:
+        description: Estimated model-cost ceiling (maximum 0.50 USD)
+        required: true
+        default: "0.10"
+        type: string
+      max_output_tokens:
+        description: Maximum model output tokens (256–4000)
+        required: true
+        default: "2500"
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: aria-factory-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-task:
+    name: Build one bounded ARIA task
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out ARIA
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Create isolated task branch
+        id: branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          BRANCH="factory/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git switch -c "$BRANCH"
+          echo "name=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Generate constrained patch
+        id: agent
+        env:
+          ARIA_FACTORY_API_URL: ${{ secrets.ARIA_FACTORY_API_URL }}
+          ARIA_FACTORY_API_KEY: ${{ secrets.ARIA_FACTORY_API_KEY }}
+          ARIA_FACTORY_MODEL: ${{ vars.ARIA_FACTORY_MODEL }}
+          ARIA_FACTORY_INPUT_USD_PER_MILLION: ${{ vars.ARIA_FACTORY_INPUT_USD_PER_MILLION }}
+          ARIA_FACTORY_OUTPUT_USD_PER_MILLION: ${{ vars.ARIA_FACTORY_OUTPUT_USD_PER_MILLION }}
+          ARIA_FACTORY_TASK: ${{ github.event.client_payload.task || inputs.task }}
+          ARIA_FACTORY_ALLOWED_PATHS: ${{ github.event.client_payload.allowed_paths || inputs.allowed_paths }}
+          ARIA_FACTORY_MAX_BUDGET_USD: ${{ github.event.client_payload.max_budget_usd || inputs.max_budget_usd || '0.10' }}
+          ARIA_FACTORY_MAX_OUTPUT_TOKENS: ${{ github.event.client_payload.max_output_tokens || inputs.max_output_tokens || '2500' }}
+        run: node scripts/aria-factory.mjs
+
+      - name: Verify patch
+        run: |
+          set -euo pipefail
+          git diff --check
+          test -f index.html
+          test -f app.js
+          test -f styles.css
+          node --check app.js
+          node --check sw.js
+          git diff --stat
+          test -n "$(git status --porcelain)"
+
+      - name: Commit and push task branch
+        env:
+          BRANCH: ${{ steps.branch.outputs.name }}
+          TASK_TITLE: ${{ github.event.client_payload.title || inputs.title }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$TASK_TITLE" || ${#TASK_TITLE} -gt 80 ]]; then
+            echo "Task title must contain 1–80 characters."
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add --all
+          git commit -m "factory: $TASK_TITLE"
+          git push --set-upstream origin "$BRANCH"
+
+      - name: Open pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.branch.outputs.name }}
+          TASK_TITLE: ${{ github.event.client_payload.title || inputs.title }}
+          TASK_SUMMARY: ${{ steps.agent.outputs.summary }}
+          MODEL_COST: ${{ steps.agent.outputs.estimated_cost_usd }}
+          CHANGED_PATHS: ${{ steps.agent.outputs.changed_paths }}
+        run: |
+          set -euo pipefail
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "ARIA Factory: $TASK_TITLE" \
+            --body "$(printf '%s\n\n' \
+              '## ARIA Factory delivery' \
+              "$TASK_SUMMARY" \
+              "Estimated model cost: \$$MODEL_COST" \
+              "Changed paths: $CHANGED_PATHS" \
+              'Static checks: git diff --check, Node syntax checks for app.js and sw.js.' \
+              'This workflow never merges or deploys. Review the diff and CI before integration.')"
+
+      - name: Publish run summary
+        if: always()
+        env:
+          TASK_TITLE: ${{ github.event.client_payload.title || inputs.title }}
+          BRANCH: ${{ steps.branch.outputs.name }}
+        run: |
+          {
+            echo "## ARIA Factory run"
+            echo "- Task: $TASK_TITLE"
+            echo "- Branch: $BRANCH"
+            echo "- Model: configured through repository variables"
+            echo "- Merge/deploy: not performed"
+          } >> "$GITHUB_STEP_SUMMARY"
