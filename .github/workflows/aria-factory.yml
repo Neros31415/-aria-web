@@ -1,6 +1,8 @@
 name: ARIA Factory — bounded task runner
 
 on:
+  repository_dispatch:
+    types: [aria-factory-task]
   workflow_dispatch:
     inputs:
       title:
@@ -68,10 +70,10 @@ jobs:
           ARIA_FACTORY_MODEL: ${{ vars.ARIA_FACTORY_MODEL }}
           ARIA_FACTORY_INPUT_USD_PER_MILLION: ${{ vars.ARIA_FACTORY_INPUT_USD_PER_MILLION }}
           ARIA_FACTORY_OUTPUT_USD_PER_MILLION: ${{ vars.ARIA_FACTORY_OUTPUT_USD_PER_MILLION }}
-          ARIA_FACTORY_TASK: ${{ inputs.task }}
-          ARIA_FACTORY_ALLOWED_PATHS: ${{ inputs.allowed_paths }}
-          ARIA_FACTORY_MAX_BUDGET_USD: ${{ inputs.max_budget_usd }}
-          ARIA_FACTORY_MAX_OUTPUT_TOKENS: ${{ inputs.max_output_tokens }}
+          ARIA_FACTORY_TASK: ${{ github.event.client_payload.task || inputs.task }}
+          ARIA_FACTORY_ALLOWED_PATHS: ${{ github.event.client_payload.allowed_paths || inputs.allowed_paths }}
+          ARIA_FACTORY_MAX_BUDGET_USD: ${{ github.event.client_payload.max_budget_usd || inputs.max_budget_usd || '0.10' }}
+          ARIA_FACTORY_MAX_OUTPUT_TOKENS: ${{ github.event.client_payload.max_output_tokens || inputs.max_output_tokens || '2500' }}
         run: node scripts/aria-factory.mjs
 
       - name: Verify patch
@@ -89,7 +91,7 @@ jobs:
       - name: Commit and push task branch
         env:
           BRANCH: ${{ steps.branch.outputs.name }}
-          TASK_TITLE: ${{ inputs.title }}
+          TASK_TITLE: ${{ github.event.client_payload.title || inputs.title }}
         run: |
           set -euo pipefail
           if [[ -z "$TASK_TITLE" || ${#TASK_TITLE} -gt 80 ]]; then
@@ -106,7 +108,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           BRANCH: ${{ steps.branch.outputs.name }}
-          TASK_TITLE: ${{ inputs.title }}
+          TASK_TITLE: ${{ github.event.client_payload.title || inputs.title }}
           TASK_SUMMARY: ${{ steps.agent.outputs.summary }}
           MODEL_COST: ${{ steps.agent.outputs.estimated_cost_usd }}
           CHANGED_PATHS: ${{ steps.agent.outputs.changed_paths }}
@@ -127,7 +129,7 @@ jobs:
       - name: Publish run summary
         if: always()
         env:
-          TASK_TITLE: ${{ inputs.title }}
+          TASK_TITLE: ${{ github.event.client_payload.title || inputs.title }}
           BRANCH: ${{ steps.branch.outputs.name }}
         run: |
           {
