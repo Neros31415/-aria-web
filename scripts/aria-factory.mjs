@@ -120,6 +120,8 @@ const response = await fetch(endpoint, {
     max_tokens: maxOutputTokens,
     temperature: 0.1,
   }),
+  // Never forward the bearer API key through an HTTP redirect.
+  redirect: "error",
   signal: AbortSignal.timeout(60_000),
 });
 
