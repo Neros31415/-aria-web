@@ -13,6 +13,8 @@ In the ARIA repository, open **Settings → Secrets and variables → Actions**.
 Create these repository secrets:
 - `ARIA_FACTORY_API_URL`: HTTPS chat-completions endpoint.
 - `ARIA_FACTORY_API_KEY`: provider API key.
+- `NEXUS_STATUS_URL`: base HTTPS URL of the Nexus Worker, without an API path.
+- `NEXUS_CALLBACK_SECRET`: callback secret matching the Nexus Worker secret `FACTORY_CALLBACK_SECRET`.
 
 Create these repository variables:
 - `ARIA_FACTORY_MODEL`: exact model identifier.
@@ -59,3 +61,15 @@ These checks do not replace application tests, browser testing, security review,
 This is the first bounded execution slice, not the complete autonomous factory. It supports one configured OpenAI-compatible model endpoint per run and accepts a future Nexus repository-dispatch event. Multi-provider routing, task decomposition, parallel agents, a secure Nexus dispatcher, persistent run accounting, automated repair loops and policy-based auto-integration are subsequent milestones.
 
 Until secrets and variables are configured and the workflow is merged into the default branch, no model execution occurs.
+
+## Nexus execution callbacks
+
+For tasks submitted by Nexus, the repository-dispatch payload includes a `dispatch_id`. The workflow uses `scripts/aria-factory-status.mjs` to report:
+
+- `running` when execution begins;
+- `pr_opened` after a pull request has been created;
+- `failed` if the workflow fails.
+
+These callbacks are best-effort (`continue-on-error`) so a temporary status-reporting outage does not discard a successfully built change. Manual workflow runs have no Nexus dispatch ID and skip callbacks.
+
+Configure `NEXUS_STATUS_URL` and `NEXUS_CALLBACK_SECRET` as repository secrets. The callback secret must match the independently generated `FACTORY_CALLBACK_SECRET` in the Nexus Worker. Never reuse the GitHub dispatch token or model-provider key for this purpose.
