@@ -56,7 +56,7 @@ function statefulMemoryConsentDb(initialEnabled = false) {
               return null;
             },
             async run() {
-              if (sql.includes("INSERT INTO aria_memory_consent")) {
+              if (sql.includes("INSERT INTO aria_memory_consent (")) {
                 consent = { enabled: values[1], consentVersion: "memory-v1", updatedAt: values[2], consentGeneration: (consent?.consentGeneration ?? 0) + 1 };
               }
               if (sql.includes("aria_memory_consent_audit")) {
@@ -107,7 +107,7 @@ function individualMemoryDb({ consent = {}, documents = {} } = {}) {
               return null;
             },
             async run() {
-              if (sql.includes("INSERT INTO aria_memory_consent")) {
+              if (sql.includes("INSERT INTO aria_memory_consent (")) {
                 consents.set(values[0], { enabled: values[1], consentVersion: "memory-v1", updatedAt: values[2], consentGeneration: (consents.get(values[0])?.consentGeneration ?? 0) + 1 });
                 return { success: true, meta: { changes: 1 } };
               }
