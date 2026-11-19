@@ -42,7 +42,7 @@ function authorizationDb(consentEnabled = true) {
 }
 
 function statefulMemoryConsentDb(initialEnabled = false) {
-  let consent = initialEnabled ? { enabled: 1, consentVersion: "memory-v1", updatedAt: Date.now() } : null;
+  let consent = initialEnabled ? { enabled: 1, consentVersion: "memory-v1", updatedAt: Date.now(), consentGeneration: 1 } : null;
   const audit = [];
   return {
     audit,
@@ -57,7 +57,7 @@ function statefulMemoryConsentDb(initialEnabled = false) {
             },
             async run() {
               if (sql.includes("INSERT INTO aria_memory_consent")) {
-                consent = { enabled: values[1], consentVersion: "memory-v1", updatedAt: values[2] };
+                consent = { enabled: values[1], consentVersion: "memory-v1", updatedAt: values[2], consentGeneration: (consent?.consentGeneration ?? 0) + 1 };
               }
               if (sql.includes("aria_memory_consent_audit")) {
                 audit.push({ id: values[0], ownerId: values[1], enabled: values[2], occurredAt: values[3] });
@@ -99,7 +99,8 @@ function individualMemoryDb({ consent = {}, documents = {} } = {}) {
                 return {
                   consentEnabled: consentEnabled === 1 || consentEnabled === true ? 1 : 0,
                   memoriesJson: memories.get(ownerId) ?? null,
-                  revision: revisions.get(ownerId) ?? 0
+                  revision: revisions.get(ownerId) ?? 0,
+                  consentGeneration: consents.get(ownerId)?.consentGeneration ?? 1
                 };
               }
               if (sql.includes("aria_memory_consent")) return consents.get(values[0]) || null;
@@ -115,9 +116,11 @@ function individualMemoryDb({ consent = {}, documents = {} } = {}) {
                 return { success: true, meta: { changes: 1 } };
               }
               if (sql.includes("INSERT INTO aria_memory_documents")) {
-                const [ownerId, memoriesJson, updatedAt, consentOwner, expectedInsert, existsOwner, existsRevision, expectedUpdate, updateConsentOwner] = values;
+                const [ownerId, memoriesJson, updatedAt, consentOwner, expectedConsentGeneration, expectedInsert, existsOwner, existsRevision, expectedUpdate, updateConsentOwner, updateConsentGeneration] = values;
                 const currentRevision = revisions.get(ownerId) ?? 0;
                 if (consentOwner !== ownerId || existsOwner !== ownerId || updateConsentOwner !== ownerId ||
+                    expectedConsentGeneration !== (consents.get(ownerId)?.consentGeneration ?? 1) ||
+                    updateConsentGeneration !== (consents.get(ownerId)?.consentGeneration ?? 1) ||
                     (consents.get(ownerId)?.enabled !== 1 && consents.get(ownerId)?.enabled !== true) ||
                     (expectedInsert !== 0 && currentRevision !== existsRevision) ||
                     currentRevision !== expectedUpdate) {
@@ -886,7 +889,7 @@ test("individual-auth mode rejects a token that Supabase does not validate", asy
 test("individual-auth memory is isolated by the validated account, not clientId", async (t) => {
   const ownerA = "123e4567-e89b-42d3-a456-426614174000";
   const ownerB = "223e4567-e89b-42d3-a456-426614174001";
-  const enabled = { enabled: 1, consentVersion: "memory-v1", updatedAt: 1 };
+  const enabled = { enabled: 1, consentVersion: "memory-v1", updatedAt: 1, consentGeneration: 1 };
   const db = individualMemoryDb({ consent: { [ownerA]: enabled, [ownerB]: enabled } });
   const memoryEnv = {
     ARIA_AUTH_MODE: "individual",
@@ -917,6 +920,7 @@ test("individual-auth memory is isolated by the validated account, not clientId"
     body: JSON.stringify({
       clientId: ownerB,
       expectedRevision: 0,
+      expectedConsentGeneration: 1,
       memories: [{ id: "private-note", text: "Note privée du compte A" }]
     })
   }), memoryEnv);
@@ -1375,7 +1379,7 @@ test("individual memory PUT uses optimistic revision and rejects stale concurren
   const put = (id, text) => worker.fetch(new Request("https://aria-staging.test/memory", {
     method: "PUT",
     headers: { Authorization: "Bearer account-token", "Content-Type": "application/json" },
-    body: JSON.stringify({ expectedRevision: 0, memories: [{ id, text }] })
+    body: JSON.stringify({ expectedRevision: 0, expectedConsentGeneration: 1, memories: [{ id, text }] })
   }), memoryEnv);
 
   const first = await put("first", "first writer");
@@ -1383,6 +1387,7 @@ test("individual memory PUT uses optimistic revision and rejects stale concurren
   const firstPayload = await first.json();
   assert.equal(firstPayload.persisted, true);
   assert.equal(firstPayload.revision, 1);
+  assert.equal(firstPayload.consentGeneration, 1);
   assert.equal(firstPayload.memories.length, 1);
   assert.equal(firstPayload.memories[0].id, "first");
   assert.equal(firstPayload.memories[0].text, "first writer");
