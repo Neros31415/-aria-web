@@ -568,7 +568,7 @@ test("durable memory consent is isolated between authenticated accounts", async 
 test("D1 memory write is rejected if consent is revoked before the conditional write", async (t) => {
   const ownerId = "123e4567-e89b-42d3-a456-426614174000";
   const db = individualMemoryDb({
-    consent: { [ownerId]: { enabled: 1, consentVersion: "memory-v1", updatedAt: 1 } }
+    consent: { [ownerId]: { enabled: 1, consentVersion: "memory-v1", updatedAt: 1, consentGeneration: 1 } }
   });
   const prepare = db.prepare.bind(db);
   db.prepare = (sql) => {
