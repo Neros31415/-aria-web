@@ -29,6 +29,7 @@ const activeMemoryControllers = new Set();
 function cancelRemoteMemoryRequests() {
   memorySyncGeneration += 1;
   remoteMemoryRevision = null;
+  remoteMemoryConsentGeneration = null;
   for (const controller of activeMemoryControllers) controller.abort();
   activeMemoryControllers.clear();
 }
