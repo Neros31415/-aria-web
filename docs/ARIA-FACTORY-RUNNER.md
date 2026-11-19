@@ -73,3 +73,22 @@ For tasks submitted by Nexus, the repository-dispatch payload includes a `dispat
 These callbacks are best-effort (`continue-on-error`) so a temporary status-reporting outage does not discard a successfully built change. Manual workflow runs have no Nexus dispatch ID and skip callbacks.
 
 Configure `NEXUS_STATUS_URL` and `NEXUS_CALLBACK_SECRET` as repository secrets. The callback secret must match the independently generated `FACTORY_CALLBACK_SECRET` in the Nexus Worker. Never reuse the GitHub dispatch token or model-provider key for this purpose.
+
+## Validation hardening update — 19 November 2026
+
+The patch validator is isolated in `scripts/aria-factory-validation.mjs` and has unit tests in `tests/aria-factory-validation.test.mjs`. The tests cover canonical allow-list entries, traversal and protected paths, diff-header redirection, out-of-scope targets, rename/binary/symlink/mode-change rejection, and bounded streaming response reads.
+
+The model response must have a JSON content type and is capped at 1 MiB while streaming. Provider error response bodies are intentionally omitted from logs to avoid accidentally recording sensitive provider diagnostics.
+
+The current Factory CI runs JavaScript syntax checks, the validator unit tests, and `git diff --check`. The latest observed run passed. This is still not an end-to-end test of a real model provider or a full application test suite.
+
+The workflow now pins the official Actions to verified full commit SHAs:
+- `actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683` (v4.2.2);
+- `actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020` (v4.4.0).
+
+The hardened runner was ported to a clean branch based on the current `main` head; no divergent history is carried forward. The existing Nexus execution-status callbacks remain in the workflow.
+
+Remaining hardening before enabling paid model execution:
+- configure and verify a provider-side spending cap;
+- verify that required repository secrets and variables are present without reading or exposing their values;
+- add an end-to-end dry run against a non-production test repository or disposable branch.

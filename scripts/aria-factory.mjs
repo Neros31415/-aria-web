@@ -1,4 +1,5 @@
 import { appendFileSync, readFileSync, statSync } from "node:fs";
+import { validateAllowedPaths, validateAndGetChangedPaths, readLimitedResponseText } from "./aria-factory-validation.mjs";
 import { spawnSync } from "node:child_process";
 
 const fail = (message) => {
@@ -29,10 +30,10 @@ if (![inputRate, outputRate].every((value) => Number.isFinite(value) && value >=
   fail("configure non-negative input/output USD-per-million token rates as repository variables.");
 }
 
-for (const path of allowedPaths) {
-  if (path.startsWith("/") || path.split("/").includes("..") || path.includes("*")) {
-    fail("allowed paths must be repository-relative exact paths or directory prefixes, without wildcards.");
-  }
+try {
+  validateAllowedPaths(allowedPaths);
+} catch (error) {
+  fail(error.message);
 }
 
 let endpoint;
@@ -126,11 +127,21 @@ const response = await fetch(endpoint, {
 });
 
 if (!response.ok) {
-  const body = (await response.text()).slice(0, 1000);
-  fail("model provider returned HTTP " + response.status + ": " + body);
+  try { await response.body?.cancel(); } catch {}
+  fail("model provider returned HTTP " + response.status + "; response body omitted from logs.");
 }
 
-const payload = await response.json();
+const contentType = response.headers.get("content-type") ?? "";
+if (!/^application\/(?:[a-z0-9.+-]+\+)?json(?:\s*;|$)/i.test(contentType)) {
+  fail("provider response must use a JSON content type.");
+}
+let payload;
+try {
+  payload = JSON.parse(await readLimitedResponseText(response, 1_048_576));
+} catch (error) {
+  fail("provider response was invalid or exceeded the 1 MiB response limit: " + error.message);
+}
+
 const message = payload?.choices?.[0]?.message?.content;
 if (typeof message !== "string") fail("provider response did not contain a chat completion.");
 
@@ -160,23 +171,11 @@ if (actualEstimatedCost > maxBudget) {
     ", above the $" + maxBudget.toFixed(2) + " task ceiling. Patch rejected.");
 }
 
-const diffPaths = [...result.patch.matchAll(/^diff --git a\/(.+) b\/(.+)$/gm)]
-  .flatMap((match) => [match[1], match[2]]);
-const changedPaths = [...new Set(diffPaths)];
-if (changedPaths.length === 0) fail("patch did not declare any changed files.");
-for (const path of changedPaths) {
-  if (
-    path.startsWith("/") ||
-    path.split("/").includes("..") ||
-    path.startsWith(".git/") ||
-    path.startsWith(".github/workflows/") ||
-    /(^|\/)\.env($|\.)/i.test(path) ||
-    !allowedPaths.some((allowed) =>
-      allowed.endsWith("/") ? path.startsWith(allowed) : path === allowed,
-    )
-  ) {
-    fail("patch attempted to modify a forbidden path: " + path);
-  }
+let changedPaths;
+try {
+  changedPaths = validateAndGetChangedPaths(result.patch, allowedPaths);
+} catch (error) {
+  fail(error.message);
 }
 
 const check = spawnSync("git", ["apply", "--check", "--"], {
