@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#05070b"><title>ARIA — Live HUD</title>
+<style>
+:root{color-scheme:dark;--ink:#f4f1e9;--muted:#858b98;--line:#ffffff20;--gold:#e6c997;--blue:#9ccbe9;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+*{box-sizing:border-box}body{margin:0;min-height:100svh;background:radial-gradient(ellipse at 50% 43%,#17212b 0,#090d12 34%,#030406 76%);color:var(--ink);overflow-x:hidden}
+body:before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.22;background-image:linear-gradient(#ffffff08 1px,transparent 1px),linear-gradient(90deg,#ffffff08 1px,transparent 1px);background-size:54px 54px;mask-image:radial-gradient(ellipse at center,#000,transparent 75%)}
+.shell{width:min(100%,1100px);min-height:100svh;margin:auto;padding:env(safe-area-inset-top) 22px env(safe-area-inset-bottom);display:flex;flex-direction:column;position:relative}
+header{height:78px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);font-size:11px;letter-spacing:.22em}
+.brand{display:flex;align-items:center;gap:13px}.mark{width:31px;height:28px;position:relative}.mark:before{content:"";position:absolute;inset:0;background:var(--ink);clip-path:polygon(50% 0,100% 100%,77% 100%,50% 39%,23% 100%,0 100%)}.mark:after{content:"";position:absolute;width:11px;height:2px;background:#07090d;left:10px;bottom:5px}
+.brand strong{font-weight:500;letter-spacing:.48em}.sub{display:block;color:var(--muted);font-size:8px;letter-spacing:.24em;margin-top:5px}.status{color:#b7c9bd;letter-spacing:.1em;font-size:10px}.dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:#a4d7b8;box-shadow:0 0 12px #a4d7b8;margin-right:8px}
+main{flex:1;display:grid;grid-template-columns:1fr minmax(280px,390px) 1fr;align-items:center;gap:24px;padding:28px 0}
+.side{font-size:12px;color:var(--muted);line-height:1.65}.side h2{font-size:9px;font-weight:500;letter-spacing:.23em;color:var(--gold);margin:0 0 14px}.data{border-top:1px solid var(--line);padding:13px 0}.data b{display:block;color:var(--ink);font-size:13px;font-weight:400;margin-bottom:3px}.center{text-align:center;display:flex;align-items:center;flex-direction:column}.time{font-size:10px;color:var(--muted);letter-spacing:.2em;margin-bottom:24px}
+.core{width:min(62vw,270px);aspect-ratio:1;position:relative;display:grid;place-items:center;margin:0 auto 24px;cursor:pointer;outline:none}
+.ring{position:absolute;border:1px solid #d6dce226;border-radius:50%;inset:0;animation:turn 24s linear infinite}.ring.r2{inset:13%;border-color:#e5cb9940;animation-duration:18s;animation-direction:reverse}.ring.r3{inset:26%;border-style:dashed;border-color:#a7cde933;animation-duration:32s}
+.ring:before{content:"";position:absolute;width:4px;height:4px;border-radius:50%;background:var(--gold);top:13%;left:19%;box-shadow:0 0 12px var(--gold)}
+.emblem{font-size:clamp(60px,12vw,98px);font-weight:200;letter-spacing:-.1em;padding-right:.1em;color:#fffaf0;text-shadow:0 0 28px #f2d9a522;transition:transform .4s,text-shadow .4s}.core.active .emblem{transform:scale(1.06);text-shadow:0 0 34px #a4d6efaa}
+.core.active .ring{border-color:#a4d6ef66;animation-duration:6s}.greeting{font-weight:300;font-size:clamp(24px,4vw,34px);letter-spacing:-.04em;margin:0 0 9px}.prompt{font-size:12px;color:var(--muted);margin:0 0 24px}
+.controls{display:flex;align-items:center;gap:10px}.mic{width:62px;height:62px;border:1px solid #e6c99799;border-radius:50%;background:#e6c9970b;color:var(--ink);font-size:23px;cursor:pointer;box-shadow:0 0 30px #e6c9970b;transition:.2s}.mic:active,.mic.listening{background:#e6c99722;box-shadow:0 0 35px #e6c99735}.small{border:1px solid var(--line);background:#ffffff05;color:#cbd0d7;border-radius:50%;width:42px;height:42px;cursor:pointer}.composer{display:flex;gap:8px;width:min(100%,410px);margin-top:24px;border-bottom:1px solid #ffffff50;padding:8px 0}.composer input{flex:1;min-width:0;background:none;border:0;outline:0;color:var(--ink);font:inherit;font-size:13px}.composer input::placeholder{color:#777e89}.composer button{background:none;border:0;color:var(--gold);font-size:20px;cursor:pointer}
+.feedback{min-height:22px;color:var(--gold);font-size:11px;margin-top:13px}
+footer{border-top:1px solid var(--line);min-height:60px;display:flex;align-items:center;justify-content:space-between;gap:15px;color:#7e8490;font-size:8px;letter-spacing:.2em}.footer-actions{display:flex;gap:20px}.footer-actions button{font:inherit;letter-spacing:inherit;color:inherit;background:none;border:0;cursor:pointer}
+@keyframes turn{to{transform:rotate(360deg)}}@media(max-width:700px){.shell{padding-left:19px;padding-right:19px}header{height:67px}.status{font-size:0}.status .dot{font-size:initial}main{grid-template-columns:1fr;gap:20px;padding:27px 0 20px}.center{grid-row:1}.side{display:grid;grid-template-columns:1fr 1fr;gap:0 18px;font-size:11px}.side h2{grid-column:1/-1;margin-bottom:8px}.data{padding:10px 0}.side.left{order:2}.side.right{order:3}.core{width:min(58vw,230px);margin-bottom:19px}.time{margin-bottom:20px}.greeting{font-size:28px}.prompt{margin-bottom:18px}.mic{width:58px;height:58px}footer{font-size:7px}.footer-actions{gap:10px}}@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body><div class="shell">
+<header><div class="brand"><div class="mark" aria-hidden="true"></div><div><strong>ARIA</strong><span class="sub">ASSISTANT PERSONNEL</span></div></div><div class="status"><span class="dot"></span><span id="state">INTERFACE ACTIVE</span></div></header>
+<main>
+<aside class="side left"><h2>ÉTAT DU SYSTÈME</h2><div class="data"><b>Interface</b>Opérationnelle</div><div class="data"><b>Mémoire</b><span id="memoryState">Locale · prête</span></div><div class="data"><b>Moteur cognitif</b>Non connecté</div></aside>
+<section class="center"><div class="time" id="clock">--:-- · LOCAL</div>
+<div class="core" id="core" role="button" tabindex="0" aria-label="Activer la présence visuelle d'ARIA"><div class="ring"></div><div class="ring r2"></div><div class="ring r3"></div><div class="emblem">A</div></div>
+<h1 class="greeting" id="greeting">Je vous écoute.</h1><p class="prompt" id="prompt">Une présence. Une intention. À vous de jouer.</p>
+<div class="controls"><button class="small" id="clear" aria-label="Effacer la conversation" title="Effacer">↺</button><button class="mic" id="mic" aria-label="Parler à ARIA" title="Dictée vocale">⌁</button><button class="small" id="speak" aria-label="Lire la réponse" title="Lire la réponse">◖</button></div>
+<form class="composer" id="form"><input id="input" maxlength="500" autocomplete="off" placeholder="Donnez une instruction à ARIA…" aria-label="Instruction pour ARIA"><button aria-label="Envoyer">↗</button></form><div class="feedback" id="feedback" aria-live="polite">Prototype interactif · aucune IA distante connectée</div>
+</section>
+<aside class="side right"><h2>ACCÈS RAPIDE</h2><div class="data"><b>01 / Mémoire</b><span id="memoryCount">0 notes enregistrées</span></div><div class="data"><b>02 / Missions</b>Planification bientôt connectée</div><div class="data"><b>03 / Recherche</b>Accès Web non connecté</div></aside>
+</main>
+<footer><span>ARIA · LIVE HUD / EXPÉRIMENTAL</span><div class="footer-actions"><button id="memoryBtn">MÉMOIRE</button><button id="missionBtn">MISSIONS</button><button id="helpBtn">ÉTAT</button><button id="connectBtn">CONNECTER</button></div></footer>
+</div>
+<script>
+const $=id=>document.getElementById(id);const key='aria.hud.memory.v1';let memory=[];try{memory=JSON.parse(localStorage.getItem(key)||'[]');if(!Array.isArray(memory))memory=[]}catch{memory=[]}
+let lastReply='Le moteur IA distant n’est pas connecté.';let apiBase='';try{apiBase=localStorage.getItem('aria.hud.apiBase.v1')||''}catch{}
+function updateClock(){const d=new Date();$('clock').textContent=d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})+' · LOCAL'}updateClock();setInterval(updateClock,15000);
+function pulse(){ $('core').classList.toggle('active'); }$('core').addEventListener('click',pulse);$('core').addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();pulse()}});
+function feedback(t){$('feedback').textContent=t}
+function reply(text,remote=false){lastReply=text;$('greeting').textContent=remote?'Je suis là.':'Demande reçue.';$('prompt').textContent=text;$('state').textContent=remote?'IA CONNECTÉE':'MODE LOCAL';feedback(remote?'Réponse du backend ARIA':'Réponse locale · aucune requête serveur');if('speechSynthesis'in window){speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.lang='fr-FR';u.rate=.96;speechSynthesis.speak(u)}}
+async function askAssistant(text){if(!apiBase){reply('Instruction reçue : « '+text+' ». Aucun backend IA n’est configuré. Utilisez CONNECTER pour renseigner votre endpoint sécurisé.');return}feedback('Connexion au moteur IA…');$('state').textContent='CONNEXION…';try{const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),20000);const res=await fetch(apiBase.replace(/\/$/, '')+'/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:[{role:'user',content:text}]}),signal:controller.signal});clearTimeout(timer);if(!res.ok)throw new Error('HTTP '+res.status);const data=await res.json();const answer=typeof data.reply==='string'?data.reply:typeof data.content==='string'?data.content:typeof data.message==='string'?data.message:'';if(!answer)throw new Error('Format de réponse non reconnu');reply(answer,true)}catch(err){$('state').textContent='IA INDISPONIBLE';feedback('Échec de connexion : '+(err.name==='AbortError'?'délai dépassé':err.message)+'. Vérifiez endpoint et CORS.');$('prompt').textContent='Aucune action exécutée. Vérifiez la configuration du backend.'}}
+$('form').addEventListener('submit',e=>{e.preventDefault();const v=$('input').value.trim();if(!v)return;$('input').value='';const low=v.toLowerCase();if(low.startsWith('souviens-toi de ')||low.startsWith('mémorise ')){const note=v.replace(/^souviens-toi de |^mémorise /i,'').trim();if(note){memory.push(note);memory=memory.slice(-50);try{localStorage.setItem(key,JSON.stringify(memory))}catch{}renderMemory();reply('C’est enregistré dans la mémoire locale : '+note);return}}
+if(low.includes('mémoire')){reply(memory.length?'Mémoire locale : '+memory.join(' ; '):'Votre mémoire locale est vide. Dites « Mémorise… » suivi de votre note.');return}
+if(low.includes('état')||low.includes('fonctionne')){reply('Interface active. Animation, horloge, dictée vocale selon le navigateur, lecture vocale et mémoire locale sont disponibles. Le modèle IA, la recherche Web et les actions système ne sont pas connectés.');return}
+askAssistant(v);});
+function renderMemory(){$('memoryCount').textContent=memory.length+' note'+(memory.length===1?'':'s')+' enregistrée'+(memory.length===1?'':'s');$('memoryState').textContent=memory.length+' note'+(memory.length===1?'':'s')+' locale'+(memory.length===1?'':'s')}
+renderMemory();
+$('memoryBtn').addEventListener('click',()=>{const note=prompt('Note à conserver dans la mémoire locale :');if(note&&note.trim()){memory.push(note.trim());memory=memory.slice(-50);try{localStorage.setItem(key,JSON.stringify(memory))}catch{}renderMemory();reply('Note enregistrée sur cet appareil.')}else reply(memory.length?'Mémoire locale : '+memory.join(' ; '):'La mémoire locale est vide.')});
+$('missionBtn').addEventListener('click',()=>reply('Le module Missions n’est pas encore connecté. Il sera développé comme une vraie liste de tâches persistante, pas comme un faux bouton.'));
+$('helpBtn').addEventListener('click',()=>reply('État : HUD interactif, animations CSS, horloge locale, mémoire navigateur et synthèse vocale disponibles. Reconnaissance vocale selon la prise en charge du navigateur. IA distante, recherche Web et synchronisation iPhone-PC non connectées.'));
+$('connectBtn').addEventListener('click',()=>{
+  let current='';
+  try{current=localStorage.getItem('aria.hud.apiBase.v1')||''}catch{}
+  const value=prompt('Adresse HTTPS de votre backend ARIA (endpoint /chat ajouté automatiquement). Laissez vide pour déconnecter :',current);
+  if(value===null)return;
+  const candidate=value.trim();
+  if(!candidate){
+    apiBase='';
+    try{localStorage.removeItem('aria.hud.apiBase.v1')}catch{feedback('Impossible de modifier le stockage local dans ce navigateur.');return}
+    $('state').textContent='MODE LOCAL';
+    feedback('Backend déconnecté. ARIA reste en mode local.');
+    return;
+  }
+  try{
+    const url=new URL(candidate);
+    const localHost=['localhost','127.0.0.1','[::1]'].includes(url.hostname);
+    if(url.username||url.password||(!localHost&&url.protocol!=='https:')||(localHost&&!['http:','https:'].includes(url.protocol))){
+      throw new Error('Utilisez une adresse HTTPS sans identifiants intégrés (HTTP autorisé uniquement sur localhost).');
+    }
+    apiBase=url.href; while(apiBase.endsWith('/'))apiBase=apiBase.slice(0,-1);
+    localStorage.setItem('aria.hud.apiBase.v1',apiBase);
+    $('state').textContent='BACKEND CONFIGURÉ';
+    feedback('Endpoint enregistré. La connexion sera vérifiée au prochain message.');
+  }catch(err){
+    feedback('Adresse refusée : '+(err instanceof TypeError?'URL invalide.':err.message));
+  }
+});
+$('clear').addEventListener('click',()=>{$('greeting').textContent='Je vous écoute.';$('prompt').textContent='Une présence. Une intention. À vous de jouer.';feedback('Affichage réinitialisé. La mémoire est conservée.')});
+$('speak').addEventListener('click',()=>{if(!('speechSynthesis'in window)){feedback('Lecture vocale non prise en charge par ce navigateur.');return}speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(lastReply);u.lang='fr-FR';speechSynthesis.speak(u)});
+$('mic').addEventListener('click',()=>{const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){feedback('Dictée vocale indisponible ici. Utilisez le champ de texte.');return}const r=new SR();r.lang='fr-FR';r.interimResults=false;$('mic').classList.add('listening');feedback('Je vous écoute…');r.onresult=e=>{$('input').value=e.results[0][0].transcript;$('input').focus();feedback('Dictée transcrite. Appuyez sur envoyer pour confirmer.')};r.onerror=()=>feedback('La dictée vocale a échoué ou n’est pas autorisée.');r.onend=()=>$('mic').classList.remove('listening');try{r.start()}catch{$('mic').classList.remove('listening');feedback('Impossible de démarrer la dictée vocale.')}});
+</script></body></html>
