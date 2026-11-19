@@ -13,20 +13,20 @@
   <div class="app-shell">
     <header class="topbar">
       <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
-      <div class="brand-copy"><div class="brand">ARIA <span>PERSONAL AI</span></div><div class="status"><i></i><span id="statusText">Chat web · moteur IA à connecter</span></div></div>
+      <div class="brand-copy"><div class="brand">ARIA <span>PERSONAL AI</span></div><div class="status"><i></i><span id="statusText">Prototype local · backend non connecté</span></div></div>
       <button class="icon-button" id="settingsBtn" aria-label="Paramètres" title="Paramètres">⚙</button>
     </header>
 
     <main>
       <section class="hero" id="welcome">
-        <div class="eyebrow">ARIA · ASSISTANTE PERSONNELLE</div>
-        <h1>Parlons.<br><em>Je vous écoute.</em></h1>
-        <p>Un espace unique pour échanger avec ARIA. Vos conversations et notes restent dans ce navigateur sur cet appareil.</p>
-        <div class="capability-row"><span>◈ Conversation intégrée</span><span>◈ Mémoire locale</span><span>◈ Interface mobile</span></div>
+        <div class="eyebrow">SYSTÈME PERSONNEL · V0.7 FOUNDATION</div>
+        <h1>À votre service,<br><em>Quentin.</em></h1>
+        <p>Une interface discrète pour organiser vos idées, préparer vos missions et construire votre assistant personnel.</p>
+        <div class="capability-row"><span>◈ Mémoire persistante</span><span>◈ Interface mobile</span><span>◈ Architecture extensible</span></div>
       </section>
 
       <section class="workspace">
-        <div class="section-head"><div><div class="eyebrow">ESPACE ARIA</div><h2>Votre conversation</h2></div><button id="clearBtn" class="text-button">Effacer</button></div>
+        <div class="section-head"><div><div class="eyebrow">CONSOLE</div><h2>Conversation</h2></div><button id="clearBtn" class="text-button">Effacer</button></div>
         <div id="messages" class="messages" aria-live="polite">
           <article class="message aria-message"><div class="avatar">A</div><div class="bubble"><div class="message-label">ARIA <span>PROTOCOLE INITIAL</span></div><p>Bonjour. Mon interface est prête, mais mon moteur IA distant n’est pas encore connecté. Vous pouvez tester la conversation locale et la mémoire de ce prototype.</p></div></article>
         </div>
@@ -39,27 +39,35 @@
       </section>
 
       <section class="memory-panel">
-        <div class="section-head"><div><div class="eyebrow">CONTEXTE PERSISTANT</div><h2>Mémoire locale</h2></div><span class="pill">SUR CET APPAREIL</span></div>
-        <p class="panel-description">Les notes ajoutées ici restent dans le stockage de ce navigateur. Elles ne sont pas envoyées à un serveur.</p>
+        <div class="section-head"><div><div class="eyebrow">CONTEXTE PERSISTANT</div><h2>Mémoire d’Aria</h2></div><span class="pill">SERVEUR + APPAREIL</span></div>
+        <p class="panel-description">Les notes peuvent être synchronisées avec le serveur ARIA et réutilisées dans une nouvelle conversation. Sans jeton configuré, elles restent sur cet appareil.</p>
         <form id="memoryForm" class="memory-form"><input id="memoryInput" maxlength="300" placeholder="Ajouter une préférence ou une note…"><button type="submit">Ajouter</button></form>
+        <p id="memoryStatus" class="panel-description" role="status" aria-live="polite">Stockée sur cet appareil uniquement. Configurez le jeton pour synchroniser.</p>
         <ul id="memoryList" class="memory-list"></ul>
       </section>
 
       <section class="security-note"><span class="shield">◇</span><div><strong>Mode prototype sécurisé</strong><p>Aucune action sur votre téléphone ou un PC n’est exécutée. Aucun compte, paiement ou accès distant n’est configuré.</p></div></section>
     </main>
-    <footer>ARIA · ESPACE WEB <span>CONVERSATION · MÉMOIRE LOCALE</span></footer>
+    <footer>ARIA · FONDATION WEB V0.7 <span>CONSTRUIRE · TESTER · FIABILISER</span></footer>
   </div>
 
   <dialog id="settingsDialog">
-    <form method="dialog" class="dialog-content">
-      <div class="section-head"><div><div class="eyebrow">CONFIGURATION</div><h2>État du prototype</h2></div><button class="icon-button" aria-label="Fermer">×</button></div>
+    <div class="dialog-content">
+      <div class="section-head"><div><div class="eyebrow">CONFIGURATION</div><h2>État du prototype</h2></div><button class="icon-button" id="closeSettingsTopBtn" type="button" aria-label="Fermer">×</button></div>
       <div class="setting-row"><span>Interface PWA</span><b class="good">ACTIVE</b></div>
       <div class="setting-row"><span>Mémoire locale</span><b class="good">ACTIVE</b></div>
-      <div class="setting-row"><span>Modèle IA réel</span><b class="pending">NON CONNECTÉ</b></div>
-      <div class="setting-row"><span>Agent Web / Windows</span><b class="pending">NON CONNECTÉ</b></div>
-      <p class="dialog-help">Pour connecter un vrai modèle, il faudra déployer un backend sécurisé. Une clé API ne doit jamais être placée dans le code de cette application.</p>
-      <button class="primary-button">Fermer</button>
-    </form>
+      <div class="setting-row"><span>Backend IA de test</span><b class="pending">À VALIDER</b></div>
+      <div class="setting-row"><span>Recherche Web / agent Windows</span><b class="pending">NON CONNECTÉS</b></div>
+      <form id="apiTokenForm" class="token-form">
+        <label for="apiTokenInput">Jeton d’accès ARIA</label>
+        <input id="apiTokenInput" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Saisir le jeton d’accès" maxlength="500">
+        <div class="dialog-help">Le jeton est conservé uniquement dans la session de cet onglet, jamais dans le dépôt ni dans la mémoire persistante. Ne saisissez pas votre clé fournisseur OpenAI.</div>
+        <div id="tokenStatus" class="dialog-help" role="status" aria-live="polite"></div>
+        <button class="primary-button" type="submit">Enregistrer le jeton de session</button>
+      </form>
+      <p class="dialog-help">Le chat et la mémoire utilisent le backend de test Cloudflare. La mémoire serveur n’est considérée comme validée qu’après un test réel et une récupération depuis une nouvelle session.</p>
+      <button class="text-button" id="closeSettingsBtn" type="button">Fermer</button>
+    </div>
   </dialog>
   <script src="app.js"></script>
 </body>
