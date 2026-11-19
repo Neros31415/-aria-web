@@ -127,9 +127,8 @@ const response = await fetch(endpoint, {
 });
 
 if (!response.ok) {
-  let body = "";
-  try { body = (await readLimitedResponseText(response, 4096)).slice(0, 1000); } catch {}
-  fail("model provider returned HTTP " + response.status + (body ? ": " + body : "."));
+  try { await response.body?.cancel(); } catch {}
+  fail("model provider returned HTTP " + response.status + "; response body omitted from logs.");
 }
 
 const contentType = response.headers.get("content-type") ?? "";
