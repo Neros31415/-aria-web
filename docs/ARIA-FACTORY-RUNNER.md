@@ -82,8 +82,13 @@ The model response must have a JSON content type and is capped at 1 MiB while st
 
 The current Factory CI runs JavaScript syntax checks, the validator unit tests, and `git diff --check`. The latest observed run passed. This is still not an end-to-end test of a real model provider or a full application test suite.
 
-Remaining hardening before enabling the workflow:
-- pin third-party GitHub Actions to verified full commit SHAs;
-- reconcile the feature branch with the latest `main` and resolve the current divergence;
-- configure a provider-side spend cap and verify repository secrets/variables without exposing their values;
+The workflow now pins the official Actions to verified full commit SHAs:
+- `actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683` (v4.2.2);
+- `actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020` (v4.4.0).
+
+The hardened runner was ported to a clean branch based on the current `main` head; no divergent history is carried forward. The existing Nexus execution-status callbacks remain in the workflow.
+
+Remaining hardening before enabling paid model execution:
+- configure and verify a provider-side spending cap;
+- verify that required repository secrets and variables are present without reading or exposing their values;
 - add an end-to-end dry run against a non-production test repository or disposable branch.
