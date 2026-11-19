@@ -9,6 +9,7 @@ on:
       - feat/aria-supabase-email-auth-staging
       - fix/enforce-required-individual-auth
       - fix/memory-revision-and-consent-audit
+      - fix/memory-consent-generation-v1
     paths:
       - "cloudflare/aria-brain-staging.mjs"
       - "cloudflare/aria-authorization.mjs"
@@ -20,6 +21,7 @@ on:
       - "migrations/0002_aria_memory_consent.sql"
       - "migrations/0003_aria_memory_documents.sql"
       - "migrations/0004_aria_memory_revision_and_consent_audit.sql"
+      - "migrations/0005_aria_memory_consent_generation.sql"
       - ".github/workflows/staging-worker-tests.yml"
   pull_request:
     branches:
