@@ -1,0 +1,28 @@
+name: GEV bridge tests
+
+on:
+  pull_request:
+    paths:
+      - "geo/gev-bridge.js"
+      - "tests/gev-bridge.test.mjs"
+      - ".github/workflows/gev-bridge-tests.yml"
+  push:
+    branches:
+      - "feat/aria-gev-bridge"
+
+permissions:
+  contents: read
+
+jobs:
+  node-tests:
+    name: Node.js bridge tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run GEV bridge tests
+        run: node --test tests/gev-bridge.test.mjs
