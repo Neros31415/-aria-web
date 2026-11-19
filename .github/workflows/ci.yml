@@ -20,7 +20,11 @@ jobs:
       - name: Check JavaScript syntax
         run: |
           node --check scripts/aria-factory.mjs
+          node --check scripts/aria-factory-validation.mjs
+          node --check tests/aria-factory-validation.test.mjs
           node --check app.js
           node --check sw.js
+      - name: Test Factory validation
+        run: node --test tests/aria-factory-validation.test.mjs
       - name: Check patch whitespace
         run: git diff --check
