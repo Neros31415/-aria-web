@@ -188,8 +188,10 @@ for (const section of sections) {
     fail("patch contains a malformed, renamed, or redirected diff header.");
   }
 
-  const oldHeaders = lines.filter((line) => line.startsWith("--- "));
-  const newHeaders = lines.filter((line) => line.startsWith("+++ "));
+  const firstHunk = lines.findIndex((line) => line.startsWith("@@"));
+  const fileHeaderLines = firstHunk < 0 ? lines : lines.slice(0, firstHunk);
+  const oldHeaders = fileHeaderLines.filter((line) => line.startsWith("--- "));
+  const newHeaders = fileHeaderLines.filter((line) => line.startsWith("+++ "));
   if (oldHeaders.length !== 1 || newHeaders.length !== 1) {
     fail("each patch section must contain exactly one old and one new file header.");
   }
