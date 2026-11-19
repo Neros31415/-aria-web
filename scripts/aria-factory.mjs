@@ -1,4 +1,5 @@
 import { appendFileSync, readFileSync, statSync } from "node:fs";
+import { validateAllowedPaths, validateAndGetChangedPaths, readLimitedResponseText } from "./aria-factory-validation.mjs";
 import { spawnSync } from "node:child_process";
 
 const fail = (message) => {
@@ -29,10 +30,10 @@ if (![inputRate, outputRate].every((value) => Number.isFinite(value) && value >=
   fail("configure non-negative input/output USD-per-million token rates as repository variables.");
 }
 
-for (const path of allowedPaths) {
-  if (path.startsWith("/") || path.split("/").includes("..") || path.includes("*")) {
-    fail("allowed paths must be repository-relative exact paths or directory prefixes, without wildcards.");
-  }
+try {
+  validateAllowedPaths(allowedPaths);
+} catch (error) {
+  fail(error.message);
 }
 
 let endpoint;
@@ -126,11 +127,22 @@ const response = await fetch(endpoint, {
 });
 
 if (!response.ok) {
-  const body = (await response.text()).slice(0, 1000);
-  fail("model provider returned HTTP " + response.status + ": " + body);
+  let body = "";
+  try { body = (await readLimitedResponseText(response, 4096)).slice(0, 1000); } catch {}
+  fail("model provider returned HTTP " + response.status + (body ? ": " + body : "."));
 }
 
-const payload = await response.json();
+const contentType = response.headers.get("content-type") ?? "";
+if (!/^application\/(?:[a-z0-9.+-]+\+)?json(?:\s*;|$)/i.test(contentType)) {
+  fail("provider response must use a JSON content type.");
+}
+let payload;
+try {
+  payload = JSON.parse(await readLimitedResponseText(response, 1_048_576));
+} catch (error) {
+  fail("provider response was invalid or exceeded the 1 MiB response limit: " + error.message);
+}
+
 const message = payload?.choices?.[0]?.message?.content;
 if (typeof message !== "string") fail("provider response did not contain a chat completion.");
 
@@ -160,67 +172,11 @@ if (actualEstimatedCost > maxBudget) {
     ", above the $" + maxBudget.toFixed(2) + " task ceiling. Patch rejected.");
 }
 
-// Validate both the diff header and the actual ---/+++ file headers.
-// Checking only "diff --git" is insufficient: git apply trusts the ---/+++
-// target path and a crafted patch can redirect an allowed header to a forbidden file.
-const sections = result.patch.split(/^diff --git /m).slice(1);
-if (sections.length === 0) fail("patch did not contain a git diff section.");
-
-const changedPaths = [];
-const isAllowedPath = (path) =>
-  typeof path === "string" &&
-  path.length > 0 &&
-  !path.startsWith("/") &&
-  !path.includes("\\") &&
-  !path.split("/").some((part) => part === "" || part === "." || part === "..") &&
-  !path.startsWith(".git/") &&
-  !path.startsWith(".github/workflows/") &&
-  !/(^|\/)\.env($|\.)/i.test(path) &&
-  /^[A-Za-z0-9._/-]+$/.test(path) &&
-  allowedPaths.some((allowed) =>
-    allowed.endsWith("/") ? path.startsWith(allowed) : path === allowed,
-  );
-
-for (const section of sections) {
-  const lines = section.split(/\r?\n/);
-  const headerMatch = (lines[0] ?? "").match(/^a\/([A-Za-z0-9._/-]+) b\/([A-Za-z0-9._/-]+)$/);
-  if (!headerMatch || headerMatch[1] !== headerMatch[2]) {
-    fail("patch contains a malformed, renamed, or redirected diff header.");
-  }
-
-  const firstHunk = lines.findIndex((line) => line.startsWith("@@"));
-  const fileHeaderLines = firstHunk < 0 ? lines : lines.slice(0, firstHunk);
-  const oldHeaders = fileHeaderLines.filter((line) => line.startsWith("--- "));
-  const newHeaders = fileHeaderLines.filter((line) => line.startsWith("+++ "));
-  if (oldHeaders.length !== 1 || newHeaders.length !== 1) {
-    fail("each patch section must contain exactly one old and one new file header.");
-  }
-
-  const oldMatch = oldHeaders[0].match(/^--- (?:a\/([A-Za-z0-9._/-]+)|\/dev\/null)$/);
-  const newMatch = newHeaders[0].match(/^\+\+\+ (?:b\/([A-Za-z0-9._/-]+)|\/dev\/null)$/);
-  if (!oldMatch || !newMatch) fail("patch contains an unsupported or malformed file path header.");
-
-  const oldPath = oldMatch[1] ?? null;
-  const newPath = newMatch[1] ?? null;
-  const declaredPath = headerMatch[1];
-  if ((oldPath && oldPath !== declaredPath) || (newPath && newPath !== declaredPath)) {
-    fail("patch file headers do not match the validated diff path.");
-  }
-  if (!newPath && !oldPath) fail("patch section does not identify a file.");
-  const effectivePath = newPath ?? oldPath;
-  if (!isAllowedPath(effectivePath)) {
-    fail("patch attempted to modify a forbidden path: " + effectivePath);
-  }
-
-  if (lines.some((line) =>
-    /^(?:new file mode|deleted file mode|old mode|new mode) (?!100644$|100755$)/.test(line) ||
-    /^GIT binary patch$/.test(line) ||
-    /^rename (?:from|to) /.test(line) ||
-    /^copy (?:from|to) /.test(line)
-  )) {
-    fail("patch contains a binary, symlink, mode-changing, rename, or copy operation.");
-  }
-  changedPaths.push(effectivePath);
+let changedPaths;
+try {
+  changedPaths = validateAndGetChangedPaths(result.patch, allowedPaths);
+} catch (error) {
+  fail(error.message);
 }
 
 const check = spawnSync("git", ["apply", "--check", "--"], {
