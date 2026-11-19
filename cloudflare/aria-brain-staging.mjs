@@ -37,15 +37,16 @@ async function readServerMemoryConsent(env, ownerId) {
   if (!db || typeof db.prepare !== "function") return { ok: false, status: 503, error: "consent_store_unavailable" };
   try {
     const row = await db.prepare(
-      "SELECT enabled, consent_version AS consentVersion, updated_at_ms AS updatedAt FROM aria_memory_consent WHERE owner_id = ? LIMIT 1"
+      "SELECT enabled, consent_version AS consentVersion, updated_at_ms AS updatedAt, consent_generation AS consentGeneration FROM aria_memory_consent WHERE owner_id = ? LIMIT 1"
     ).bind(ownerId).first();
     if (!row) return { ok: true, enabled: false };
     if (![0, 1, true, false].includes(row.enabled) ||
         typeof row.consentVersion !== "string" ||
-        !Number.isSafeInteger(row.updatedAt) || row.updatedAt < 0) {
+        !Number.isSafeInteger(row.updatedAt) || row.updatedAt < 0 ||
+        !Number.isSafeInteger(row.consentGeneration) || row.consentGeneration < 1) {
       return { ok: false, status: 503, error: "consent_store_unavailable" };
     }
-    return { ok: true, enabled: row.enabled === 1 || row.enabled === true, consentVersion: row.consentVersion, updatedAt: row.updatedAt };
+    return { ok: true, enabled: row.enabled === 1 || row.enabled === true, consentVersion: row.consentVersion, updatedAt: row.updatedAt, consentGeneration: row.consentGeneration };
   } catch {
     return { ok: false, status: 503, error: "consent_store_unavailable" };
   }
@@ -62,7 +63,7 @@ async function writeServerMemoryConsent(env, ownerId, enabled) {
     if (typeof db.batch !== "function") return { ok: false, status: 503, error: "consent_store_unavailable" };
     const result = await db.batch([
       db.prepare(
-        "INSERT INTO aria_memory_consent (owner_id, enabled, consent_version, updated_at_ms) VALUES (?, ?, 'memory-v1', ?) ON CONFLICT(owner_id) DO UPDATE SET enabled = excluded.enabled, consent_version = excluded.consent_version, updated_at_ms = excluded.updated_at_ms"
+        "INSERT INTO aria_memory_consent (owner_id, enabled, consent_version, updated_at_ms, consent_generation) VALUES (?, ?, 'memory-v1', ?, 1) ON CONFLICT(owner_id) DO UPDATE SET enabled = excluded.enabled, consent_version = excluded.consent_version, updated_at_ms = excluded.updated_at_ms, consent_generation = aria_memory_consent.consent_generation + 1"
       ).bind(ownerId, enabled ? 1 : 0, now),
       db.prepare(
         "INSERT INTO aria_memory_consent_audit (id, owner_id, enabled, consent_version, occurred_at_ms, source) VALUES (?, ?, ?, 'memory-v1', ?, 'user_request')"
@@ -71,7 +72,9 @@ async function writeServerMemoryConsent(env, ownerId, enabled) {
     if (!Array.isArray(result) || result.some((item) => item?.success === false)) {
       return { ok: false, status: 503, error: "consent_store_unavailable" };
     }
-    return { ok: true, enabled, consentVersion: "memory-v1", updatedAt: now };
+    const consent = await readServerMemoryConsent(env, ownerId);
+    if (!consent.ok) return { ok: false, status: 503, error: "consent_store_unavailable" };
+    return { ok: true, enabled, consentVersion: "memory-v1", updatedAt: now, consentGeneration: consent.consentGeneration };
   } catch {
     return { ok: false, status: 503, error: "consent_store_unavailable" };
   }
@@ -86,36 +89,40 @@ async function readAccountMemory(env, ownerId) {
   const db = env?.ARIA_AUTHZ_DB;
   if (!db || typeof db.prepare !== "function") throw new Error("memory_storage_unavailable");
   const row = await db.prepare(
-    "SELECT c.enabled AS consentEnabled, d.memories_json AS memoriesJson, COALESCE(d.revision, 0) AS revision FROM aria_memory_consent c LEFT JOIN aria_memory_documents d ON d.owner_id = c.owner_id WHERE c.owner_id = ? LIMIT 1"
+    "SELECT c.enabled AS consentEnabled, c.consent_generation AS consentGeneration, d.memories_json AS memoriesJson, COALESCE(d.revision, 0) AS revision FROM aria_memory_consent c LEFT JOIN aria_memory_documents d ON d.owner_id = c.owner_id WHERE c.owner_id = ? LIMIT 1"
   ).bind(ownerId).first();
   if (!row || (row.consentEnabled !== 1 && row.consentEnabled !== true)) {
     throw new Error("memory_consent_required");
   }
   const revision = row.revision ?? 0;
-  if (!Number.isSafeInteger(revision) || revision < 0) throw new Error("invalid_memory_document");
-  if (row.memoriesJson === null || row.memoriesJson === undefined) return { memories: [], revision: 0 };
+  const consentGeneration = row.consentGeneration;
+  if (!Number.isSafeInteger(revision) || revision < 0 ||
+      !Number.isSafeInteger(consentGeneration) || consentGeneration < 1) throw new Error("invalid_memory_document");
+  if (row.memoriesJson === null || row.memoriesJson === undefined) return { memories: [], revision: 0, consentGeneration };
   if (typeof row.memoriesJson !== "string") throw new Error("invalid_memory_document");
   const memories = JSON.parse(row.memoriesJson);
   if (!Array.isArray(memories)) throw new Error("invalid_memory_document");
-  return { memories, revision };
+  return { memories, revision, consentGeneration };
 }
 
-async function writeAccountMemory(env, ownerId, memories, expectedRevision, now = Date.now()) {
+async function writeAccountMemory(env, ownerId, memories, expectedRevision, expectedConsentGeneration, now = Date.now()) {
   if (!CANONICAL_ACCOUNT_ID.test(ownerId || "") || !Array.isArray(memories) ||
       !Number.isSafeInteger(expectedRevision) || expectedRevision < 0 ||
+      !Number.isSafeInteger(expectedConsentGeneration) || expectedConsentGeneration < 1 ||
       !Number.isSafeInteger(now) || now < 0) return { ok: false, reason: "invalid_memory_document" };
   const db = env?.ARIA_AUTHZ_DB;
   if (!db || typeof db.prepare !== "function") return { ok: false, reason: "memory_storage_unavailable" };
   const result = await db.prepare(
-    "INSERT INTO aria_memory_documents (owner_id, memories_json, updated_at_ms, revision) SELECT ?, ?, ?, 1 WHERE EXISTS (SELECT 1 FROM aria_memory_consent WHERE owner_id = ? AND enabled = 1) AND (? = 0 OR EXISTS (SELECT 1 FROM aria_memory_documents WHERE owner_id = ? AND revision = ?)) ON CONFLICT(owner_id) DO UPDATE SET memories_json = excluded.memories_json, updated_at_ms = excluded.updated_at_ms, revision = aria_memory_documents.revision + 1 WHERE aria_memory_documents.revision = ? AND EXISTS (SELECT 1 FROM aria_memory_consent WHERE owner_id = ? AND enabled = 1)"
-  ).bind(ownerId, JSON.stringify(memories), now, ownerId, expectedRevision, ownerId, expectedRevision, expectedRevision, ownerId).run();
+    "INSERT INTO aria_memory_documents (owner_id, memories_json, updated_at_ms, revision) SELECT ?, ?, ?, 1 WHERE EXISTS (SELECT 1 FROM aria_memory_consent WHERE owner_id = ? AND enabled = 1 AND consent_generation = ?) AND (? = 0 OR EXISTS (SELECT 1 FROM aria_memory_documents WHERE owner_id = ? AND revision = ?)) ON CONFLICT(owner_id) DO UPDATE SET memories_json = excluded.memories_json, updated_at_ms = excluded.updated_at_ms, revision = aria_memory_documents.revision + 1 WHERE aria_memory_documents.revision = ? AND EXISTS (SELECT 1 FROM aria_memory_consent WHERE owner_id = ? AND enabled = 1 AND consent_generation = ?)"
+  ).bind(ownerId, JSON.stringify(memories), now, ownerId, expectedConsentGeneration, expectedRevision, ownerId, expectedRevision, expectedRevision, ownerId, expectedConsentGeneration).run();
   if (result?.success === false) return { ok: false, reason: "memory_storage_unavailable" };
   if (Number.isFinite(result?.meta?.changes) && result.meta.changes === 0) {
     const consent = await readServerMemoryConsent(env, ownerId);
     if (!consent.ok || !consent.enabled) return { ok: false, reason: "memory_consent_required" };
+    if (consent.consentGeneration !== expectedConsentGeneration) return { ok: false, reason: "memory_consent_changed" };
     return { ok: false, reason: "memory_revision_conflict" };
   }
-  return { ok: true, revision: expectedRevision + 1 };
+  return { ok: true, revision: expectedRevision + 1, consentGeneration: expectedConsentGeneration };
 }
 
 async function deleteAccountMemory(env, ownerId) {
@@ -359,7 +366,7 @@ export default {
       if (req.method === "GET") {
         const consent = await readServerMemoryConsent(env, ownerId);
         if (!consent.ok) return json({ error: consent.error }, consent.status);
-        return json({ enabled: consent.enabled, persisted: true, consentVersion: consent.consentVersion || null, updatedAt: consent.updatedAt || null });
+        return json({ enabled: consent.enabled, persisted: true, consentVersion: consent.consentVersion || null, updatedAt: consent.updatedAt || null, consentGeneration: consent.consentGeneration ?? null });
       }
       const boundedBody = await readLimitedBody(req, 2048);
       if (boundedBody.tooLarge) return json({ error: "request_too_large" }, 413);
@@ -375,7 +382,7 @@ export default {
       }
       const saved = await writeServerMemoryConsent(env, ownerId, consentBody.enabled);
       if (!saved.ok) return json({ error: saved.error }, saved.status);
-      return json({ enabled: saved.enabled, persisted: true, consentVersion: saved.consentVersion, updatedAt: saved.updatedAt });
+      return json({ enabled: saved.enabled, persisted: true, consentVersion: saved.consentVersion, updatedAt: saved.updatedAt, consentGeneration: saved.consentGeneration });
     }
 
     if (url.pathname === "/memory") {
@@ -426,7 +433,7 @@ export default {
           if (individualAuth) {
             try {
               const saved = await readAccountMemory(env, ownerId);
-              return json({ memories: saved.memories, revision: saved.revision, persisted: true });
+              return json({ memories: saved.memories, revision: saved.revision, consentGeneration: saved.consentGeneration, persisted: true });
             } catch (error) {
               if (error?.message === "memory_consent_required") return json({ error: "memory_consent_required" }, 403);
               throw error;
@@ -446,6 +453,9 @@ export default {
         if (individualAuth && (!Number.isSafeInteger(body.expectedRevision) || body.expectedRevision < 0)) {
           return json({ error: "memory_revision_required" }, 400);
         }
+        if (individualAuth && (!Number.isSafeInteger(body.expectedConsentGeneration) || body.expectedConsentGeneration < 1)) {
+          return json({ error: "memory_consent_generation_required" }, 400);
+        }
         const now = Date.now();
         const memories = body.memories
           .filter((item) => item && typeof item.text === "string" && item.text.trim())
@@ -457,9 +467,10 @@ export default {
             updatedAt: now
           }));
         if (individualAuth) {
-          const saved = await writeAccountMemory(env, ownerId, memories, body.expectedRevision, now);
+          const saved = await writeAccountMemory(env, ownerId, memories, body.expectedRevision, body.expectedConsentGeneration, now);
           if (!saved.ok) {
             if (saved.reason === "memory_revision_conflict") return json({ error: "memory_revision_conflict" }, 409);
+            if (saved.reason === "memory_consent_changed") return json({ error: "memory_consent_generation_conflict" }, 409);
             const consentRequired = saved.reason === "memory_consent_required";
             return json({ error: consentRequired ? "memory_consent_required" : "memory_storage_failed" }, consentRequired ? 403 : 503);
           }
@@ -469,7 +480,7 @@ export default {
             metadata: { schema: 1, count: memories.length, updatedAt: now }
           });
         }
-        return json({ memories, revision: individualAuth ? body.savedRevision : undefined, persisted: true });
+        return json({ memories, revision: individualAuth ? body.savedRevision : undefined, consentGeneration: individualAuth ? body.expectedConsentGeneration : undefined, persisted: true });
       } catch {
         return json({ error: "memory_storage_failed" }, 503);
       }
@@ -591,10 +602,10 @@ export default {
                   ? "Consentement mémoire révoqué avant la validation de l’écriture : aucune information n’a été enregistrée."
                   : "Le consentement mémoire ne peut plus être vérifié : aucune information n’a été enregistrée.";
               } else {
-                const persisted = await writeAccountMemory(env, ownerId, bounded, saved.revision, now);
+                const persisted = await writeAccountMemory(env, ownerId, bounded, saved.revision, saved.consentGeneration, now);
                 if (!persisted.ok) {
-                  memoryWriteStatus = persisted.reason === "memory_consent_required"
-                    ? "Consentement mémoire révoqué avant la validation de l’écriture : aucune information n’a été enregistrée."
+                  memoryWriteStatus = persisted.reason === "memory_consent_required" || persisted.reason === "memory_consent_changed"
+                    ? "Consentement mémoire modifié avant la validation de l’écriture : aucune information n’a été enregistrée."
                     : persisted.reason === "memory_revision_conflict"
                       ? "Une autre opération a modifié la mémoire simultanément. Cette écriture a été refusée pour éviter d’écraser un souvenir plus récent."
                       : "La mémoire persistante est indisponible. Aucune information n’a été enregistrée.";
