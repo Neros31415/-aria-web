@@ -40,6 +40,6 @@ test("rejects paths outside scope, renames, binary patches and symlinks", () => 
 test("bounds provider response size while streaming", async () => {
   const response = new Response("123456789", { headers: { "content-type": "application/json" } });
   await assert.rejects(readLimitedResponseText(response, 4), /size limit/);
-  const small = new Response("{\\"ok\\":true}");
-  assert.equal(await readLimitedResponseText(small, 32), "{\\"ok\\":true}");
+  const small = new Response('{"ok":true}');
+  assert.equal(await readLimitedResponseText(small, 32), '{"ok":true}');
 });
