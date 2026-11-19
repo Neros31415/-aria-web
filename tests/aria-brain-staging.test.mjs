@@ -615,8 +615,9 @@ test("D1 memory write is rejected if consent is revoked before the conditional w
     body: JSON.stringify({ expectedRevision: 0, expectedConsentGeneration: 1, memories: [{ text: "must not persist after revocation" }] })
   }), env);
 
-  assert.equal(response.status, 403);
-  assert.deepEqual(await response.json(), { error: "memory_consent_required" });
+  const responseBody = await response.json();
+  assert.equal(response.status, 403, JSON.stringify(responseBody));
+  assert.deepEqual(responseBody, { error: "memory_consent_required" });
   assert.equal(db.memories.has(ownerId), false, "conditional D1 write must not persist after revocation");
 });
 
