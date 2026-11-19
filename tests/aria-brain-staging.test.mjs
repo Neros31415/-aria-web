@@ -1362,7 +1362,7 @@ test("health reports identity migration required when a compatibility mode confl
 
 test("individual memory PUT uses optimistic revision and rejects stale concurrent writes", async (t) => {
   const ownerId = "123e4567-e89b-42d3-a456-426614174000";
-  const db = individualMemoryDb({ consent: { [ownerId]: { enabled: 1, consentVersion: "memory-v1", updatedAt: 1 } } });
+  const db = individualMemoryDb({ consent: { [ownerId]: { enabled: 1, consentVersion: "memory-v1", updatedAt: 1, consentGeneration: 1 } } });
   t.mock.method(globalThis, "fetch", async (url) => {
     if (String(url).endsWith("/auth/v1/user")) {
       return new Response(JSON.stringify({ id: ownerId }), { status: 200, headers: { "Content-Type": "application/json" } });
