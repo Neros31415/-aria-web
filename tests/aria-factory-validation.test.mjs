@@ -34,6 +34,7 @@ test("rejects paths outside scope, renames, binary patches and symlinks", () => 
   assert.throws(() => validateAndGetChangedPaths(validPatch().replace("a/docs/notes.md b/docs/notes.md", "a/docs/old.md b/docs/notes.md"), ["docs/"]), /renamed/);
   assert.throws(() => validateAndGetChangedPaths(validPatch().replace("@@ -1 +1 @@", "GIT binary patch\n@@ -1 +1 @@"), ["docs/"]), /binary/);
   assert.throws(() => validateAndGetChangedPaths(validPatch().replace("index 1111111..2222222 100644", "new file mode 120000"), ["docs/"]), /symlink/);
+  assert.throws(() => validateAndGetChangedPaths(validPatch().replace("index 1111111..2222222 100644", "old mode 100644\\nnew mode 100755"), ["docs/"]), /mode change/);
 });
 
 test("bounds provider response size while streaming", async () => {
