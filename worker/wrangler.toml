@@ -1,0 +1,6 @@
+name = "aria-brain-staging"
+main = "index.mjs"
+compatibility_date = "2026-10-13"
+
+[ai]
+binding = "AI"

@@ -1,4 +1,5 @@
 const $ = (id) => document.getElementById(id);
+const DEFAULT_API_URL = "https://aria-brain-staging.quentineros-sevesi.workers.dev";
 const STORAGE_MESSAGES = "aria.v07.messages";
 const STORAGE_MEMORY = "aria.v07.memory";
 const messagesEl = $("messages");
@@ -51,13 +52,50 @@ function localReply(text) {
   }
   return "Message reçu et conservé dans l’historique local. Je suis actuellement en mode prototype : sans backend connecté, je ne peux pas générer une véritable réponse par IA ni exécuter cette demande. Prochaine étape : déployer un backend sécurisé et connecter un modèle réel.";
 }
-$("chatForm").addEventListener("submit", (event) => {
+async function sendToBrain() {
+  const endpoint = (localStorage.getItem("aria.apiUrl") || DEFAULT_API_URL).trim().replace(new RegExp("/+$"), "");
+  const token = sessionStorage.getItem("aria.accessToken") || "";
+  if (!endpoint || !token) return null;
+  const payload = {
+    messages: messages.slice(-20).map((m) => ({ role: m.role === "user" ? "user" : "assistant", content: m.text }))
+  };
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 30000);
+  try {
+    const response = await fetch(endpoint + "/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data?.error?.message || "Erreur HTTP " + response.status);
+    if (typeof data.reply !== "string" || !data.reply.trim()) throw new Error("Réponse IA invalide");
+    return data.reply.trim();
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+$("chatForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const text = input.value.trim();
   if (!text) return;
   addMessage("user", text);
   input.value = ""; resizeInput(); $("charCount").textContent = "0/2000";
-  window.setTimeout(() => addMessage("assistant", localReply(text)), 180);
+  setStatus("ARIA réfléchit…");
+  try {
+    const reply = await sendToBrain();
+    if (reply) {
+      addMessage("assistant", reply);
+      setStatus("Cerveau IA connecté");
+    } else {
+      addMessage("assistant", localReply(text));
+      setStatus("Mode local · configurez le cerveau dans les paramètres");
+    }
+  } catch (error) {
+    addMessage("assistant", "Je n’ai pas pu joindre le cerveau IA. Vérifiez l’URL, le jeton et la configuration du Worker. Détail : " + (error.name === "AbortError" ? "délai dépassé" : error.message));
+    setStatus("Connexion au cerveau IA échouée");
+  }
 });
 input.addEventListener("input", () => {
   resizeInput(); $("charCount").textContent = `${input.value.length}/2000`;
@@ -89,7 +127,49 @@ $("memoryForm").addEventListener("submit", (event) => {
   if (!value) return;
   memories.push(value); persist(); $("memoryInput").value = ""; renderMemory();
 });
-$("settingsBtn").addEventListener("click", () => $("settingsDialog").showModal());
+$("settingsBtn").addEventListener("click", () => {
+  $("apiUrlInput").value = localStorage.getItem("aria.apiUrl") || DEFAULT_API_URL;
+  $("apiTokenInput").value = sessionStorage.getItem("aria.accessToken") || "";
+  $("settingsDialog").showModal();
+});
+$("testConnectionBtn").addEventListener("click", async () => {
+  const endpoint = ($("apiUrlInput").value.trim() || localStorage.getItem("aria.apiUrl") || "").replace(new RegExp("/+$"), "");
+  if (!endpoint.startsWith("https://")) {
+    setStatus("Saisissez et enregistrez une URL HTTPS valide.");
+    return;
+  }
+  const button = $("testConnectionBtn");
+  button.disabled = true;
+  button.textContent = "Test en cours…";
+  try {
+    const response = await fetch(endpoint + "/health", { method: "GET", cache: "no-store" });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error("HTTP " + response.status);
+    if (data.status !== "ok") throw new Error("Réponse de santé inattendue");
+    setStatus(data.configured
+      ? "Worker joignable · configuration IA déclarée prête"
+      : "Worker joignable, mais secret ou modèle IA non configuré");
+  } catch (error) {
+    setStatus("Test impossible : " + (error.message || "erreur réseau/CORS"));
+  } finally {
+    button.disabled = false;
+    button.textContent = "Tester la connexion";
+  }
+});
+$("saveSettingsBtn").addEventListener("click", () => {
+  const endpoint = $("apiUrlInput").value.trim().replace(new RegExp("/+$"), "");
+  const token = $("apiTokenInput").value.trim();
+  if (endpoint && !endpoint.startsWith("https://") && !endpoint.startsWith("http://localhost")) {
+    setStatus("URL refusée : utilisez HTTPS ou localhost");
+    return;
+  }
+  if (endpoint) localStorage.setItem("aria.apiUrl", endpoint);
+  else localStorage.removeItem("aria.apiUrl");
+  if (token) sessionStorage.setItem("aria.accessToken", token);
+  else sessionStorage.removeItem("aria.accessToken");
+  $("settingsDialog").close();
+  setStatus(endpoint && token ? "Configuration IA enregistrée pour cette session" : "Mode local · backend non configuré");
+});
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
 }

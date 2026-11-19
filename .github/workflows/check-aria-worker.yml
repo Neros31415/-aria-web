@@ -1,0 +1,27 @@
+name: ARIA Worker checks
+on:
+  push:
+    paths: ["worker/**", "app.js", ".github/workflows/check-aria-worker.yml"]
+  pull_request:
+    paths: ["worker/**", "app.js", ".github/workflows/check-aria-worker.yml"]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check Worker modules
+        working-directory: worker
+        run: |
+          node --check index.mjs
+          node --check security.mjs
+          node --check provider.mjs
+          node --check security.test.mjs
+          node --check ../app.js
+      - name: Run security and chat contract tests
+        working-directory: worker
+        run: node --test security.test.mjs
