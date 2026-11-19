@@ -313,6 +313,9 @@ export default {
           await env.ARIA_AUTHZ_DB.prepare(
             "SELECT id FROM aria_memory_consent_audit LIMIT 1"
           ).bind().first();
+          await env.ARIA_AUTHZ_DB.prepare(
+            "SELECT consent_generation FROM aria_memory_consent LIMIT 1"
+          ).bind().first();
           memoryConsentStoreConfigured = true;
         } catch {
           memoryConsentStoreConfigured = false;
