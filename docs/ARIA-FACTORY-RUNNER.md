@@ -13,8 +13,6 @@ In the ARIA repository, open **Settings → Secrets and variables → Actions**.
 Create these repository secrets:
 - `ARIA_FACTORY_API_URL`: HTTPS chat-completions endpoint.
 - `ARIA_FACTORY_API_KEY`: provider API key.
-- `NEXUS_STATUS_URL`: base HTTPS URL of the Nexus Worker, without an API path.
-- `NEXUS_CALLBACK_SECRET`: callback secret matching the Nexus Worker secret `FACTORY_CALLBACK_SECRET`.
 
 Create these repository variables:
 - `ARIA_FACTORY_MODEL`: exact model identifier.
@@ -62,14 +60,16 @@ This is the first bounded execution slice, not the complete autonomous factory. 
 
 Until secrets and variables are configured and the workflow is merged into the default branch, no model execution occurs.
 
-## Nexus execution callbacks
+## Validation hardening update — 19 November 2026
 
-For tasks submitted by Nexus, the repository-dispatch payload includes a `dispatch_id`. The workflow uses `scripts/aria-factory-status.mjs` to report:
+The patch validator is isolated in `scripts/aria-factory-validation.mjs` and has unit tests in `tests/aria-factory-validation.test.mjs`. The tests cover canonical allow-list entries, traversal and protected paths, diff-header redirection, out-of-scope targets, rename/binary/symlink/mode-change rejection, and bounded streaming response reads.
 
-- `running` when execution begins;
-- `pr_opened` after a pull request has been created;
-- `failed` if the workflow fails.
+The model response must have a JSON content type and is capped at 1 MiB while streaming. Provider error response bodies are intentionally omitted from logs to avoid accidentally recording sensitive provider diagnostics.
 
-These callbacks are best-effort (`continue-on-error`) so a temporary status-reporting outage does not discard a successfully built change. Manual workflow runs have no Nexus dispatch ID and skip callbacks.
+The current Factory CI runs JavaScript syntax checks, the validator unit tests, and `git diff --check`. The latest observed run passed. This is still not an end-to-end test of a real model provider or a full application test suite.
 
-Configure `NEXUS_STATUS_URL` and `NEXUS_CALLBACK_SECRET` as repository secrets. The callback secret must match the independently generated `FACTORY_CALLBACK_SECRET` in the Nexus Worker. Never reuse the GitHub dispatch token or model-provider key for this purpose.
+Remaining hardening before enabling the workflow:
+- pin third-party GitHub Actions to verified full commit SHAs;
+- reconcile the feature branch with the latest `main` and resolve the current divergence;
+- configure a provider-side spend cap and verify repository secrets/variables without exposing their values;
+- add an end-to-end dry run against a non-production test repository or disposable branch.
