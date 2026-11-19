@@ -184,6 +184,27 @@ Statuts de tâche : `planned`, `running`, `succeeded`, `failed`, `blocked`, `unv
 
 En conséquence, cette architecture est une cible d'intégration. Elle ne doit pas être codée en parallèle en ignorant les contrats d'authentification, de consentement et de mémoire déjà en cours de stabilisation.
 
+## 8.1. Précondition identité et mémoire — état observé le 19 novembre 2026
+
+La pile de PR actuellement ouverte forme une dépendance explicite :
+
+1. PR #54 — impose le mode d'identité individuelle et refuse les modes de compatibilité lorsque `ARIA_REQUIRE_INDIVIDUAL_AUTH=true`.
+2. PR #57 — fait dépendre le test HTTP staging de deux comptes du signal de readiness strict (identité individuelle, autorisation D1 et mémoire persistante).
+3. PR #58 — ajoute la révision optimiste des documents mémoire, le conflit HTTP 409 et l'audit du consentement ; sa base est la branche de la PR #57.
+4. PR #56 — correction vocale séparée, basée sur une autre branche d'interface ; à intégrer indépendamment après vérification de ses dépendances.
+
+Les PR #54, #57 et #58 sont empilées ; elles ne doivent pas être fusionnées comme trois changements indépendants. Leur statut GitHub indique actuellement qu'elles sont fusionnables sur leur base respective, mais leurs branches sont en retard de plusieurs commits sur `main`. Cela ne constitue pas une preuve que leur ensemble est prêt pour la production.
+
+La PR #54 documente un décalage de staging : le Worker observé utilisait encore `session_kv` alors que le garde-fou exigeait l'identité individuelle. Le comportement attendu est un refus fermé et un état de readiness non prêt, pas un retour silencieux au mode historique. Ne modifier aucun secret, binding, migration ou déploiement pour masquer ce blocage.
+
+**Gate obligatoire avant le premier moteur IA connecté à la mémoire :**
+- réconcilier la pile sur une base à jour sans perdre les changements de `main` ;
+- exécuter les tests unitaires Worker et les tests SQL/migrations ;
+- valider le Worker staging avec deux comptes canoniques réellement distincts ;
+- vérifier isolation lecture/écriture, consentement désactivé, révocation, concurrence et réponse 409 ;
+- confirmer les migrations réellement appliquées à D1 et l'état de readiness ;
+- seulement ensuite connecter le Context Builder au Memory Adapter.
+
 ## 8. Séquencement d'implémentation proposé
 
 **Étape A — Préconditions**
