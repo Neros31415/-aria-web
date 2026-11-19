@@ -11,6 +11,7 @@ WORKER = (ROOT / "cloudflare/aria-brain-staging.mjs").read_text(encoding="utf-8"
 MIGRATION_CONSENT = (ROOT / "migrations/0002_aria_memory_consent.sql").read_text(encoding="utf-8")
 MIGRATION_DOCUMENTS = (ROOT / "migrations/0003_aria_memory_documents.sql").read_text(encoding="utf-8")
 MIGRATION_REVISION_AUDIT = (ROOT / "migrations/0004_aria_memory_revision_and_consent_audit.sql").read_text(encoding="utf-8")
+MIGRATION_CONSENT_GENERATION = (ROOT / "migrations/0005_aria_memory_consent_generation.sql").read_text(encoding="utf-8")
 
 
 def sql_literal_containing(marker: str) -> str:
@@ -35,6 +36,7 @@ class AriaMemoryD1SqliteTests(unittest.TestCase):
         self.db.executescript(MIGRATION_CONSENT)
         self.db.executescript(MIGRATION_DOCUMENTS)
         self.db.executescript(MIGRATION_REVISION_AUDIT)
+        self.db.executescript(MIGRATION_CONSENT_GENERATION)
         self.owner_a = "11111111-1111-4111-8111-111111111111"
         self.owner_b = "22222222-2222-4222-8222-222222222222"
 
@@ -43,15 +45,15 @@ class AriaMemoryD1SqliteTests(unittest.TestCase):
 
     def enable_consent(self, owner):
         self.db.execute(
-            "INSERT INTO aria_memory_consent (owner_id, enabled, consent_version, updated_at_ms) "
-            "VALUES (?, 1, 'memory-v1', 1)",
+            "INSERT INTO aria_memory_consent (owner_id, enabled, consent_version, updated_at_ms, consent_generation) "
+            "VALUES (?, 1, 'memory-v1', 1, 1)",
             (owner,),
         )
 
-    def write(self, owner, memories_json, updated_at, expected_revision=0):
+    def write(self, owner, memories_json, updated_at, expected_revision=0, expected_consent_generation=1):
         return self.db.execute(
             WRITE_MEMORY_SQL,
-            (owner, memories_json, updated_at, owner, expected_revision, owner, expected_revision, expected_revision, owner),
+            (owner, memories_json, updated_at, owner, expected_consent_generation, expected_revision, owner, expected_revision, expected_revision, owner, expected_consent_generation),
         )
 
     def test_migrations_create_constrained_tables(self):
@@ -104,6 +106,76 @@ class AriaMemoryD1SqliteTests(unittest.TestCase):
             READ_MEMORY_SQL, (self.owner_a,)
         ).fetchone()
         self.assertEqual(consent["consentEnabled"], 0)
+
+    def test_revocation_then_reenable_rejects_write_from_previous_consent_generation(self):
+        self.enable_consent(self.owner_a)
+        original = '[{"text":"before revocation"}]'
+        self.assertEqual(self.write(self.owner_a, original, 2, 0, 1).rowcount, 1)
+
+        # The client read generation 1 and revision 1 before this consent cycle.
+        self.db.execute(
+            "UPDATE aria_memory_consent SET enabled=0, consent_generation=consent_generation+1 WHERE owner_id=?",
+            (self.owner_a,),
+        )
+        self.db.execute(
+            "UPDATE aria_memory_consent SET enabled=1, consent_generation=consent_generation+1 WHERE owner_id=?",
+            (self.owner_a,),
+        )
+
+        stale = self.write(
+            self.owner_a, '[{"text":"stale write after re-consent"}]', 4,
+            expected_revision=1, expected_consent_generation=1,
+        )
+        self.assertEqual(stale.rowcount, 0)
+        row = self.db.execute(
+            "SELECT memories_json, revision FROM aria_memory_documents WHERE owner_id=?",
+            (self.owner_a,),
+        ).fetchone()
+        self.assertEqual(row["memories_json"], original)
+        self.assertEqual(row["revision"], 1)
+        consent = self.db.execute(
+            "SELECT enabled, consent_generation FROM aria_memory_consent WHERE owner_id=?",
+            (self.owner_a,),
+        ).fetchone()
+        self.assertEqual(consent["enabled"], 1)
+        self.assertEqual(consent["consent_generation"], 3)
+
+    def test_revocation_then_reenable_rejects_stale_first_write_without_document(self):
+        self.enable_consent(self.owner_a)
+        self.db.execute(
+            "UPDATE aria_memory_consent SET enabled=0, consent_generation=consent_generation+1 WHERE owner_id=?",
+            (self.owner_a,),
+        )
+        self.db.execute(
+            "UPDATE aria_memory_consent SET enabled=1, consent_generation=consent_generation+1 WHERE owner_id=?",
+            (self.owner_a,),
+        )
+        stale = self.write(
+            self.owner_a, '[{"text":"must remain absent"}]', 2,
+            expected_revision=0, expected_consent_generation=1,
+        )
+        self.assertEqual(stale.rowcount, 0)
+        count = self.db.execute(
+            "SELECT COUNT(*) AS count FROM aria_memory_documents WHERE owner_id=?",
+            (self.owner_a,),
+        ).fetchone()["count"]
+        self.assertEqual(count, 0)
+
+    def test_current_consent_generation_allows_write(self):
+        self.enable_consent(self.owner_a)
+        self.db.execute(
+            "UPDATE aria_memory_consent SET enabled=0, consent_generation=consent_generation+1 WHERE owner_id=?",
+            (self.owner_a,),
+        )
+        self.db.execute(
+            "UPDATE aria_memory_consent SET enabled=1, consent_generation=consent_generation+1 WHERE owner_id=?",
+            (self.owner_a,),
+        )
+        accepted = self.write(
+            self.owner_a, '[{"text":"fresh consent"}]', 3,
+            expected_revision=0, expected_consent_generation=3,
+        )
+        self.assertEqual(accepted.rowcount, 1)
 
     def test_accounts_are_isolated_and_consent_delete_cascades(self):
         self.enable_consent(self.owner_a)
