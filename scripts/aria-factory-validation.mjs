@@ -62,7 +62,9 @@ export function validateAndGetChangedPaths(patch, allowedPaths) {
     const effectivePath = newPath ?? oldPath;
     if (!isAllowedPath(effectivePath)) throw new Error("patch attempted to modify a forbidden path: " + effectivePath);
     if (lines.some((line) =>
-      /^(?:new file mode|deleted file mode|old mode|new mode) (?!100644$|100755$)/.test(line) ||
+      /^old mode /.test(line) ||
+      /^new mode /.test(line) ||
+      /^(?:new file mode|deleted file mode) (?!100644$|100755$)/.test(line) ||
       /^GIT binary patch$/.test(line) ||
       /^rename (?:from|to) /.test(line) ||
       /^copy (?:from|to) /.test(line)
